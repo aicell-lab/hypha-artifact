@@ -32,7 +32,15 @@ def get_artifact_name() -> str:
 
 
 async def get_artifact_manager(token: str) -> Tuple[Any, Any]:
-    api = await connect_to_server(
+    """Get the artifact manager and API client.
+
+    Args:
+        token (str): The personal access token.
+
+    Returns:
+        Tuple[Any, Any]: The artifact manager and API client.
+    """
+    api = await connect_to_server(  # type: ignore
         {
             "name": "artifact-client",
             "server_url": "https://hypha.aicell.io",
@@ -41,12 +49,17 @@ async def get_artifact_manager(token: str) -> Tuple[Any, Any]:
     )
 
     # Get the artifact manager service
-    artifact_manager = await api.get_service("public/artifact-manager")
+    artifact_manager = await api.get_service("public/artifact-manager")  # type: ignore
 
-    return artifact_manager, api
+    return artifact_manager, api  # type: ignore
 
 
 async def create_artifact(artifact_id: str, token: str) -> None:
+    """Create an artifact with the given ID.
+    Args:
+        artifact_id (str): The ID of the artifact to create.
+        token (str): The personal access token.
+    """
     artifact_manager, api = await get_artifact_manager(token)
 
     # Create the artifact
@@ -69,6 +82,12 @@ async def create_artifact(artifact_id: str, token: str) -> None:
 
 
 async def delete_artifact(artifact_id: str, token: str) -> None:
+    """Delete an artifact.
+
+    Args:
+        artifact_id (str): The ID of the artifact to delete.
+        token (str): The personal access token.
+    """
     artifact_manager, api = await get_artifact_manager(token)
 
     # Delete the artifact
@@ -152,7 +171,7 @@ class TestHyphaArtifactIntegration:
             assert "size" in files[0], "File listing should include 'size' attribute"
 
         # Test listing with detail=False
-        file_names = artifact.ls("/", detail=False)
+        file_names: list[str] = artifact.ls("/", detail=False)
         assert isinstance(file_names, list)
         if files:
             # Check that file_names contains string values, not dictionaries
@@ -287,6 +306,8 @@ class TestHyphaArtifactIntegration:
 
         # Verify the partial content matches the expected first 10 bytes
         expected_content = test_content[:10]
-        assert (
-            partial_content == expected_content
-        ), f"Partial content doesn't match. Expected: '{expected_content}', Got: '{partial_content}'"
+        assert partial_content == expected_content, (
+            "Partial content doesn't match."
+            f"Expected: '{expected_content}'"
+            f"Got: '{partial_content}'"
+        )

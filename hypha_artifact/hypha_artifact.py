@@ -6,260 +6,63 @@ using the fsspec specification, allowing for operations like reading, writing, l
 and manipulating files stored in Hypha artifacts.
 """
 
-import io
-import locale
-import os
 import json
-from typing import Callable, Literal, Self, overload, Any, Protocol
-from types import TracebackType
+from typing import Literal, Self, overload, Any
 import requests
-
-
-class ReadableBuffer(Protocol):
-    def __buffer__(self) -> Any: ...
-
-
-OnError = Literal["raise", "ignore"]
-JsonType = str | int | float | bool | None | dict[str, Any] | list[Any]
-FileMode = Literal["r", "rb", "w", "wb", "a", "ab"]
-
-
-def remove_none(d: dict[Any, Any]) -> dict[Any, Any]:
-    """Remove None values from a dictionary."""
-    return {k: v for k, v in d.items() if v is not None}
-
-
-def clean_url(url: str | bytes) -> str:
-    """Clean the URL by removing surrounding quotes and converting to string if needed."""
-    if isinstance(url, bytes):
-        url = url.decode("utf-8")
-    return str(url).strip("\"'")
-
-
-def parent_and_filename(path: str) -> tuple[str | None, str]:
-    """Get the parent directory of a path"""
-    parts = path.rstrip("/").split("/")
-    if len(parts) == 1:
-        return None, parts[-1]  # Root directory
-    return "/".join(parts[:-1]), parts[-1]
-
-
-class ArtifactHttpFile(io.IOBase):
-    """A file-like object that supports both sync and async context manager protocols.
-
-    This implements a file interface for Hypha artifacts, handling HTTP operations
-    via the requests library instead of relying on Pyodide.
-    """
-
-    _on_close: Callable[..., Any] | None = None
-
-    def __init__(
-        self: Self,
-        url: str,
-        mode: FileMode = "r",
-        encoding: str | None = None,
-        newline: str | None = None,
-        name: str | None = None,
-    ) -> None:
-        self._url = url
-        self._pos = 0
-        self._mode = mode
-        self._encoding = encoding or locale.getpreferredencoding()
-        self._newline = newline or os.linesep
-        self.name = name
-        self._closed = False
-        self._buffer = io.BytesIO()
-
-        if "r" in mode:
-            # For read mode, download the content immediately
-            self._download_content()
-            self._size = len(self._buffer.getvalue())
-        else:
-            # For write modes, initialize an empty buffer
-            self._size = 0
-
-    def _download_content(self: Self, range_header: str | None = None) -> None:
-        """Download content from URL into buffer, optionally using a range header."""
-        try:
-            # Clean the URL by removing any surrounding quotes and converting to string if needed
-            cleaned_url = clean_url(self._url)
-
-            headers: dict[str, str | None] = {}
-            if range_header:
-                headers["Range"] = range_header
-
-            response = requests.get(cleaned_url, headers=headers, timeout=60)
-            response.raise_for_status()
-            self._buffer = io.BytesIO(response.content)
-        except requests.exceptions.RequestException as e:
-            # More detailed error information for debugging
-            status_code = (
-                e.response.status_code
-                if hasattr(e, "response") and e.response is not None
-                else "unknown"
-            )
-            message = str(e)
-            raise IOError(
-                f"Error downloading content (status {status_code}): {message}"
-            ) from e
-        except Exception as e:
-            raise IOError(f"Unexpected error downloading content: {str(e)}") from e
-
-    def _upload_content(self: Self) -> requests.Response:
-        """Upload buffer content to URL"""
-        try:
-            content = self._buffer.getvalue()
-
-            cleaned_url = clean_url(self._url)
-
-            headers = {
-                "Content-Type": "application/octet-stream",
-                "Content-Length": str(len(content)),
-            }
-
-            response = requests.put(
-                cleaned_url, data=content, headers=headers, timeout=60
-            )
-
-            response.raise_for_status()
-            return response
-        except requests.exceptions.HTTPError as e:
-            status_code = (
-                e.response.status_code if hasattr(e, "response") else "unknown"
-            )
-            error_msg = e.response.text if hasattr(e, "response") else str(e)
-            raise IOError(
-                f"HTTP error uploading content (status {status_code}): {error_msg}"
-            ) from e
-        except Exception as e:
-            raise IOError(f"Error uploading content: {str(e)}") from e
-
-    def tell(self: Self) -> int:
-        """Return current position in the file"""
-        return self._pos
-
-    def seek(self: Self, offset: int, whence: int = 0) -> int:
-        """Change stream position"""
-        if whence == 0:  # os.SEEK_SET
-            self._pos = offset
-        elif whence == 1:  # os.SEEK_CUR
-            self._pos += offset
-        elif whence == 2:  # os.SEEK_END
-            self._pos = self._size + offset
-
-        # Make sure buffer's position is synced
-        self._buffer.seek(self._pos)
-        return self._pos
-
-    def read(self: Self, size: int = -1) -> bytes | str:
-        """Read up to size bytes from the file, using HTTP range if necessary."""
-        if "r" not in self._mode:
-            raise IOError("File not open for reading")
-
-        if size < 0:
-            self._download_content()
-        else:
-            range_header = f"bytes={self._pos}-{self._pos + size - 1}"
-            self._download_content(range_header=range_header)
-
-        data = self._buffer.read()
-        self._pos += len(data)
-
-        if "b" not in self._mode:
-            return data.decode(self._encoding)
-        return data
-
-    def write(self: Self, data: str | bytes) -> int:
-        """Write data to the file"""
-        if "w" not in self._mode and "a" not in self._mode:
-            raise IOError("File not open for writing")
-
-        # Convert string to bytes if necessary
-        if isinstance(data, str) and "b" in self._mode:
-            data = data.encode(self._encoding)
-        elif isinstance(data, bytes) and "b" not in self._mode:
-            data = data.decode(self._encoding)
-            data = data.encode(self._encoding)
-
-        # Ensure we're at the right position
-        self._buffer.seek(self._pos)
-
-        # Write the data
-        if isinstance(data, str):
-            bytes_written = self._buffer.write(data.encode(self._encoding))
-        else:
-            bytes_written = self._buffer.write(data)
-
-        self._pos = self._buffer.tell()
-        if self._pos > self._size:
-            self._size = self._pos
-
-        return bytes_written
-
-    def readable(self: Self) -> bool:
-        """Return whether the file is readable"""
-        return "r" in self._mode
-
-    def writable(self: Self) -> bool:
-        """Return whether the file is writable"""
-        return "w" in self._mode or "a" in self._mode
-
-    def seekable(self: Self) -> bool:
-        """Return whether the file is seekable"""
-        return True
-
-    def close(self: Self) -> None:
-        """Close the file and upload content if in write mode"""
-        if self._closed:
-            return
-
-        try:
-            if "w" in self._mode or "a" in self._mode:
-                self._upload_content()
-        finally:
-            self._closed = True
-            self._buffer.close()
-            if self._on_close is not None:
-                self._on_close()
-
-    @property
-    def on_close(self: Self) -> Callable[..., Any] | None:
-        """Get on_close callback function"""
-        return self._on_close
-
-    @on_close.setter
-    def on_close(self: Self, func: Callable[..., Any] | None) -> None:
-        """Set on_close callback function"""
-        self._on_close = func
-
-    def __enter__(self: Self) -> Self:
-        """Enter context manager"""
-        return self
-
-    def __exit__(
-        self: Self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Exit context manager"""
-        self.close()
-
-    def __aenter__(self: Self) -> Self:
-        """Enter async context manager"""
-        return self
-
-    def __aexit__(
-        self: Self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Exit async context manager"""
-        self.close()
+from hypha_artifact.utils import (
+    remove_none,
+    parent_and_filename,
+    FileMode,
+    OnError,
+    JsonType,
+)
+from hypha_artifact.artifact_file import ArtifactHttpFile
 
 
 class HyphaArtifact:
+    """
+    HyphaArtifact provides an interface for interacting with Hypha artifact storage.
+
+    This class allows users to manage files and directories within a Hypha artifact,
+    including uploading, downloading, editing metadata, listing contents, and managing permissions.
+    It abstracts the underlying HTTP API and
+    provides a file-system-like interface compatible with fsspec.
+
+    Attributes
+    artifact_alias : str
+        The identifier or alias of the Hypha artifact to interact with.
+    artifact_url : str
+        The base URL for the Hypha artifact manager service.
+    token : str
+        The authentication token for accessing the artifact service.
+    workspace_id : str
+        The workspace identifier associated with the artifact.
+
+    Raises
+    ------
+    ValueError
+        If invalid arguments are provided or unsupported file modes are used.
+    FileNotFoundError
+        If a requested file or directory does not exist.
+    FileExistsError
+        If attempting to create a directory that already exists and exist_ok is False.
+    OSError
+        If attempting to remove a non-empty directory.
+    Exception
+        For other errors encountered during remote requests or file operations.
+
+    HyphaArtifact
+        An instance of the HyphaArtifact class for interacting with Hypha artifact storage.
+
+    Examples
+    --------
+    >>> artifact = HyphaArtifact("my-artifact", "workspace-id", "my-token")
+    >>> artifact.ls("/")
+    ['data.csv', 'images/']
+    >>> with artifact.open("data.csv", "r") as f:
+    ...     print(f.read())
+    """
+
     artifact_alias: str
     artifact_url: str
     token: str
@@ -365,9 +168,9 @@ class HyphaArtifact:
                 Ensure the manifest follows the required schema
                 if applicable (e.g., for collections).
             artifact_type (str | None): Optional. The type of the artifact.
-                Supported values are collection, vector-collection, generic and any other custom type.
-                By default, it's set to generic which contains fields tailored for
-                displaying the artifact as cards on a webpage.
+                Supported values are collection, vector-collection, generic and
+                any other custom type. By default, it's set to generic which
+                contains fields tailored for displaying the artifact as cards on a webpage.
             permissions (dict | None): Optional. A dictionary containing user permissions.
                 For example {"*": "r+"} gives read and create access to everyone,
                 {"@": "rw+"} allows all authenticated users to read/write/create,
@@ -418,9 +221,10 @@ class HyphaArtifact:
             version (str | None): Optional. The version number to use for the committed artifact.
                 By default, it's set to None, the version will stay the same.
                 Note that this only affects the version number - whether a new version is created
-                or the current version is updated depends on whether the artifact was in staging mode.
-                If committing from staging mode, a new version is always created.
-                If committing a direct edit, the current version is updated.
+                or the current version is updated depends on whether the artifact
+                was in staging mode. If committing from staging mode,
+                a new version is always created. If committing a direct edit,
+                the current version is updated.
             comment (str | None): Optional. A comment to describe the changes made to the artifact.
         """
         params = {
@@ -756,6 +560,18 @@ class HyphaArtifact:
     def delete(
         self: Self, path: str, recursive: bool = False, maxdepth: int | None = None
     ):
+        """Delete a file or directory from the artifact
+
+        Args:
+            self (Self): The instance of the class.
+            path (str): The path to the file or directory to delete.
+            recursive (bool, optional): Whether to delete directories recursively.
+                Defaults to False.
+            maxdepth (int | None, optional): The maximum depth to delete. Defaults to None.
+
+        Returns:
+            None
+        """
         return self.rm(path, recursive, maxdepth)
 
     def exists(self: Self, path: str, **kwargs: Any) -> bool:
@@ -771,10 +587,12 @@ class HyphaArtifact:
         bool
             True if the path exists, False otherwise
         """
-        # TODO: use read 0 bytes to check existence
         try:
-            self.info(path)
-            return True
+            with self.open(path, "r") as f:
+                partial_content = f.read(0)
+                if isinstance(partial_content, (bytes, str)):
+                    return True
+                return False
         except Exception:
             return False
 
@@ -875,6 +693,18 @@ class HyphaArtifact:
             return False
 
     def listdir(self: Self, path: str, **kwargs: Any) -> list[str]:
+        """List files in a directory
+        Parameters
+        ----------
+        path: str
+            Path to list
+        **kwargs: dict[str, Any]
+            Additional arguments passed to the ls method
+        Returns
+        -------
+        list of str
+            List of file names in the directory
+        """
         result = self.ls(path, detail=False, **kwargs)
         return [str(item) for item in result]
 
