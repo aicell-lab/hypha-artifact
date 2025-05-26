@@ -1,1 +1,1 @@
-from .hypha_artifact import HyphaArtifact
+from .hypha_artifact import HyphaArtifact, ArtifactHttpFile
