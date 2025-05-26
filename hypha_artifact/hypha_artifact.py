@@ -358,7 +358,7 @@ class HyphaArtifact:
             for p in path:
                 try:
                     result[p] = self.cat(p, recursive=recursive, on_error=on_error)
-                except Exception as e:
+                except (FileNotFoundError, IOError, requests.RequestException) as e:
                     if on_error == "raise":
                         raise e
             return result
@@ -378,7 +378,7 @@ class HyphaArtifact:
                 elif isinstance(content, (bytearray, memoryview)):
                     return bytes(content).decode("utf-8")
                 return str(content)
-        except Exception as e:
+        except (FileNotFoundError, IOError, requests.RequestException) as e:
             if on_error == "raise":
                 raise e
             return None
@@ -388,7 +388,7 @@ class HyphaArtifact:
         urlpath: str,
         mode: FileMode = "rb",
         auto_commit: bool = True,
-        **kwargs: Any,
+        **kwargs: Any,  # pylint: disable=unused-argument
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing
 
@@ -435,7 +435,7 @@ class HyphaArtifact:
             raise ValueError(f"Unsupported file mode: {mode}")
 
     def copy(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path1: str,
         path2: str,
         recursive: bool = False,
@@ -469,7 +469,7 @@ class HyphaArtifact:
                 dest_path = f"{path2}/{rel_path}" if path2 else rel_path
                 try:
                     self._copy_single_file(file_path, dest_path)
-                except Exception as e:
+                except (FileNotFoundError, IOError, requests.RequestException) as e:
                     if on_error == "raise":
                         raise e
         else:
@@ -516,7 +516,10 @@ class HyphaArtifact:
         )
 
     def rm(
-        self: Self, path: str, recursive: bool = False, maxdepth: int | None = None
+        self: Self,
+        path: str,
+        recursive: bool = False,  # pylint: disable=unused-argument
+        maxdepth: int | None = None,  # pylint: disable=unused-argument
     ) -> None:
         """Remove a file from the artifact
 
@@ -574,7 +577,9 @@ class HyphaArtifact:
         """
         return self.rm(path, recursive, maxdepth)
 
-    def exists(self: Self, path: str, **kwargs: Any) -> bool:
+    def exists(
+        self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
+    ) -> bool:
         """Check if a file or directory exists
 
         Parameters
@@ -593,11 +598,14 @@ class HyphaArtifact:
                 if isinstance(partial_content, (bytes, str)):
                     return True
                 return False
-        except Exception:
+        except (FileNotFoundError, IOError, requests.RequestException):
             return False
 
     def ls(
-        self: Self, path: str, detail: bool = True, **kwargs: Any
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        detail: bool = True,
+        **kwargs: Any,
     ) -> list[str | dict[str, Any]]:
         """List files and directories in a directory
 
@@ -625,7 +633,9 @@ class HyphaArtifact:
         # Convert to proper return type
         return [item if isinstance(item, (str, dict)) else {} for item in result]
 
-    def info(self: Self, path: str, **kwargs: Any) -> dict[str, Any]:
+    def info(
+        self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
+    ) -> dict[str, Any]:
         """Get information about a file or directory
 
         Parameters
@@ -670,7 +680,7 @@ class HyphaArtifact:
         try:
             info = self.info(path)
             return info["type"] == "directory"
-        except Exception:
+        except (FileNotFoundError, KeyError):
             return False
 
     def isfile(self: Self, path: str) -> bool:
@@ -689,10 +699,12 @@ class HyphaArtifact:
         try:
             info = self.info(path)
             return info["type"] == "file"
-        except Exception:
+        except (FileNotFoundError, KeyError):
             return False
 
-    def listdir(self: Self, path: str, **kwargs: Any) -> list[str]:
+    def listdir(
+        self: Self, path: str, **kwargs: Any
+    ) -> list[str]:  # pylint: disable=unused-argument
         """List files in a directory
         Parameters
         ----------
@@ -709,7 +721,7 @@ class HyphaArtifact:
         return [str(item) for item in result]
 
     def find(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path: str,
         maxdepth: int | None = None,
         withdirs: bool = False,
@@ -745,7 +757,7 @@ class HyphaArtifact:
             # List current directory
             try:
                 items = self.ls(current_path)
-            except Exception:
+            except (FileNotFoundError, IOError, requests.RequestException):
                 return {}
 
             # Add items to results
@@ -785,7 +797,10 @@ class HyphaArtifact:
             return sorted(all_files.keys())
 
     def mkdir(
-        self: Self, path: str, create_parents: bool = True, **kwargs: Any
+        self: Self,
+        path: str,
+        create_parents: bool = True,  # pylint: disable=unused-argument
+        **kwargs: Any,  # pylint: disable=unused-argument
     ) -> None:
         """Create a directory
 
@@ -803,7 +818,12 @@ class HyphaArtifact:
         # Directories in Hypha artifacts are implicit
         # This is a no-op for compatibility with fsspec
 
-    def makedirs(self: Self, path: str, exist_ok: bool = True, **kwargs: Any) -> None:
+    def makedirs(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        exist_ok: bool = True,
+        **kwargs: Any,
+    ) -> None:
         """Create a directory and any parent directories
 
         In the Hypha artifact system, directories don't need to be explicitly created,
