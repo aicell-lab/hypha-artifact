@@ -10,7 +10,8 @@ import io
 import locale
 import os
 import json
-from typing import Callable, Literal, Self, overload
+from typing import Callable, Literal, Self, overload, Any
+from types import TracebackType
 import requests
 
 OnError = Literal["raise", "ignore"]
@@ -18,7 +19,7 @@ JsonType = str | int | float | bool | None | dict[str, "JsonType"] | list["JsonT
 FileMode = Literal["r", "rb", "w", "wb", "a", "ab"]
 
 
-def remove_none(d: dict) -> dict:
+def remove_none(d: dict[Any, Any]) -> dict[Any, Any]:
     """Remove None values from a dictionary."""
     return {k: v for k, v in d.items() if v is not None}
 
@@ -27,10 +28,10 @@ def clean_url(url: str | bytes) -> str:
     """Clean the URL by removing surrounding quotes and converting to string if needed."""
     if isinstance(url, bytes):
         url = url.decode("utf-8")
-    return url.strip("\"'")
+    return str(url.strip("\"'"))
 
 
-def parent_and_filename(path: str) -> str | None:
+def parent_and_filename(path: str) -> tuple[str | None, str]:
     """Get the parent directory of a path"""
     parts = path.rstrip("/").split("/")
     if len(parts) == 1:
@@ -45,7 +46,7 @@ class ArtifactHttpFile(io.IOBase):
     via the requests library instead of relying on Pyodide.
     """
 
-    _on_close: Callable | None = None
+    _on_close: Callable[..., Any] | None = None
 
     def __init__(
         self: Self,
@@ -72,13 +73,13 @@ class ArtifactHttpFile(io.IOBase):
             # For write modes, initialize an empty buffer
             self._size = 0
 
-    def _download_content(self: Self, range_header: str = None) -> None:
+    def _download_content(self: Self, range_header: str | None = None) -> None:
         """Download content from URL into buffer, optionally using a range header."""
         try:
             # Clean the URL by removing any surrounding quotes and converting to string if needed
             cleaned_url = clean_url(self._url)
 
-            headers = {}
+            headers: dict[str, str | None] = {}
             if range_header:
                 headers["Range"] = range_header
 
@@ -143,7 +144,7 @@ class ArtifactHttpFile(io.IOBase):
         self._buffer.seek(self._pos)
         return self._pos
 
-    def read(self: Self, size: int = -1) -> bytes:
+    def read(self: Self, size: int = -1) -> bytes | str:
         """Read up to size bytes from the file, using HTTP range if necessary."""
         if "r" not in self._mode:
             raise IOError("File not open for reading")
@@ -215,12 +216,12 @@ class ArtifactHttpFile(io.IOBase):
                 self._on_close()
 
     @property
-    def on_close(self: Self) -> Callable | None:
+    def on_close(self: Self) -> Callable[..., Any] | None:
         """Get on_close callback function"""
         return self._on_close
 
     @on_close.setter
-    def on_close(self: Self, func: Callable | None) -> None:
+    def on_close(self: Self, func: Callable[..., Any] | None) -> None:
         """Set on_close callback function"""
         self._on_close = func
 
@@ -228,7 +229,7 @@ class ArtifactHttpFile(io.IOBase):
         """Enter context manager"""
         return self
 
-    def __exit__(self: Self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self: Self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
         """Exit context manager"""
         self.close()
 
@@ -236,7 +237,7 @@ class ArtifactHttpFile(io.IOBase):
         """Enter async context manager"""
         return self
 
-    def __aexit__(self: Self, exc_type, exc_val, exc_tb) -> None:
+    def __aexit__(self: Self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
         """Exit async context manager"""
         self.close()
 
@@ -274,7 +275,7 @@ class HyphaArtifact:
         method: Literal["GET", "POST"],
         params: dict[str, JsonType] | None = None,
         json: dict[str, JsonType] | None = None,
-    ) -> str:
+    ) -> bytes | Any:
         """Make a remote request to the artifact service.
         Args:
             method_name (str): The name of the method to call on the artifact service.
@@ -302,7 +303,7 @@ class HyphaArtifact:
 
         return response.content
 
-    def _remote_post(self: Self, method_name: str, params: dict[str, JsonType]) -> str:
+    def _remote_post(self: Self, method_name: str, params: dict[str, JsonType]) -> bytes | Any:
         """Make a POST request to the artifact service with extended parameters.
 
         Returns:
@@ -315,7 +316,7 @@ class HyphaArtifact:
             json=params,
         )
 
-    def _remote_get(self: Self, method_name: str, params: dict[str, JsonType]) -> None:
+    def _remote_get(self: Self, method_name: str, params: dict[str, JsonType]) -> bytes | Any:
         """Make a GET request to the artifact service with extended parameters.
 
         Returns:
@@ -329,11 +330,11 @@ class HyphaArtifact:
 
     def _remote_edit(
         self: Self,
-        manifest: dict | None = None,
+        manifest: dict[str, Any] | None = None,
         artifact_type: str | None = None,
-        permissions: dict | None = None,
-        config: dict | None = None,
-        secrets: dict | None = None,
+        permissions: dict[str, str] | None = None,
+        config: dict[str, Any] | None = None,
+        secrets: dict[str, str] | None = None,
         version: str | None = None,
         stage: bool = False,
         comment: str | None = None,
@@ -558,7 +559,7 @@ class HyphaArtifact:
         urlpath: str,
         mode: FileMode = "rb",
         auto_commit: bool = True,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing
 
@@ -584,7 +585,7 @@ class HyphaArtifact:
                 url=download_url,
                 mode=mode,
                 name=normalized_path,
-                **kwargs,
+                **kwargs: dict[str, Any],
             )
         elif "w" in mode or "a" in mode:
             if auto_commit:
@@ -594,7 +595,7 @@ class HyphaArtifact:
                 url=upload_url,
                 mode=mode,
                 name=normalized_path,
-                **kwargs,
+                **kwargs: dict[str, Any],
             )
 
             if auto_commit:
@@ -610,8 +611,8 @@ class HyphaArtifact:
         path2: str,
         recursive: bool = False,
         maxdepth: int | None = None,
-        on_error: OnError = "raise",
-        **kwargs,
+        on_error: OnError | None = "raise",
+        **kwargs: dict[str, Any],
     ) -> None:
         """Copy file(s) from path1 to path2 within the artifact
 
@@ -655,7 +656,11 @@ class HyphaArtifact:
             f.write(content)
 
     def cp(
-        self: Self, path1: str, path2: str, on_error: OnError | None = None, **kwargs
+        self: Self,
+        path1: str,
+        path2: str,
+        on_error: OnError | None = None,
+        **kwargs: dict[str, Any]
     ) -> None:
         """Alias for copy method
 
@@ -766,7 +771,7 @@ class HyphaArtifact:
 
         return result
 
-    def info(self: Self, path: str, **kwargs) -> dict[str, str | int]:
+    def info(self: Self, path: str, **kwargs: dict[str, Any]) -> dict[str, str | int]:
         """Get information about a file or directory
 
         Parameters
@@ -836,7 +841,7 @@ class HyphaArtifact:
         maxdepth: int | None = None,
         withdirs: bool = False,
         detail: bool = False,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ) -> list[str] | dict[str, dict]:
         """Find all files (and optional directories) under a path
 
@@ -997,7 +1002,7 @@ class HyphaArtifact:
         info = self.info(path)
         if info["type"] == "directory":
             return 0
-        return info.get("size", 0) or 0  # Default to 0 if size is None
+        return int(info.get("size", 0)) or 0  # Default to 0 if size is None
 
     def sizes(self: Self, paths: list[str]) -> list[int]:
         """Get the size of multiple files
