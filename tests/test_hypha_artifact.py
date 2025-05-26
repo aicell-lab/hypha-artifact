@@ -9,8 +9,9 @@ against an actual Hypha artifact service.
 import os
 import uuid
 import asyncio
+from typing import Any, Callable, Tuple
 import pytest
-from hypha_rpc import connect_to_server
+from hypha_rpc import connect_to_server  # type: ignore
 from dotenv import load_dotenv
 from hypha_artifact import HyphaArtifact
 
@@ -24,13 +25,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
-def artifact_name():
+@pytest.fixture(scope="module", name="artifact_name")
+def get_artifact_name() -> str:
     """Generate a unique artifact name for testing."""
     return f"test_artifact_{uuid.uuid4().hex[:8]}"
 
 
-async def get_artifact_manager(token: str):
+async def get_artifact_manager(token: str) -> Tuple[Any, Any]:
     api = await connect_to_server(
         {
             "name": "artifact-client",
@@ -45,7 +46,7 @@ async def get_artifact_manager(token: str):
     return artifact_manager, api
 
 
-async def create_artifact(artifact_id: str, token: str):
+async def create_artifact(artifact_id: str, token: str) -> None:
     artifact_manager, api = await get_artifact_manager(token)
 
     # Create the artifact
@@ -67,7 +68,7 @@ async def create_artifact(artifact_id: str, token: str):
     await api.disconnect()
 
 
-async def delete_artifact(artifact_id: str, token: str):
+async def delete_artifact(artifact_id: str, token: str) -> None:
     artifact_manager, api = await get_artifact_manager(token)
 
     # Delete the artifact
@@ -79,29 +80,37 @@ async def delete_artifact(artifact_id: str, token: str):
     await api.disconnect()
 
 
-def run_func_sync(artifact_id: str, token: str, func: callable) -> bool:
-    """Synchronous wrapper for delete_artifact function"""
+def run_func_sync(
+    artifact_id: str, token: str, func: Callable[[str, str], Any]
+) -> None:
+    """Synchronous wrapper for async functions"""
     loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(func(artifact_id, token))
+        loop.run_until_complete(func(artifact_id, token))
     finally:
         loop.close()
 
 
-@pytest.fixture(scope="module")
-def artifact(artifact_name):
+@pytest.fixture(scope="module", name="artifact")
+def get_artifact(artifact_name: str) -> Any:
     """Create a test artifact with a real connection to Hypha."""
 
     personal_token = os.getenv("PERSONAL_TOKEN")
     workspace = os.getenv("PERSONAL_WORKSPACE")
+
+    if not personal_token:
+        pytest.skip("PERSONAL_TOKEN environment variable not set")
+    if not workspace:
+        pytest.skip("PERSONAL_WORKSPACE environment variable not set")
+
     run_func_sync(artifact_name, personal_token, create_artifact)
     _artifact = HyphaArtifact(artifact_name, workspace, personal_token)
     yield _artifact
     run_func_sync(artifact_name, personal_token, delete_artifact)
 
 
-@pytest.fixture
-def test_content():
+@pytest.fixture(name="test_content")
+def get_test_content() -> str:
     """Provide test file content for testing."""
     return "This is a test file content for integration testing"
 
@@ -109,14 +118,14 @@ def test_content():
 class TestHyphaArtifactIntegration:
     """Integration test suite for the HyphaArtifact class."""
 
-    def test_artifact_initialization(self, artifact, artifact_name):
+    def test_artifact_initialization(self, artifact: Any, artifact_name: str) -> None:
         """Test that the artifact is initialized correctly with real credentials."""
         assert artifact.artifact_alias == artifact_name
         assert artifact.token is not None
         assert artifact.workspace_id is not None
         assert artifact.artifact_url is not None
 
-    def test_create_file(self, artifact, test_content):
+    def test_create_file(self, artifact: Any, test_content: str) -> None:
         """Test creating a file in the artifact using real operations."""
         test_file_path = "test_file.txt"
 
@@ -131,7 +140,7 @@ class TestHyphaArtifactIntegration:
             test_file_path in file_names
         ), f"Created file {test_file_path} not found in {file_names}"
 
-    def test_list_files(self, artifact):
+    def test_list_files(self, artifact: Any) -> None:
         """Test listing files in the artifact using real operations."""
         # First, list files with detail=True (default)
         files = artifact.ls("/")
@@ -151,7 +160,7 @@ class TestHyphaArtifactIntegration:
                 isinstance(name, str) for name in file_names
             ), "File names should be strings"
 
-    def test_read_file_content(self, artifact, test_content):
+    def test_read_file_content(self, artifact: Any, test_content: str) -> None:
         """Test reading content from a file in the artifact using real operations."""
         test_file_path = "test_file.txt"
 
@@ -168,7 +177,7 @@ class TestHyphaArtifactIntegration:
             content == test_content
         ), f"File content doesn't match. Expected: '{test_content}', Got: '{content}'"
 
-    def test_copy_file(self, artifact, test_content):
+    def test_copy_file(self, artifact: Any, test_content: str) -> None:
         """Test copying a file within the artifact using real operations."""
         source_path = "source_file.txt"
         copy_path = "copy_of_source_file.txt"
@@ -200,7 +209,7 @@ class TestHyphaArtifactIntegration:
             source_content == copy_content
         ), "Content in source and copied file should match"
 
-    def test_file_existence(self, artifact):
+    def test_file_existence(self, artifact: Any) -> None:
         """Test checking if files exist in the artifact using real operations."""
         # Create a test file to check existence
         test_file_path = "existence_test.txt"
@@ -218,7 +227,7 @@ class TestHyphaArtifactIntegration:
             artifact.exists(non_existent_path) is False
         ), f"File {non_existent_path} should not exist"
 
-    def test_remove_file(self, artifact):
+    def test_remove_file(self, artifact: Any) -> None:
         """Test removing a file from the artifact using real operations."""
         # Create a file to be removed
         removal_test_file = "file_to_remove.txt"
@@ -240,7 +249,7 @@ class TestHyphaArtifactIntegration:
             removal_test_file
         ), f"File {removal_test_file} should no longer exist after removal"
 
-    def test_workflow(self, artifact, test_content):
+    def test_workflow(self, artifact: Any, test_content: str) -> None:
         """Integration test for a complete file workflow: create, read, copy, remove."""
         # File paths for testing
         original_file = "workflow_test.txt"
@@ -264,7 +273,7 @@ class TestHyphaArtifactIntegration:
         assert not artifact.exists(copied_file)
         assert artifact.exists(original_file)
 
-    def test_partial_file_read(self, artifact, test_content):
+    def test_partial_file_read(self, artifact: Any, test_content: str) -> None:
         """Test reading only part of a file using the size parameter in read."""
         test_file_path = "partial_read_test.txt"
 

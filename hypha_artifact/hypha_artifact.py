@@ -10,12 +10,17 @@ import io
 import locale
 import os
 import json
-from typing import Callable, Literal, Self, overload, Any
+from typing import Callable, Literal, Self, overload, Any, Protocol
 from types import TracebackType
 import requests
 
+
+class ReadableBuffer(Protocol):
+    def __buffer__(self) -> Any: ...
+
+
 OnError = Literal["raise", "ignore"]
-JsonType = str | int | float | bool | None | dict[str, "JsonType"] | list["JsonType"]
+JsonType = str | int | float | bool | None | dict[str, Any] | list[Any]
 FileMode = Literal["r", "rb", "w", "wb", "a", "ab"]
 
 
@@ -28,7 +33,7 @@ def clean_url(url: str | bytes) -> str:
     """Clean the URL by removing surrounding quotes and converting to string if needed."""
     if isinstance(url, bytes):
         url = url.decode("utf-8")
-    return str(url.strip("\"'"))
+    return str(url).strip("\"'")
 
 
 def parent_and_filename(path: str) -> tuple[str | None, str]:
@@ -89,7 +94,9 @@ class ArtifactHttpFile(io.IOBase):
         except requests.exceptions.RequestException as e:
             # More detailed error information for debugging
             status_code = (
-                e.response.status_code if hasattr(e, "response") else "unknown"
+                e.response.status_code
+                if hasattr(e, "response") and e.response is not None
+                else "unknown"
             )
             message = str(e)
             raise IOError(
@@ -229,7 +236,12 @@ class ArtifactHttpFile(io.IOBase):
         """Enter context manager"""
         return self
 
-    def __exit__(self: Self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
+    def __exit__(
+        self: Self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Exit context manager"""
         self.close()
 
@@ -237,7 +249,12 @@ class ArtifactHttpFile(io.IOBase):
         """Enter async context manager"""
         return self
 
-    def __aexit__(self: Self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
+    def __aexit__(
+        self: Self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Exit async context manager"""
         self.close()
 
@@ -274,7 +291,7 @@ class HyphaArtifact:
         artifact_method: str,
         method: Literal["GET", "POST"],
         params: dict[str, JsonType] | None = None,
-        json: dict[str, JsonType] | None = None,
+        json_data: dict[str, JsonType] | None = None,
     ) -> bytes | Any:
         """Make a remote request to the artifact service.
         Args:
@@ -285,7 +302,7 @@ class HyphaArtifact:
         Returns:
             str: The response content from the artifact service.
         """
-        extended_params = self._extend_params(params or json or {})
+        extended_params = self._extend_params(params or json_data or {})
         cleaned_params = remove_none(extended_params)
 
         request_url = f"{self.artifact_url}/{artifact_method}"
@@ -293,7 +310,7 @@ class HyphaArtifact:
         response = requests.request(
             method,
             request_url,
-            json=cleaned_params if json else None,
+            json=cleaned_params if json_data else None,
             params=cleaned_params if params else None,
             headers={"Authorization": f"Bearer {self.token}"},
             timeout=20,
@@ -303,7 +320,7 @@ class HyphaArtifact:
 
         return response.content
 
-    def _remote_post(self: Self, method_name: str, params: dict[str, JsonType]) -> bytes | Any:
+    def _remote_post(self: Self, method_name: str, params: dict[str, Any]) -> bytes:
         """Make a POST request to the artifact service with extended parameters.
 
         Returns:
@@ -313,10 +330,10 @@ class HyphaArtifact:
         return self._remote_request(
             method_name,
             method="POST",
-            json=params,
+            json_data=params,
         )
 
-    def _remote_get(self: Self, method_name: str, params: dict[str, JsonType]) -> bytes | Any:
+    def _remote_get(self: Self, method_name: str, params: dict[str, Any]) -> bytes:
         """Make a GET request to the artifact service with extended parameters.
 
         Returns:
@@ -376,7 +393,7 @@ class HyphaArtifact:
                 Default is None. Set to True to copy files from the previous version.
         """
 
-        params = {
+        params: dict[str, Any] = {
             "manifest": manifest,
             "artifact_type": artifact_type,
             "permissions": permissions,
@@ -430,7 +447,7 @@ class HyphaArtifact:
         Returns:
             str: A pre-signed URL for uploading the file.
         """
-        params = {
+        params: dict[str, Any] = {
             "file_path": file_path,
         }
         # Only include download_weight if it's not None
@@ -438,7 +455,7 @@ class HyphaArtifact:
             params["download_weight"] = download_weight
 
         response = self._remote_post("put_file", params)
-        return response
+        return response.decode("utf-8")
 
     def _remote_remove_file(
         self: Self,
@@ -468,11 +485,12 @@ class HyphaArtifact:
         Returns:
             str: A pre-signed URL for downloading the file.
         """
-        params = {
+        params: dict[str, str | bool] = {
             "file_path": file_path,
             "silent": silent,
         }
-        return self._remote_get("get_file", params)
+        response = self._remote_get("get_file", params)
+        return response.decode("utf-8")
 
     def _remote_list_contents(
         self: Self, dir_path: str | None = None
@@ -499,20 +517,20 @@ class HyphaArtifact:
         self: Self,
         path: list[str],
         recursive: bool = False,
-        on_error: OnError | None = None,
-    ) -> dict[str, str]: ...
+        on_error: OnError = "raise",
+    ) -> dict[str, str | None]: ...
 
     @overload
     def cat(
-        self: Self, path: str, recursive: bool = False, on_error: OnError | None = None
-    ) -> str: ...
+        self: Self, path: str, recursive: bool = False, on_error: OnError = "raise"
+    ) -> str | None: ...
 
     def cat(
         self: Self,
         path: str | list[str],
         recursive: bool = False,
         on_error: OnError = "raise",
-    ) -> dict[str, str] | str:
+    ) -> dict[str, str | None] | str | None:
         """Get file(s) content as string(s)
 
         Parameters
@@ -526,12 +544,13 @@ class HyphaArtifact:
 
         Returns
         -------
-        str or dict
-            File contents as string if path is a string, or dict of {path: content} if path is a list
+        str or dict or None
+            File contents as string if path is a string, dict of {path: content} if path is a list,
+            or None if the file is not found and on_error is "ignore"
         """
         # Handle the case where path is a list of paths
         if isinstance(path, list):
-            result = {}
+            result: dict[str, str | None] = {}
             for p in path:
                 try:
                     result[p] = self.cat(p, recursive=recursive, on_error=on_error)
@@ -548,7 +567,13 @@ class HyphaArtifact:
         # Handle single file case
         try:
             with self.open(path, mode="r") as file:
-                return file.read()
+                content = file.read()
+                # Ensure we return a string
+                if isinstance(content, bytes):
+                    return content.decode("utf-8")
+                elif isinstance(content, (bytearray, memoryview)):
+                    return bytes(content).decode("utf-8")
+                return str(content)
         except Exception as e:
             if on_error == "raise":
                 raise e
@@ -559,7 +584,7 @@ class HyphaArtifact:
         urlpath: str,
         mode: FileMode = "rb",
         auto_commit: bool = True,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing
 
@@ -585,7 +610,7 @@ class HyphaArtifact:
                 url=download_url,
                 mode=mode,
                 name=normalized_path,
-                **kwargs: dict[str, Any],
+                **kwargs,
             )
         elif "w" in mode or "a" in mode:
             if auto_commit:
@@ -595,7 +620,7 @@ class HyphaArtifact:
                 url=upload_url,
                 mode=mode,
                 name=normalized_path,
-                **kwargs: dict[str, Any],
+                **kwargs,
             )
 
             if auto_commit:
@@ -652,15 +677,16 @@ class HyphaArtifact:
     def _copy_single_file(self, src: str, dst: str) -> None:
         """Helper method to copy a single file"""
         content = self.cat(src)
-        with self.open(dst, mode="w", auto_commit=False) as f:
-            f.write(content)
+        if content is not None:
+            with self.open(dst, mode="w", auto_commit=False) as f:
+                f.write(content)
 
     def cp(
         self: Self,
         path1: str,
         path2: str,
         on_error: OnError | None = None,
-        **kwargs: dict[str, Any]
+        **kwargs: Any,
     ) -> None:
         """Alias for copy method
 
@@ -679,7 +705,11 @@ class HyphaArtifact:
         -------
         None
         """
-        return self.copy(path1, path2, on_error=on_error, **kwargs)
+        recursive = kwargs.pop("recursive", False)
+        maxdepth = kwargs.pop("maxdepth", None)
+        return self.copy(
+            path1, path2, recursive=recursive, maxdepth=maxdepth, on_error=on_error
+        )
 
     def rm(
         self: Self, path: str, recursive: bool = False, maxdepth: int | None = None
@@ -728,7 +758,7 @@ class HyphaArtifact:
     ):
         return self.rm(path, recursive, maxdepth)
 
-    def exists(self: Self, path: str, **kwargs) -> bool:
+    def exists(self: Self, path: str, **kwargs: Any) -> bool:
         """Check if a file or directory exists
 
         Parameters
@@ -748,7 +778,9 @@ class HyphaArtifact:
         except Exception:
             return False
 
-    def ls(self: Self, path: str, detail: bool = True, **kwargs) -> list[str | dict]:
+    def ls(
+        self: Self, path: str, detail: bool = True, **kwargs: Any
+    ) -> list[str | dict[str, Any]]:
         """List files and directories in a directory
 
         Parameters
@@ -764,14 +796,18 @@ class HyphaArtifact:
         list
             List of files and directories in the directory
         """
-        result = self._remote_list_contents(path)
+        result: list[JsonType] = self._remote_list_contents(path)
 
         if not detail:
-            return [item["name"] for item in result]
+            return [
+                str(item.get("name", "")) if isinstance(item, dict) else ""
+                for item in result
+            ]
 
-        return result
+        # Convert to proper return type
+        return [item if isinstance(item, (str, dict)) else {} for item in result]
 
-    def info(self: Self, path: str, **kwargs: dict[str, Any]) -> dict[str, str | int]:
+    def info(self: Self, path: str, **kwargs: Any) -> dict[str, Any]:
         """Get information about a file or directory
 
         Parameters
@@ -786,11 +822,17 @@ class HyphaArtifact:
         """
         parent_path, filename = parent_and_filename(path)
 
+        if parent_path is None:
+            parent_path = ""
+
         listing = self.ls(parent_path)
         for item in listing:
-            if item["name"] == filename:
+            if isinstance(item, dict) and item.get("name") == filename:
                 # It's a file
                 return item
+            elif isinstance(item, str) and item == filename:
+                # Return basic info for string items
+                return {"name": filename, "type": "file"}
 
         raise FileNotFoundError(f"Path not found: {path}")
 
@@ -832,8 +874,9 @@ class HyphaArtifact:
         except Exception:
             return False
 
-    def listdir(self: Self, path: str, **kwargs) -> list[str]:
-        return self.ls(path, **kwargs)
+    def listdir(self: Self, path: str, **kwargs: Any) -> list[str]:
+        result = self.ls(path, detail=False, **kwargs)
+        return [str(item) for item in result]
 
     def find(
         self: Self,
@@ -842,7 +885,7 @@ class HyphaArtifact:
         withdirs: bool = False,
         detail: bool = False,
         **kwargs: dict[str, Any],
-    ) -> list[str] | dict[str, dict]:
+    ) -> list[str] | dict[str, dict[str, Any]]:
         """Find all files (and optional directories) under a path
 
         Parameters
@@ -864,8 +907,10 @@ class HyphaArtifact:
         """
 
         # Helper function to walk the directory tree recursively
-        def _walk_dir(current_path, current_depth):
-            results = {}
+        def _walk_dir(
+            current_path: str, current_depth: int
+        ) -> dict[str, dict[str, Any]]:
+            results: dict[str, dict[str, Any]] = {}
 
             # List current directory
             try:
@@ -875,15 +920,26 @@ class HyphaArtifact:
 
             # Add items to results
             for item in items:
-                item_type = item.get("type")
-                item_name = item.get("name")
+                if isinstance(item, dict):
+                    item_type = item.get("type")
+                    item_name = item.get("name")
+                else:
+                    # Default values for non-dict items
+                    item_type = "file"
+                    item_name = str(item)
 
-                if item_type == "file" or (withdirs and item_type == "directory"):
+                if (
+                    (item_type == "file" or (withdirs and item_type == "directory"))
+                    and isinstance(item, dict)
+                    and isinstance(item_name, str)
+                ):
                     results[item_name] = item
 
                 # Recurse into subdirectories if depth allows
-                if item_type == "directory" and (
-                    maxdepth is None or current_depth < maxdepth
+                if (
+                    item_type == "directory"
+                    and (maxdepth is None or current_depth < maxdepth)
+                    and isinstance(item_name, str)
                 ):
                     subdirectory_results = _walk_dir(item_name, current_depth + 1)
                     results.update(subdirectory_results)
@@ -898,7 +954,9 @@ class HyphaArtifact:
         else:
             return sorted(all_files.keys())
 
-    def mkdir(self: Self, path: str, create_parents: bool = True, **kwargs) -> None:
+    def mkdir(
+        self: Self, path: str, create_parents: bool = True, **kwargs: Any
+    ) -> None:
         """Create a directory
 
         In the Hypha artifact system, directories don't need to be explicitly created,
@@ -915,7 +973,7 @@ class HyphaArtifact:
         # Directories in Hypha artifacts are implicit
         # This is a no-op for compatibility with fsspec
 
-    def makedirs(self: Self, path: str, exist_ok: bool = True, **kwargs) -> None:
+    def makedirs(self: Self, path: str, exist_ok: bool = True, **kwargs: Any) -> None:
         """Create a directory and any parent directories
 
         In the Hypha artifact system, directories don't need to be explicitly created,
@@ -984,7 +1042,10 @@ class HyphaArtifact:
             First bytes of the file
         """
         with self.open(path, mode="rb") as f:
-            return f.read(size)
+            data = f.read(size)
+            if isinstance(data, str):
+                return data.encode("utf-8")
+            return data
 
     def size(self: Self, path: str) -> int:
         """Get the size of a file in bytes
