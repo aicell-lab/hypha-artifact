@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=65.0.0", "wheel"]
+
+[project]
+name = "hypha-artifact"
+version = "0.0.1"
+readme = "README.md"
+description = "Hypha Artifact package, used with Hypha."
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.28.0",
+  "python-dotenv>=0.21.0",
+  "hypha_rpc>=0.20.54",
+]
+license = "MIT"
+license-files = ["LICENSE"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["hypha_artifact*"]
+exclude = ["tests*"]
