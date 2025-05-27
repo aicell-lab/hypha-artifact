@@ -199,7 +199,7 @@ class HyphaArtifact:
                 If None, a new version is typically created. Cannot be "stage".
             comment (str | None): A comment describing the commit.
         """
-        params: dict[str, Any] = {
+        params: dict[str, str | None] = {
             "version": version,
             "comment": comment,
         }
@@ -245,21 +245,32 @@ class HyphaArtifact:
         }
         self._remote_post("remove_file", params)
 
-    def _remote_get_file_url(self: Self, file_path: str, silent: bool = False) -> str:
+    def _remote_get_file_url(
+        self: Self,
+        path: str,
+        silent: bool = False,
+        version: str | None = None,
+        limit: int = 1000,
+    ) -> str:
         """Generates a pre-signed URL to download a file from the artifact stored in S3.
 
         Args:
             self (Self): The instance of the HyphaArtifact class.
-            file_path (str): The relative path of the file to be downloaded (e.g., "data.csv").
+            path (str): The relative path of the file to be downloaded (e.g., "data.csv").
             silent (bool, optional): A boolean to suppress the download count increment.
                 Default is False.
+            version (str | None, optional): The version of the artifact to download from.
+            limit (int, optional): The maximum number of items to return.
+                Default is 1000.
 
         Returns:
             str: A pre-signed URL for downloading the file.
         """
-        params: dict[str, str | bool] = {
-            "file_path": file_path,
+        params: dict[str, str | bool | float | None] = {
+            "path": path,
             "silent": silent,
+            "version": version,
+            "limit": limit,
         }
         response = self._remote_get("get_file", params)
         return response.decode("utf-8")
