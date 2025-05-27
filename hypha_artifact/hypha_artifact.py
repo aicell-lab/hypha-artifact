@@ -151,83 +151,55 @@ class HyphaArtifact:
     def _remote_edit(
         self: Self,
         manifest: dict[str, Any] | None = None,
-        artifact_type: str | None = None,
-        permissions: dict[str, str] | None = None,
+        type: str | None = None,
         config: dict[str, Any] | None = None,
         secrets: dict[str, str] | None = None,
         version: str | None = None,
-        stage: bool = False,
         comment: str | None = None,
-        copy_files: bool | None = None,
+        stage: bool = False,
     ) -> None:
-        """Edits the artifact's metadata, including the manifest, type, and permissions.
+        """Edits the artifact's metadata and saves it.
+
+        This includes the manifest, type, configuration, secrets, and versioning information.
 
         Args:
-            self (Self): The instance of the HyphaArtifact class.
-            manifest (dict | None): Optional. The updated manifest.
-                Ensure the manifest follows the required schema
-                if applicable (e.g., for collections).
-            artifact_type (str | None): Optional. The type of the artifact.
-                Supported values are collection, vector-collection, generic and
-                any other custom type. By default, it's set to generic which
-                contains fields tailored for displaying the artifact as cards on a webpage.
-            permissions (dict | None): Optional. A dictionary containing user permissions.
-                For example {"*": "r+"} gives read and create access to everyone,
-                {"@": "rw+"} allows all authenticated users to read/write/create,
-                and {"user_id_1": "r+"} grants read and create permissions to a specific user.
-                You can also set permissions for specific operations,
-                such as {"user_id_1": ["read", "create"]}.
-            secrets (dict | None): Optional. A dictionary containing secrets to be stored
-                with the artifact. Secrets are encrypted and can only be accessed
-                by the artifact owner or users with appropriate permissions.
-            config (dict | None): Optional. A dictionary containing additional
-                configuration options for the artifact.
-            version (str | None): Optional. The version of the artifact to edit.
-                By default, it set to None, the version will stay the same.
-                If stage=True is specified, any version parameter is ignored.
-                You can set it to any version in text, e.g. 0.1.0 or v1.
-                If you set it to "new", it will generate a version similar to v0, v1, etc.
-            stage (bool): Optional. If True, the artifact will be edited in staging mode
-                regardless of the version parameter. Default is False. When in staging mode,
-                committing will create a new version.
-            comment (str | None): Optional. A comment to describe the changes made to the artifact.
-            copy_files (bool | None): Optional. A boolean flag indicating whether to copy files
-                from the previous version when creating a new staged version.
-                Default is None. Set to True to copy files from the previous version.
+            manifest (dict[str, Any] | None): The manifest data to set for the artifact.
+            type (str | None): The type of the artifact (e.g., "generic", "collection").
+            config (dict[str, Any] | None): Configuration dictionary for the artifact.
+            secrets (dict[str, str] | None): Secrets to store with the artifact.
+            version (str | None): The version to edit or create.
+                Can be "new" for a new version, "stage", or a specific version string.
+            comment (str | None): A comment for this version or edit.
+            stage (bool): If True, edits are made to a staging version.
         """
 
         params: dict[str, Any] = {
             "manifest": manifest,
-            "artifact_type": artifact_type,
-            "permissions": permissions,
+            "type": type,
             "config": config,
             "secrets": secrets,
             "version": version,
-            "stage": stage,
             "comment": comment,
-            "copy_files": copy_files,
+            "stage": stage,
         }
         self._remote_post("edit", params)
 
     def _remote_commit(
-        self: Self, version: str | None = None, comment: str | None = None
+        self: Self,
+        version: str | None = None,
+        comment: str | None = None,
     ) -> None:
-        """Finalizes and commits an artifact's staged changes.
-            Validates uploaded files and commits the staged manifest.
-            This process also updates view and download statistics.
+        """Commits the staged changes to the artifact.
+
+        This finalizes the staged manifest and files, creating a new version or
+        updating an existing one.
 
         Args:
-            self (Self): The instance of the HyphaArtifact class.
-            version (str | None): Optional. The version number to use for the committed artifact.
-                By default, it's set to None, the version will stay the same.
-                Note that this only affects the version number - whether a new version is created
-                or the current version is updated depends on whether the artifact
-                was in staging mode. If committing from staging mode,
-                a new version is always created. If committing a direct edit,
-                the current version is updated.
-            comment (str | None): Optional. A comment to describe the changes made to the artifact.
+            version (str | None): The version string for the commit.
+                If None, a new version is typically created. Cannot be "stage".
+            comment (str | None): A comment describing the commit.
         """
-        params = {
+        params: dict[str, Any] = {
             "version": version,
             "comment": comment,
         }
@@ -236,43 +208,39 @@ class HyphaArtifact:
     def _remote_put_file_url(
         self: Self,
         file_path: str,
-        download_weight: float | None = None,
+        download_weight: float = 1.0,
     ) -> str:
-        """Generates a pre-signed URL to upload a file to the artifact in S3. The URL can be used
-        with an HTTP PUT request to upload the file.
+        """Requests a pre-signed URL to upload a file to the artifact.
+
+        The artifact must be in staging mode to upload files.
 
         Args:
-            self (Self): The instance of the HyphaArtifact class.
-            file_path (str): The relative path of the file to upload within the
-                artifact (e.g., "data.csv").
-            download_weight (float | None): A float value representing the file's impact
-                on download count (0-1). Defaults to None.
+            file_path (str): The path within the artifact where the file will be stored.
+            download_weight (float): The download weight for the file (default is 1.0).
 
         Returns:
             str: A pre-signed URL for uploading the file.
         """
         params: dict[str, Any] = {
             "file_path": file_path,
+            "download_weight": download_weight,
         }
-        # Only include download_weight if it's not None
-        if download_weight is not None:
-            params["download_weight"] = download_weight
-
-        response = self._remote_post("put_file", params)
-        return response.decode("utf-8")
+        response_content = self._remote_post("put_file", params)
+        return response_content.decode()
 
     def _remote_remove_file(
         self: Self,
         file_path: str,
     ) -> None:
-        """Removes a file from the artifact and updates the staged manifest. The file is
-        also removed from the S3 storage.
+        """Removes a file from the artifact's staged version.
+
+        The artifact must be in staging mode. This operation updates the
+        staged manifest.
 
         Args:
-            self (Self): The instance of the HyphaArtifact class.
-            file_path (str): The relative path of the file to be removed (e.g., "data.csv").
+            file_path (str): The path of the file to remove within the artifact.
         """
-        params = {
+        params: dict[str, Any] = {
             "file_path": file_path,
         }
         self._remote_post("remove_file", params)
@@ -297,24 +265,31 @@ class HyphaArtifact:
         return response.decode("utf-8")
 
     def _remote_list_contents(
-        self: Self, dir_path: str | None = None
+        self: Self,
+        dir_path: str | None = None,
+        limit: int = 1000,
+        version: str | None = None,
     ) -> list[JsonType]:
-        """Lists all files in the artifact.
+        """Lists files and directories within a specified path in the artifact.
 
         Args:
-            self (Self): The instance of the HyphaArtifact class.
-            dir_path (str | None, optional): Optional. The directory path within the artifact to
-                list files from. Default is None.
+            dir_path (str | None): The directory path within the artifact to list.
+                If None, lists contents from the root of the artifact.
+            limit (int): The maximum number of items to return (default is 1000).
+            version (str | None): The version of the artifact to list files from.
+                If None, uses the latest committed version. Can be "stage".
 
         Returns:
-            list[JsonType]: A list of files in the specified directory.
+            list[JsonType]: A list of items (files and directories) found at the path.
+                Each item is a dictionary with details like 'name', 'type', 'size'.
         """
-        params = {
+        params: dict[str, Any] = {
             "dir_path": dir_path,
+            "limit": limit,
+            "version": version,
         }
-        response_bytes = self._remote_get("list_files", params)
-
-        return json.loads(response_bytes.decode("utf-8"))
+        response_content = self._remote_get("list_files", params)
+        return json.loads(response_content)
 
     @overload
     def cat(
@@ -458,7 +433,6 @@ class HyphaArtifact:
         on_error: "raise" or "ignore"
             What to do if a file is not found
         """
-        # Stage the artifact for edits
         self._remote_edit(stage=True)
         # Handle recursive case
         if recursive and self.isdir(path1):
