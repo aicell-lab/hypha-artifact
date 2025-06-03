@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest>=7.4.0
+hypha_rpc>=0.20.54
+python-dotenv>=1.0.0
