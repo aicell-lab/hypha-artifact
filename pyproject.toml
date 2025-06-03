@@ -3,8 +3,11 @@ requires = ["setuptools>=65.0.0", "wheel"]
 
 [project]
 name = "hypha-artifact"
-version = "0.0.1"
+version = "0.0.2"
 readme = "README.md"
+authors = [
+  { name = "Hugo Dettner Källander", email = "hugokallander@gmail.com"}
+]
 description = "Hypha Artifact package, used with Hypha."
 requires-python = ">=3.11"
 dependencies = [
