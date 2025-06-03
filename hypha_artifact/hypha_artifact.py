@@ -21,7 +21,7 @@ from hypha_artifact.artifact_file import ArtifactHttpFile
 
 class HyphaArtifact:
     """
-    HyphaArtifact provides an interface for interacting with Hypha artifact storage.
+    HyphaArtifact provides an fsspec-like interface for interacting with Hypha artifact storage.
 
     This class allows users to manage files and directories within a Hypha artifact,
     including uploading, downloading, editing metadata, listing contents, and managing permissions.
@@ -38,22 +38,6 @@ class HyphaArtifact:
     workspace_id : str
         The workspace identifier associated with the artifact.
 
-    Raises
-    ------
-    ValueError
-        If invalid arguments are provided or unsupported file modes are used.
-    FileNotFoundError
-        If a requested file or directory does not exist.
-    FileExistsError
-        If attempting to create a directory that already exists and exist_ok is False.
-    OSError
-        If attempting to remove a non-empty directory.
-    Exception
-        For other errors encountered during remote requests or file operations.
-
-    HyphaArtifact
-        An instance of the HyphaArtifact class for interacting with Hypha artifact storage.
-
     Examples
     --------
     >>> artifact = HyphaArtifact("my-artifact", "workspace-id", "my-token")
@@ -61,6 +45,8 @@ class HyphaArtifact:
     ['data.csv', 'images/']
     >>> with artifact.open("data.csv", "r") as f:
     ...     print(f.read())
+    >>> with artifact.open("data.csv", "w") as f:
+    ...     f.write("new content")
     """
 
     artifact_alias: str
