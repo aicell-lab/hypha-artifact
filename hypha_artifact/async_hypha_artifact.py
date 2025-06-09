@@ -56,7 +56,7 @@ class AsyncHyphaArtifact:
     ...     async with artifact.open("data.csv", "w") as f:
     ...         await f.write("new content")
     ... finally:
-    ...     await artifact.close()
+    ...     await artifact.aclose()
     """
 
     artifact_alias: str
