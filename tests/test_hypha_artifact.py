@@ -6,143 +6,25 @@ testing real file operations such as creation, reading, copying, and deletion
 against an actual Hypha artifact service.
 """
 
-import os
-import uuid
-import asyncio
-from typing import Any, Callable, Tuple
+from typing import Any
 import pytest
-from hypha_rpc import connect_to_server  # type: ignore
-from dotenv import load_dotenv
 from hypha_artifact import HyphaArtifact
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Skip all tests if no token is available
-pytestmark = pytest.mark.skipif(
-    os.getenv("PERSONAL_TOKEN") is None,
-    reason="PERSONAL_TOKEN environment variable not set",
-)
-
-
-@pytest.fixture(scope="module", name="artifact_name")
-def get_artifact_name() -> str:
-    """Generate a unique artifact name for testing."""
-    return f"test_artifact_{uuid.uuid4().hex[:8]}"
-
-
-async def get_artifact_manager(token: str) -> Tuple[Any, Any]:
-    """Get the artifact manager and API client.
-
-    Args:
-        token (str): The personal access token.
-
-    Returns:
-        Tuple[Any, Any]: The artifact manager and API client.
-    """
-    api = await connect_to_server(  # type: ignore
-        {
-            "name": "artifact-client",
-            "server_url": "https://hypha.aicell.io",
-            "token": token,
-        }
-    )
-
-    # Get the artifact manager service
-    artifact_manager = await api.get_service("public/artifact-manager")  # type: ignore
-
-    return artifact_manager, api  # type: ignore
-
-
-async def create_artifact(artifact_id: str, token: str) -> None:
-    """Create an artifact with the given ID.
-    Args:
-        artifact_id (str): The ID of the artifact to create.
-        token (str): The personal access token.
-    """
-    artifact_manager, api = await get_artifact_manager(token)
-
-    # Create the artifact
-    manifest = {
-        "name": artifact_id,
-        "description": f"Artifact created programmatically: {artifact_id}",
-    }
-
-    print(f"============Creating artifact: {artifact_id}============")
-    await artifact_manager.create(
-        alias=artifact_id,
-        type="generic",
-        manifest=manifest,
-        config={"permissions": {"*": "rw+", "@": "rw+"}},
-    )
-    print(f"============Created artifact: {artifact_id}============")
-
-    # Disconnect from the server
-    await api.disconnect()
-
-
-async def delete_artifact(artifact_id: str, token: str) -> None:
-    """Delete an artifact.
-
-    Args:
-        artifact_id (str): The ID of the artifact to delete.
-        token (str): The personal access token.
-    """
-    artifact_manager, api = await get_artifact_manager(token)
-
-    # Delete the artifact
-    print(f"============Deleting artifact: {artifact_id}============")
-    await artifact_manager.delete(artifact_id)
-    print(f"============Deleted artifact: {artifact_id}============")
-
-    # Disconnect from the server
-    await api.disconnect()
-
-
-def run_func_sync(
-    artifact_id: str, token: str, func: Callable[[str, str], Any]
-) -> None:
-    """Synchronous wrapper for async functions"""
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(func(artifact_id, token))
-    finally:
-        loop.close()
+from conftest import ArtifactTestMixin
 
 
 @pytest.fixture(scope="module", name="artifact")
-def get_artifact(artifact_name: str) -> Any:
+def get_artifact(artifact_name: str, artifact_setup_teardown) -> Any:
     """Create a test artifact with a real connection to Hypha."""
-
-    personal_token = os.getenv("PERSONAL_TOKEN")
-    workspace = os.getenv("PERSONAL_WORKSPACE")
-
-    if not personal_token:
-        pytest.skip("PERSONAL_TOKEN environment variable not set")
-    if not workspace:
-        pytest.skip("PERSONAL_WORKSPACE environment variable not set")
-
-    run_func_sync(artifact_name, personal_token, create_artifact)
-    _artifact = HyphaArtifact(artifact_name, workspace, personal_token)
-    yield _artifact
-    run_func_sync(artifact_name, personal_token, delete_artifact)
+    personal_token, workspace = artifact_setup_teardown
+    return HyphaArtifact(artifact_name, workspace, personal_token)
 
 
-@pytest.fixture(name="test_content")
-def get_test_content() -> str:
-    """Provide test file content for testing."""
-    return "This is a test file content for integration testing"
-
-
-class TestHyphaArtifactIntegration:
+class TestHyphaArtifactIntegration(ArtifactTestMixin):
     """Integration test suite for the HyphaArtifact class."""
 
     def test_artifact_initialization(self, artifact: Any, artifact_name: str) -> None:
         """Test that the artifact is initialized correctly with real credentials."""
-        assert artifact.artifact_alias == artifact_name
-        assert artifact.token is not None
-        assert artifact.workspace_id is not None
-        assert artifact.artifact_url is not None
+        self._check_artifact_initialization(artifact, artifact_name)
 
     def test_create_file(self, artifact: Any, test_content: str) -> None:
         """Test creating a file in the artifact using real operations."""
@@ -163,21 +45,11 @@ class TestHyphaArtifactIntegration:
         """Test listing files in the artifact using real operations."""
         # First, list files with detail=True (default)
         files = artifact.ls("/")
-
-        # Verify we got a list with file details
-        assert isinstance(files, list)
-        if files:
-            assert "name" in files[0], "File listing should include 'name' attribute"
-            assert "size" in files[0], "File listing should include 'size' attribute"
+        self._validate_file_listing(files)
 
         # Test listing with detail=False
         file_names: list[str] = artifact.ls("/", detail=False)
-        assert isinstance(file_names, list)
-        if files:
-            # Check that file_names contains string values, not dictionaries
-            assert all(
-                isinstance(name, str) for name in file_names
-            ), "File names should be strings"
+        self._validate_file_listing(file_names)
 
     def test_read_file_content(self, artifact: Any, test_content: str) -> None:
         """Test reading content from a file in the artifact using real operations."""
@@ -190,11 +62,7 @@ class TestHyphaArtifactIntegration:
 
         # Read the file content
         content = artifact.cat(test_file_path)
-
-        # Verify the content matches
-        assert (
-            content == test_content
-        ), f"File content doesn't match. Expected: '{test_content}', Got: '{content}'"
+        self._validate_file_content(content, test_content)
 
     def test_copy_file(self, artifact: Any, test_content: str) -> None:
         """Test copying a file within the artifact using real operations."""
@@ -212,21 +80,7 @@ class TestHyphaArtifactIntegration:
 
         # Copy the file
         artifact.copy(source_path, copy_path)
-
-        # Verify both files exist
-        assert artifact.exists(
-            source_path
-        ), f"Source file {source_path} should exist after copying"
-        assert artifact.exists(
-            copy_path
-        ), f"Copied file {copy_path} should exist after copying"
-
-        # Verify content is the same
-        source_content = artifact.cat(source_path)
-        copy_content = artifact.cat(copy_path)
-        assert (
-            source_content == copy_content
-        ), "Content in source and copied file should match"
+        self._validate_copy_operation(artifact, source_path, copy_path, test_content)
 
     def test_file_existence(self, artifact: Any) -> None:
         """Test checking if files exist in the artifact using real operations."""
@@ -236,15 +90,11 @@ class TestHyphaArtifactIntegration:
             f.write("Testing file existence")
 
         # Test for existing file
-        assert (
-            artifact.exists(test_file_path) is True
-        ), f"File {test_file_path} should exist"
+        self._validate_file_existence(artifact, test_file_path, True)
 
         # Test for non-existent file
         non_existent_path = "this_file_does_not_exist.txt"
-        assert (
-            artifact.exists(non_existent_path) is False
-        ), f"File {non_existent_path} should not exist"
+        self._validate_file_existence(artifact, non_existent_path, False)
 
     def test_remove_file(self, artifact: Any) -> None:
         """Test removing a file from the artifact using real operations."""
@@ -256,17 +106,13 @@ class TestHyphaArtifactIntegration:
             f.write("This file will be removed")
 
         # Verify file exists before removal
-        assert artifact.exists(
-            removal_test_file
-        ), f"File {removal_test_file} should exist before removal"
+        self._validate_file_existence(artifact, removal_test_file, True)
 
         # Remove the file
         artifact.rm(removal_test_file)
 
         # Verify file no longer exists
-        assert not artifact.exists(
-            removal_test_file
-        ), f"File {removal_test_file} should no longer exist after removal"
+        self._validate_file_existence(artifact, removal_test_file, False)
 
     def test_workflow(self, artifact: Any, test_content: str) -> None:
         """Integration test for a complete file workflow: create, read, copy, remove."""
@@ -281,7 +127,7 @@ class TestHyphaArtifactIntegration:
         # Step 2: Verify file exists and content is correct
         assert artifact.exists(original_file)
         content = artifact.cat(original_file)
-        assert content == test_content
+        self._validate_file_content(content, test_content)
 
         # Step 3: Copy file
         artifact.copy(original_file, copied_file)
@@ -289,7 +135,7 @@ class TestHyphaArtifactIntegration:
 
         # Step 4: Remove copied file
         artifact.rm(copied_file)
-        assert not artifact.exists(copied_file)
+        self._validate_file_existence(artifact, copied_file, False)
         assert artifact.exists(original_file)
 
     def test_partial_file_read(self, artifact: Any, test_content: str) -> None:
@@ -306,8 +152,4 @@ class TestHyphaArtifactIntegration:
 
         # Verify the partial content matches the expected first 10 bytes
         expected_content = test_content[:10]
-        assert partial_content == expected_content, (
-            "Partial content doesn't match."
-            f"Expected: '{expected_content}'"
-            f"Got: '{partial_content}'"
-        )
+        self._validate_file_content(partial_content, expected_content)
