@@ -81,7 +81,7 @@ from hypha_artifact import HyphaArtifact
 artifact = HyphaArtifact(
     artifact_id="my-artifact",
     workspace="your-workspace-id", 
-    token="your-personal-token"
+    token="your-workspace-token"
 )
 
 # Create and write to a file
@@ -118,7 +118,7 @@ async def main():
     async with AsyncHyphaArtifact(
         artifact_id="my-artifact",
         workspace="your-workspace-id", 
-        token="your-personal-token"
+        token="your-workspace-token"
     ) as artifact:
         
         # Create and write to a file
