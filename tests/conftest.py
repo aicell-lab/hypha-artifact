@@ -18,8 +18,8 @@ load_dotenv()
 
 # Skip all tests if no token is available
 pytestmark = pytest.mark.skipif(
-    os.getenv("PERSONAL_TOKEN") is None,
-    reason="PERSONAL_TOKEN environment variable not set",
+    os.getenv("HYPHA_TOKEN") is None,
+    reason="HYPHA_TOKEN environment variable not set",
 )
 
 
@@ -117,29 +117,29 @@ def run_func_sync(
 @pytest.fixture(scope="module", name="credentials")
 def get_credentials() -> Tuple[str, str]:
     """Get test credentials."""
-    personal_token = os.getenv("PERSONAL_TOKEN")
-    workspace = os.getenv("PERSONAL_WORKSPACE")
+    token = os.getenv("HYPHA_TOKEN")
+    workspace = os.getenv("HYPHA_WORKSPACE")
 
-    if not personal_token:
-        pytest.skip("PERSONAL_TOKEN environment variable not set")
+    if not token:
+        pytest.skip("HYPHA_TOKEN environment variable not set")
     if not workspace:
-        pytest.skip("PERSONAL_WORKSPACE environment variable not set")
+        pytest.skip("HYPHA_WORKSPACE environment variable not set")
 
-    return personal_token, workspace
+    return token, workspace
 
 
 @pytest.fixture(scope="module", name="artifact_setup_teardown")
 def get_artifact_setup_teardown(artifact_name: str, credentials: Tuple[str, str]):
     """Setup and teardown artifact for testing."""
-    personal_token, workspace = credentials
+    token, workspace = credentials
 
     # Setup
-    run_func_sync(artifact_name, personal_token, create_artifact)
+    run_func_sync(artifact_name, token, create_artifact)
 
-    yield personal_token, workspace
+    yield token, workspace
 
     # Teardown
-    run_func_sync(artifact_name, personal_token, delete_artifact)
+    run_func_sync(artifact_name, token, delete_artifact)
 
 
 class ArtifactTestMixin:

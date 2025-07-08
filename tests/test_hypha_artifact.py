@@ -15,8 +15,8 @@ from conftest import ArtifactTestMixin
 @pytest.fixture(scope="module", name="artifact")
 def get_artifact(artifact_name: str, artifact_setup_teardown) -> Any:
     """Create a test artifact with a real connection to Hypha."""
-    personal_token, workspace = artifact_setup_teardown
-    return HyphaArtifact(artifact_name, workspace, personal_token)
+    token, workspace = artifact_setup_teardown
+    return HyphaArtifact(artifact_name, workspace, token)
 
 
 class TestHyphaArtifactIntegration(ArtifactTestMixin):
