@@ -202,7 +202,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
         # Test that we can use the artifact within an async context
         async with AsyncHyphaArtifact(
             async_artifact.artifact_alias,
-            async_artifact.workspace_id,
+            async_artifact.workspace,
             async_artifact.token,
         ) as ctx_artifact:
             async with ctx_artifact.open(test_file_path, "w") as f:

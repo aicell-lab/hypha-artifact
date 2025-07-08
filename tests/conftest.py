@@ -149,7 +149,7 @@ class ArtifactTestMixin:
         """Test that the artifact is initialized correctly with real credentials."""
         assert artifact.artifact_alias == artifact_name
         assert artifact.token is not None
-        assert artifact.workspace_id is not None
+        assert artifact.workspace is not None
         assert artifact.artifact_url is not None
 
     def _validate_file_listing(self, files: list) -> None:
