@@ -16,8 +16,8 @@ from conftest import ArtifactTestMixin
 @pytest_asyncio.fixture(scope="function", name="async_artifact")
 async def get_async_artifact(artifact_name: str, artifact_setup_teardown) -> Any:
     """Create a test artifact with a real async connection to Hypha."""
-    personal_token, workspace = artifact_setup_teardown
-    artifact = AsyncHyphaArtifact(artifact_name, workspace, personal_token)
+    token, workspace = artifact_setup_teardown
+    artifact = AsyncHyphaArtifact(artifact_name, workspace, token)
     yield artifact
     await artifact.aclose()
 

@@ -23,6 +23,6 @@ jobs:
 
     - name: Run tests
       env:
-        PERSONAL_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
-        PERSONAL_WORKSPACE: ${{ secrets.PERSONAL_WORKSPACE }}
+        HYPHA_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        HYPHA_WORKSPACE: ${{ secrets.PERSONAL_WORKSPACE }}
       run: pytest -v
