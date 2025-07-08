@@ -35,7 +35,7 @@ class HyphaArtifact:
         The base URL for the Hypha artifact manager service.
     token : str
         The authentication token for accessing the artifact service.
-    workspace_id : str
+    workspace : str
         The workspace identifier associated with the artifact.
 
     Examples
@@ -49,12 +49,7 @@ class HyphaArtifact:
     ...     f.write("new content")
     """
 
-    artifact_alias: str
-    artifact_url: str
-    token: str
-    workspace_id: str
-
-    def __init__(self: Self, artifact_alias: str, workspace: str, token: str):
+    def __init__(self: Self, artifact_id: str, workspace: str, token: str=None, service_url: str=None):
         """Initialize a HyphaArtifact instance.
 
         Parameters
@@ -62,10 +57,18 @@ class HyphaArtifact:
         artifact_id: str
             The identifier of the Hypha artifact to interact with
         """
-        self.artifact_alias = artifact_alias
-        self.workspace_id = workspace
+        if "/" in artifact_id:
+            self.workspace, self.artifact_alias = artifact_id.split("/")
+            if workspace:
+                assert workspace == self.workspace, "Workspace mismatch"
+        else:
+            self.workspace = workspace
+            self.artifact_alias = artifact_id
         self.token = token
-        self.artifact_url = "https://hypha.aicell.io/public/services/artifact-manager"
+        if service_url:
+            self.artifact_url = service_url
+        else:
+            self.artifact_url = "https://hypha.aicell.io/public/services/artifact-manager"
 
     def _extend_params(
         self: Self,
@@ -101,7 +104,7 @@ class HyphaArtifact:
             request_url,
             json=cleaned_params if json_data else None,
             params=cleaned_params if params else None,
-            headers={"Authorization": f"Bearer {self.token}"},
+            headers={"Authorization": f"Bearer {self.token}"} if self.token else None,
             timeout=20,
         )
 

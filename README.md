@@ -72,22 +72,18 @@ pip install hypha-artifact
 
 ## Quick Start
 
-### Basic Setup
+### Synchronous Version
 
 ```python
 from hypha_artifact import HyphaArtifact
 
 # Initialize with your credentials
 artifact = HyphaArtifact(
-    artifact_name="my-artifact",
+    artifact_id="my-artifact",
     workspace="your-workspace-id", 
     token="your-personal-token"
 )
-```
 
-### Basic File Operations
-
-```python
 # Create and write to a file
 with artifact.open("hello.txt", "w") as f:
     f.write("Hello, Hypha!")
@@ -111,6 +107,46 @@ artifact.copy("hello.txt", "hello_copy.txt")
 artifact.rm("hello_copy.txt")
 ```
 
+### Asynchronous Version (Recommended)
+
+```python
+import asyncio
+from hypha_artifact import AsyncHyphaArtifact
+
+async def main():
+    # Initialize and use as context manager
+    async with AsyncHyphaArtifact(
+        artifact_id="my-artifact",
+        workspace="your-workspace-id", 
+        token="your-personal-token"
+    ) as artifact:
+        
+        # Create and write to a file
+        async with artifact.open("hello.txt", "w") as f:
+            await f.write("Hello, Hypha!")
+        
+        # Read file content
+        content = await artifact.cat("hello.txt")
+        print(content)  # Output: Hello, Hypha!
+        
+        # List files in the artifact
+        files = await artifact.ls("/")
+        print([f["name"] for f in files])
+        
+        # Check if file exists
+        if await artifact.exists("hello.txt"):
+            print("File exists!")
+        
+        # Copy a file
+        await artifact.copy("hello.txt", "hello_copy.txt")
+        
+        # Remove a file
+        await artifact.rm("hello_copy.txt")
+
+# Run the async function
+asyncio.run(main())
+```
+
 ## API Reference
 
 ### Synchronous API
@@ -120,7 +156,7 @@ The `HyphaArtifact` class provides synchronous file operations:
 #### Initialization
 
 ```python
-HyphaArtifact(artifact_name: str, workspace: str, token: str)
+HyphaArtifact(artifact_id: str, workspace: str, token: str)
 ```
 
 #### File Operations
@@ -185,7 +221,7 @@ The `AsyncHyphaArtifact` class provides asynchronous file operations for better 
 from hypha_artifact import AsyncHyphaArtifact
 
 async_artifact = AsyncHyphaArtifact(
-    artifact_name="my-artifact",
+    artifact_id="my-artifact",
     workspace="workspace-id",
     token="your-token"
 )
@@ -210,14 +246,13 @@ from hypha_artifact import AsyncHyphaArtifact
 
 async def main():
     # Method 1: Manual connection management
-    artifact = AsyncHyphaArtifact("my-artifact", "workspace", "token")
+    artifact = AsyncHyphaArtifact("my-workspace/my-artifact", token="token")
     
-    async with artifact:
-        async with artifact.open("async_file.txt", "w") as f:
-            await f.write("Async content")
-        
-        content = await artifact.cat("async_file.txt")
-        print(content)
+    async with artifact.open("async_file.txt", "w") as f:
+        await f.write("Async content")
+    
+    content = await artifact.cat("async_file.txt")
+    print(content)
     
     # Method 2: Context manager for the entire artifact
     async with AsyncHyphaArtifact("my-artifact", "workspace", "token") as artifact:
