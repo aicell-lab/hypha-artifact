@@ -3,7 +3,8 @@
 import io
 import locale
 import os
-from typing import Callable, Self, Any, Awaitable
+from collections.abc import Callable, Awaitable
+from typing import Self
 from types import TracebackType
 import httpx
 from hypha_artifact.utils import clean_url, FileMode
@@ -16,7 +17,10 @@ class AsyncArtifactHttpFile:
     via the httpx library.
     """
 
-    _on_close: Callable[..., Awaitable[Any]] | None = None
+    name: str | None
+    mode: str
+    auto_commit: bool
+    commit_func: Callable[[], Awaitable[None]] | None
 
     def __init__(
         self: Self,
@@ -206,6 +210,7 @@ class AsyncArtifactHttpFile:
                     await self._commit_func()
         finally:
             self._closed = True
+            self._buffer.close()
             if self._client:
                 await self._client.aclose()
 

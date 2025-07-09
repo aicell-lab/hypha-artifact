@@ -14,7 +14,9 @@ from conftest import ArtifactTestMixin
 
 
 @pytest_asyncio.fixture(scope="function", name="async_artifact")
-async def get_async_artifact(artifact_name: str, artifact_setup_teardown) -> Any:
+async def get_async_artifact(
+    artifact_name: str, artifact_setup_teardown: tuple[str, str]
+) -> Any:
     """Create a test artifact with a real async connection to Hypha."""
     token, workspace = artifact_setup_teardown
     artifact = AsyncHyphaArtifact(artifact_name, workspace, token)
@@ -27,13 +29,15 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_artifact_initialization(
-        self, async_artifact: Any, artifact_name: str
+        self, async_artifact: AsyncHyphaArtifact, artifact_name: str
     ) -> None:
         """Test that the artifact is initialized correctly with real credentials."""
         self._check_artifact_initialization(async_artifact, artifact_name)
 
     @pytest.mark.asyncio
-    async def test_create_file(self, async_artifact: Any, test_content: str) -> None:
+    async def test_create_file(
+        self, async_artifact: AsyncHyphaArtifact, test_content: str
+    ) -> None:
         """Test creating a file in the artifact using real async operations."""
         test_file_path = "async_test_file.txt"
 
@@ -44,18 +48,19 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Verify the file was created
             files = await async_artifact.ls("/")
-            file_names = [f.get("name") for f in files if isinstance(f, dict)]
+            file_names = [f.get("name") for f in files]
             assert (
                 test_file_path in file_names
             ), f"Created file {test_file_path} not found in {file_names}"
 
     @pytest.mark.asyncio
-    async def test_list_files(self, async_artifact: Any) -> None:
+    async def test_list_files(self, async_artifact: AsyncHyphaArtifact) -> None:
         """Test listing files in the artifact using real async operations."""
         async with async_artifact:
             # First, list files with detail=True (default)
             files = await async_artifact.ls("/")
             self._validate_file_listing(files)
+            print(f"Files in artifact: {files}")
 
             # Test listing with detail=False
             file_names = await async_artifact.ls("/", detail=False)
@@ -63,7 +68,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_read_file_content(
-        self, async_artifact: Any, test_content: str
+        self, async_artifact: AsyncHyphaArtifact, test_content: str
     ) -> None:
         """Test reading content from a file in the artifact using real async operations."""
         test_file_path = "async_test_file.txt"
@@ -79,7 +84,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             self._validate_file_content(content, test_content)
 
     @pytest.mark.asyncio
-    async def test_copy_file(self, async_artifact: Any, test_content: str) -> None:
+    async def test_copy_file(
+        self, async_artifact: AsyncHyphaArtifact, test_content: str
+    ) -> None:
         """Test copying a file within the artifact using real async operations."""
         source_path = "async_source_file.txt"
         copy_path = "async_copy_of_source_file.txt"
@@ -101,7 +108,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             )
 
     @pytest.mark.asyncio
-    async def test_file_existence(self, async_artifact: Any) -> None:
+    async def test_file_existence(self, async_artifact: AsyncHyphaArtifact) -> None:
         """Test checking if files exist in the artifact using real async operations."""
         async with async_artifact:
             # Create a test file to check existence
@@ -121,7 +128,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             )
 
     @pytest.mark.asyncio
-    async def test_remove_file(self, async_artifact: Any) -> None:
+    async def test_remove_file(self, async_artifact: AsyncHyphaArtifact) -> None:
         """Test removing a file from the artifact using real async operations."""
         async with async_artifact:
             # Create a file to be removed
@@ -145,7 +152,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             )
 
     @pytest.mark.asyncio
-    async def test_workflow(self, async_artifact: Any, test_content: str) -> None:
+    async def test_workflow(
+        self, async_artifact: AsyncHyphaArtifact, test_content: str
+    ) -> None:
         """Integration test for a complete async file workflow: create, read, copy, remove."""
         async with async_artifact:
             # File paths for testing
@@ -174,7 +183,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_partial_file_read(
-        self, async_artifact: Any, test_content: str
+        self, async_artifact: AsyncHyphaArtifact, test_content: str
     ) -> None:
         """Test reading only part of a file using the size parameter in async read."""
         test_file_path = "async_partial_read_test.txt"
@@ -194,7 +203,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_context_manager(
-        self, async_artifact: Any, test_content: str
+        self, async_artifact: AsyncHyphaArtifact, test_content: str
     ) -> None:
         """Test that the async context manager works correctly."""
         test_file_path = "async_context_test.txt"

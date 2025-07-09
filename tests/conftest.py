@@ -8,7 +8,8 @@ sync and async test suites to avoid code duplication.
 import os
 import uuid
 import asyncio
-from typing import Any, Callable, Tuple
+from collections.abc import Callable
+from typing import Any, Callable
 import pytest
 from hypha_rpc import connect_to_server  # type: ignore
 from dotenv import load_dotenv
@@ -35,14 +36,14 @@ def get_test_content() -> str:
     return "This is a test file content for integration testing"
 
 
-async def get_artifact_manager(token: str) -> Tuple[Any, Any]:
+async def get_artifact_manager(token: str) -> tuple[Any, Any]:
     """Get the artifact manager and API client.
 
     Args:
         token (str): The personal access token.
 
     Returns:
-        Tuple[Any, Any]: The artifact manager and API client.
+        tuple[Any, Any]: The artifact manager and API client.
     """
     api = await connect_to_server(  # type: ignore
         {
@@ -115,7 +116,7 @@ def run_func_sync(
 
 
 @pytest.fixture(scope="module", name="credentials")
-def get_credentials() -> Tuple[str, str]:
+def get_credentials() -> tuple[str, str]:
     """Get test credentials."""
     token = os.getenv("HYPHA_TOKEN")
     workspace = os.getenv("HYPHA_WORKSPACE")
@@ -129,7 +130,7 @@ def get_credentials() -> Tuple[str, str]:
 
 
 @pytest.fixture(scope="module", name="artifact_setup_teardown")
-def get_artifact_setup_teardown(artifact_name: str, credentials: Tuple[str, str]):
+def get_artifact_setup_teardown(artifact_name: str, credentials: tuple[str, str]):
     """Setup and teardown artifact for testing."""
     token, workspace = credentials
 
@@ -152,7 +153,7 @@ class ArtifactTestMixin:
         assert artifact.workspace is not None
         assert artifact.artifact_url is not None
 
-    def _validate_file_listing(self, files: list) -> None:
+    def _validate_file_listing(self, files: list[Any]) -> None:
         """Validate file listing format."""
         assert isinstance(files, list)
         if files:
@@ -171,7 +172,7 @@ class ArtifactTestMixin:
                 ), "File names should be strings"
 
     def _validate_file_content(
-        self, content: str | None, expected_content: str
+        self, content: str | bytes | None, expected_content: str | bytes
     ) -> None:
         """Validate file content matches expected."""
         assert (

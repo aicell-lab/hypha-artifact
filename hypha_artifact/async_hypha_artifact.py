@@ -21,11 +21,13 @@ from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
 
 class AsyncHyphaArtifact:
     """
-    AsyncHyphaArtifact provides an async fsspec-like interface for interacting with Hypha artifact storage.
+    AsyncHyphaArtifact provides an async fsspec-like interface for interacting with Hypha
+    artifact storage.
 
     This class allows users to manage files and directories within a Hypha artifact,
     including uploading, downloading, editing metadata, listing contents, and managing permissions.
-    It abstracts the underlying HTTP API and provides a file-system-like interface compatible with fsspec.
+    It abstracts the underlying HTTP API and provides a file-system-like interface compatible with
+    fsspec.
 
     The class uses a persistent httpx.AsyncClient for efficiency. For best performance and proper
     resource management, use it as an async context manager or call close() explicitly when done.
@@ -59,7 +61,19 @@ class AsyncHyphaArtifact:
     ...     await artifact.aclose()
     """
 
-    def __init__(self: Self, artifact_id: str, workspace: str, token: str=None, service_url: str=None):
+    token: str | None
+    workspace: str
+    artifact_alias: str
+    artifact_url: str
+    _client: httpx.AsyncClient | None
+
+    def __init__(
+        self: Self,
+        artifact_id: str,
+        workspace: str,
+        token: str | None = None,
+        service_url: str | None = None,
+    ):
         """Initialize an AsyncHyphaArtifact instance.
 
         Parameters
@@ -78,7 +92,9 @@ class AsyncHyphaArtifact:
         if service_url:
             self.artifact_url = service_url
         else:
-            self.artifact_url = "https://hypha.aicell.io/public/services/artifact-manager"
+            self.artifact_url = (
+                "https://hypha.aicell.io/public/services/artifact-manager"
+            )
         self._client = None
 
     async def __aenter__(self: Self) -> Self:
@@ -109,13 +125,17 @@ class AsyncHyphaArtifact:
         params["artifact_id"] = self.artifact_alias
         return params
 
+    def _normalize_path(self: Self, path: str) -> str:
+        """Normalize the path by removing all leading slashes."""
+        return path.lstrip("/")
+
     async def _remote_request(
         self: Self,
         artifact_method: str,
         method: Literal["GET", "POST"],
         params: dict[str, JsonType] | None = None,
         json_data: dict[str, JsonType] | None = None,
-    ) -> bytes | Any:
+    ) -> bytes:
         """Make a remote request to the artifact service.
         Args:
             method_name (str): The name of the method to call on the artifact service.
@@ -390,7 +410,7 @@ class AsyncHyphaArtifact:
             raise e
 
     def open(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         urlpath: str,
         mode: FileMode = "rb",
         auto_commit: bool = True,
@@ -412,7 +432,7 @@ class AsyncHyphaArtifact:
         AsyncArtifactHttpFile
             A file-like object
         """
-        normalized_path = urlpath[1:] if urlpath.startswith("/") else urlpath
+        normalized_path = self._normalize_path(urlpath)
 
         if "r" in mode:
 
@@ -438,7 +458,7 @@ class AsyncHyphaArtifact:
         )
 
     async def copy(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path1: str,
         path2: str,
         recursive: bool = False,
@@ -465,10 +485,14 @@ class AsyncHyphaArtifact:
         # Handle recursive case
         if recursive and await self.isdir(path1):
             files = await self.find(path1, maxdepth=maxdepth, withdirs=False)
-            for src_file in files:
-                rel_path = src_file[len(path1) :].lstrip("/")
-                dst_file = f"{path2}/{rel_path}" if rel_path else path2
-                await self._copy_single_file(src_file, dst_file)
+            for src_path in files:
+                rel_path = src_path[len(path1) :].lstrip("/")
+                dst_path = f"{path2}/{rel_path}"
+                try:
+                    await self._copy_single_file(src_path, dst_path)
+                except (FileNotFoundError, IOError, httpx.RequestError) as e:
+                    if on_error == "raise":
+                        raise e
         else:
             await self._copy_single_file(path1, path2)
 
@@ -519,68 +543,155 @@ class AsyncHyphaArtifact:
     ) -> None:
         """Remove file or directory"""
         await self._remote_edit(stage=True)
-        await self._remote_remove_file(path)
+
+        if recursive and await self.isdir(path):
+            files = await self.find(
+                path, maxdepth=maxdepth, withdirs=False, detail=False
+            )
+            for file_path in files:
+                await self._remote_remove_file(self._normalize_path(file_path))
+        else:
+            await self._remote_remove_file(self._normalize_path(path))
+
         await self._remote_commit()
 
-    async def created(self: Self, path: str):  # pylint: disable=unused-argument
-        """Return creation time of file (not supported, returns None)"""
-        return None
+    async def created(self: Self, path: str) -> str | None:
+        """Get the creation time of a file
+
+        In the Hypha artifact system, we might not have direct access to creation time,
+        but we can retrieve this information from file metadata if available.
+
+        Parameters
+        ----------
+        path: str
+            Path to the file
+
+        Returns
+        -------
+        datetime or None
+            Creation time of the file, if available
+        """
+        info = await self.info(path)
+        # Return creation time if available in the metadata, otherwise None
+        return info.get("created") if info else None
 
     async def delete(
-        self: Self,
-        path: str,
-        recursive: bool = False,  # pylint: disable=unused-argument
-        maxdepth: int | None = None,  # pylint: disable=unused-argument
-    ):
-        """Alias for rm"""
+        self: Self, path: str, recursive: bool = False, maxdepth: int | None = None
+    ) -> None:
+        """Delete a file or directory from the artifact
+
+        Args:
+            self (Self): The instance of the class.
+            path (str): The path to the file or directory to delete.
+            recursive (bool, optional): Whether to delete directories recursively.
+                Defaults to False.
+            maxdepth (int | None, optional): The maximum depth to delete. Defaults to None.
+
+        Returns:
+            None
+        """
         return await self.rm(path, recursive=recursive, maxdepth=maxdepth)
 
     async def exists(
         self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
     ) -> bool:
-        """Check if path exists"""
+        """Check if a file or directory exists
+
+        Parameters
+        ----------
+        path: str
+            Path to check
+
+        Returns
+        -------
+        bool
+            True if the path exists, False otherwise
+        """
         try:
-            await self.info(path)
-            return True
-        except (FileNotFoundError, IOError):
+            async with self.open(path, "r") as f:
+                await f.read(0)
+                return True
+        except (FileNotFoundError, IOError, httpx.RequestError):
             return False
 
+    @overload
     async def ls(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path: str,
-        detail: bool = True,
-        **kwargs: Any,  # pylint: disable=unused-argument
-    ) -> list[str | dict[str, Any]]:
-        """List contents of path"""
-        normalized_path = path[1:] if path.startswith("/") else path
-        normalized_path = normalized_path if normalized_path else None
+        detail: Literal[False],
+        **kwargs: Any,
+    ) -> list[str]: ...
 
-        try:
-            contents = await self._remote_list_contents(normalized_path)
-            if detail:
-                return contents  # type: ignore
-            else:
-                return [item.get("name", "") for item in contents if isinstance(item, dict)]  # type: ignore
-        except Exception:  # pylint: disable=broad-except
-            # If path doesn't exist or is not a directory, return empty list
-            return []
+    @overload
+    async def ls(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        detail: Literal[True],
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]: ...
+
+    @overload
+    async def ls(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]: ...
+
+    async def ls(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        detail: Literal[True] | Literal[False] = True,
+        **kwargs: Any,
+    ) -> list[str] | list[dict[str, Any]]:
+        """List contents of path"""
+        contents = await self._remote_list_contents(self._normalize_path(path))
+
+        if detail:
+            return [item for item in contents if isinstance(item, dict)]
+
+        return [item.get("name", "") for item in contents if isinstance(item, dict)]
 
     async def info(
         self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
     ) -> dict[str, Any]:
-        """Get file information"""
-        normalized_path = path[1:] if path.startswith("/") else path
+        """Get information about a file or directory
+
+        Parameters
+        ----------
+        path: str
+            Path to get information about
+
+        Returns
+        -------
+        dict
+            Dictionary with file information
+        """
+        normalized_path = self._normalize_path(path)
         parent_path, filename = parent_and_filename(normalized_path)
 
-        contents = await self._remote_list_contents(parent_path)
-        for item in contents:
-            if isinstance(item, dict) and item.get("name") == filename:
+        if parent_path is None:
+            parent_path = ""
+
+        listing = await self.ls(parent_path)
+        for item in listing:
+            if item.get("name") == filename:
                 return item
 
-        raise FileNotFoundError(f"File not found: {path}")
+        raise FileNotFoundError(f"Path not found: {path}")
 
     async def isdir(self: Self, path: str) -> bool:
-        """Check if path is a directory"""
+        """Check if a path is a directory
+
+        Parameters
+        ----------
+        path: str
+            Path to check
+
+        Returns
+        -------
+        bool
+            True if the path is a directory, False otherwise
+        """
         try:
             info = await self.info(path)
             return info.get("type") == "directory"
@@ -588,7 +699,18 @@ class AsyncHyphaArtifact:
             return False
 
     async def isfile(self: Self, path: str) -> bool:
-        """Check if path is a file"""
+        """Check if a path is a file
+
+        Parameters
+        ----------
+        path: str
+            Path to check
+
+        Returns
+        -------
+        bool
+            True if the path is a file, False otherwise
+        """
         try:
             info = await self.info(path)
             return info.get("type") == "file"
@@ -598,81 +720,208 @@ class AsyncHyphaArtifact:
     async def listdir(
         self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
     ) -> list[str]:
-        """List directory contents (names only)"""
-        result = await self.ls(path, detail=False)
-        return [item for item in result if isinstance(item, str)]
+        """List files in a directory
+
+        Parameters
+        ----------
+        path: str
+            Path to list
+        **kwargs: dict[str, Any]
+            Additional arguments passed to the ls method
+
+        Returns
+        -------
+        list of str
+            List of file names in the directory
+        """
+        return await self.ls(path, detail=False)
+
+    @overload
+    async def find(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        maxdepth: int | None = None,
+        withdirs: bool = False,
+        *,
+        detail: Literal[True],
+        **kwargs: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]: ...
+
+    @overload
+    async def find(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        maxdepth: int | None = None,
+        withdirs: bool = False,
+        detail: Literal[False] = False,
+        **kwargs: dict[str, Any],
+    ) -> list[str]: ...
 
     async def find(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path: str,
         maxdepth: int | None = None,
         withdirs: bool = False,
         detail: bool = False,
-        **kwargs: dict[str, Any],  # pylint: disable=unused-argument
+        **kwargs: dict[str, Any],
     ) -> list[str] | dict[str, dict[str, Any]]:
-        """Find files recursively"""
-        results = []
-        results_detail = {}
+        """Find all files (and optional directories) under a path
 
-        async def _find_recursive(current_path: str, current_depth: int = 0):
-            if maxdepth is not None and current_depth >= maxdepth:
-                return
+        Parameters
+        ----------
+        path: str
+            Base path to search from
+        maxdepth: int or None
+            Maximum recursion depth when searching
+        withdirs: bool
+            Whether to include directories in the results
+        detail: bool
+            If True, return a dict of {path: info_dict}
+            If False, return a list of paths
 
+        Returns
+        -------
+        list or dict
+            List of paths or dict of {path: info_dict}
+        """
+
+        # Helper function to walk the directory tree recursively
+        async def _walk_dir(
+            current_path: str, current_depth: int
+        ) -> dict[str, dict[str, Any]]:
+            results: dict[str, dict[str, Any]] = {}
+
+            # List current directory
             try:
-                contents = await self.ls(current_path, detail=True)
-                for item in contents:
-                    if isinstance(item, dict):
-                        item_name = item.get("name", "")
-                        item_path = f"{current_path}/{item_name}".strip("/")
-                        item_type = item.get("type", "")
+                items = await self.ls(current_path)
+            except (FileNotFoundError, IOError, httpx.RequestError):
+                return {}
 
-                        if item_type == "file":
-                            results.append(item_path)
-                            if detail:
-                                results_detail[item_path] = item
-                        elif item_type == "directory":
-                            if withdirs:
-                                results.append(item_path)
-                                if detail:
-                                    results_detail[item_path] = item
-                            await _find_recursive(item_path, current_depth + 1)
-            except Exception:  # pylint: disable=broad-except
-                pass  # Skip inaccessible directories
+            # Add items to results
+            for item in items:
+                item_type = item.get("type")
+                item_name = item.get("name")
 
-        await _find_recursive(path)
+                if (
+                    item_type == "file" or (withdirs and item_type == "directory")
+                ) and isinstance(item_name, str):
+                    results[item_name] = item
+
+                # Recurse into subdirectories if depth allows
+                if (
+                    item_type == "directory"
+                    and (maxdepth is None or current_depth < maxdepth)
+                    and isinstance(item_name, str)
+                ):
+                    subdirectory_results = await _walk_dir(item_name, current_depth + 1)
+                    results.update(subdirectory_results)
+
+            return results
+
+        # Start the recursive walk
+        all_files = await _walk_dir(path, 1)
 
         if detail:
-            return results_detail
-        return results
+            return all_files
+        else:
+            return sorted(all_files.keys())
 
     async def mkdir(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path: str,  # pylint: disable=unused-argument
         create_parents: bool = True,  # pylint: disable=unused-argument
         **kwargs: Any,  # pylint: disable=unused-argument
     ) -> None:
-        """Create directory (no-op for Hypha artifacts)"""
-        return  # Directories are created implicitly when files are added
+        """Create a directory
+
+        In the Hypha artifact system, directories don't need to be explicitly created,
+        they are implicitly created when files are added under a path.
+        However, we'll implement this as a no-op to maintain compatibility.
+
+        Parameters
+        ----------
+        path: str
+            Path to create
+        create_parents: bool
+            If True, create parent directories if they don't exist
+        """
+        # Directories in Hypha artifacts are implicit
+        # This is a no-op for compatibility with fsspec
+        return
 
     async def makedirs(
-        self: Self,
-        path: str,  # pylint: disable=unused-argument
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
         exist_ok: bool = True,  # pylint: disable=unused-argument
         **kwargs: Any,  # pylint: disable=unused-argument
     ) -> None:
-        """Create directories recursively (no-op for Hypha artifacts)"""
-        return  # Directories are created implicitly when files are added
+        """Create a directory tree
+
+        In the Hypha artifact system, directories don't need to be explicitly created,
+        they are implicitly created when files are added under a path.
+
+        Parameters
+        ----------
+        path: str
+            Path to create
+        exist_ok: bool
+            If False and the directory exists, raise an error
+        """
+        # If the directory already exists and exist_ok is False, raise an error
+        if not exist_ok and await self.exists(path) and await self.isdir(path):
+            raise FileExistsError(f"Directory already exists: {path}")
+        return
 
     async def rm_file(self: Self, path: str) -> None:
-        """Remove a single file"""
+        """Remove a file
+
+        Parameters
+        ----------
+        path: str
+            Path to remove
+        """
         await self.rm(path)
 
-    async def rmdir(self: Self, path: str) -> None:  # pylint: disable=unused-argument
-        """Remove directory (no-op for Hypha artifacts)"""
-        return  # Directories are removed implicitly when all files are removed
+    async def rmdir(self: Self, path: str) -> None:
+        """Remove an empty directory
+
+        In the Hypha artifact system, directories are implicit, so this would
+        only make sense if the directory is empty. Since empty directories
+        don't really exist explicitly, this is essentially a validation check
+        that no files exist under this path.
+
+        Parameters
+        ----------
+        path: str
+            Path to remove
+        """
+        # Check if the directory exists
+        if not await self.isdir(path):
+            raise FileNotFoundError(f"Directory not found: {path}")
+
+        # Check if the directory is empty
+        files = await self.ls(path)
+        if files:
+            raise OSError(f"Directory not empty: {path}")
+
+        # If we get here, the directory is empty (or doesn't exist),
+        # so there's nothing to do
 
     async def head(self: Self, path: str, size: int = 1024) -> bytes:
-        """Read first `size` bytes of file"""
+        """Get the first bytes of a file
+
+        Parameters
+        ----------
+        path: str
+            Path to the file
+        size: int
+            Number of bytes to read
+
+        Returns
+        -------
+        bytes
+            First bytes of the file
+        """
         async with self.open(path, "rb") as f:
             result = await f.read(size)
             if isinstance(result, bytes):
@@ -683,13 +932,37 @@ class AsyncHyphaArtifact:
                 return bytes(result)
 
     async def size(self: Self, path: str) -> int:
-        """Get file size"""
+        """Get the size of a file in bytes
+
+        Parameters
+        ----------
+        path: str
+            Path to the file
+
+        Returns
+        -------
+        int
+            Size of the file in bytes
+        """
         info = await self.info(path)
-        return info.get("size", 0)
+        if info.get("type") == "directory":
+            return 0
+        return int(info.get("size", 0)) or 0  # Default to 0 if size is None
 
     async def sizes(self: Self, paths: list[str]) -> list[int]:
-        """Get sizes of multiple files"""
-        sizes = []
+        """Get the size of multiple files
+
+        Parameters
+        ----------
+        paths: list of str
+            List of paths to get sizes for
+
+        Returns
+        -------
+        list of int
+            List of file sizes in bytes
+        """
+        sizes: list[int] = []
         for path in paths:
             try:
                 size = await self.size(path)

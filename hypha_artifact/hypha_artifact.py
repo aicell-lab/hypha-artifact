@@ -29,11 +29,12 @@ class HyphaArtifact:
     provides a file-system-like interface compatible with fsspec.
 
     Attributes
+    ----------
     artifact_alias : str
         The identifier or alias of the Hypha artifact to interact with.
     artifact_url : str
         The base URL for the Hypha artifact manager service.
-    token : str
+    token : str | None
         The authentication token for accessing the artifact service.
     workspace : str
         The workspace identifier associated with the artifact.
@@ -49,7 +50,18 @@ class HyphaArtifact:
     ...     f.write("new content")
     """
 
-    def __init__(self: Self, artifact_id: str, workspace: str, token: str=None, service_url: str=None):
+    token: str | None
+    workspace: str
+    artifact_alias: str
+    artifact_url: str
+
+    def __init__(
+        self: Self,
+        artifact_id: str,
+        workspace: str,
+        token: str | None = None,
+        service_url: str | None = None,
+    ):
         """Initialize a HyphaArtifact instance.
 
         Parameters
@@ -68,7 +80,9 @@ class HyphaArtifact:
         if service_url:
             self.artifact_url = service_url
         else:
-            self.artifact_url = "https://hypha.aicell.io/public/services/artifact-manager"
+            self.artifact_url = (
+                "https://hypha.aicell.io/public/services/artifact-manager"
+            )
 
     def _extend_params(
         self: Self,
@@ -84,7 +98,7 @@ class HyphaArtifact:
         method: Literal["GET", "POST"],
         params: dict[str, JsonType] | None = None,
         json_data: dict[str, JsonType] | None = None,
-    ) -> bytes | Any:
+    ) -> bytes:
         """Make a remote request to the artifact service.
         Args:
             method_name (str): The name of the method to call on the artifact service.
@@ -140,7 +154,7 @@ class HyphaArtifact:
     def _remote_edit(
         self: Self,
         manifest: dict[str, Any] | None = None,
-        type: str | None = None,
+        type: str | None = None,  # pylint: disable=redefined-builtin
         config: dict[str, Any] | None = None,
         secrets: dict[str, str] | None = None,
         version: str | None = None,
@@ -289,6 +303,10 @@ class HyphaArtifact:
         response_content = self._remote_get("list_files", params)
         return json.loads(response_content)
 
+    def _normalize_path(self: Self, path: str) -> str:
+        """Normalize the path by removing all leading slashes."""
+        return path.lstrip("/")
+
     @overload
     def cat(
         self: Self,
@@ -379,33 +397,25 @@ class HyphaArtifact:
         ArtifactHttpFile
             A file-like object
         """
-        normalized_path = urlpath[1:] if urlpath.startswith("/") else urlpath
+        normalized_path = self._normalize_path(urlpath)
 
         if "r" in mode:
-            download_url = self._remote_get_file_url(normalized_path)
-            return ArtifactHttpFile(
-                url=download_url,
-                mode=mode,
-                name=normalized_path,
-                **kwargs,
-            )
+            url = self._remote_get_file_url(normalized_path)
         elif "w" in mode or "a" in mode:
             if auto_commit:
                 self._remote_edit(stage=True)
-            upload_url = self._remote_put_file_url(normalized_path)
-            file_obj = ArtifactHttpFile(
-                url=upload_url,
-                mode=mode,
-                name=normalized_path,
-                **kwargs,
-            )
-
-            if auto_commit:
-                file_obj.on_close = self._remote_commit
-
-            return file_obj
+            url = self._remote_put_file_url(normalized_path)
         else:
             raise ValueError(f"Unsupported file mode: {mode}")
+
+        return ArtifactHttpFile(
+            url=url,
+            mode=mode,
+            name=normalized_path,
+            auto_commit=auto_commit,
+            commit_func=self._remote_commit if auto_commit else None,
+            **kwargs,
+        )
 
     def copy(
         self: Self,  # pylint: disable=unused-argument
@@ -434,13 +444,12 @@ class HyphaArtifact:
         self._remote_edit(stage=True)
         # Handle recursive case
         if recursive and self.isdir(path1):
-            files = self.find(path1, maxdepth=maxdepth)
-            for file_path in files:
-                # Calculate the destination path
-                rel_path = file_path[len(path1) :].lstrip("/")
-                dest_path = f"{path2}/{rel_path}" if path2 else rel_path
+            files = self.find(path1, maxdepth=maxdepth, withdirs=False)
+            for src_path in files:
+                rel_path = src_path[len(path1) :].lstrip("/")
+                dest_path = f"{path2}/{rel_path}"
                 try:
-                    self._copy_single_file(file_path, dest_path)
+                    self._copy_single_file(src_path, dest_path)
                 except (FileNotFoundError, IOError, requests.RequestException) as e:
                     if on_error == "raise":
                         raise e
@@ -490,8 +499,8 @@ class HyphaArtifact:
     def rm(
         self: Self,
         path: str,
-        recursive: bool = False,  # pylint: disable=unused-argument
-        maxdepth: int | None = None,  # pylint: disable=unused-argument
+        recursive: bool = False,
+        maxdepth: int | None = None,
     ) -> None:
         """Remove a file from the artifact
 
@@ -509,10 +518,17 @@ class HyphaArtifact:
         None
         """
         self._remote_edit(stage=True)
-        self._remote_remove_file(path)
+
+        if recursive and self.isdir(path):
+            files = self.find(path, maxdepth=maxdepth, withdirs=False, detail=False)
+            for file_path in files:
+                self._remote_remove_file(self._normalize_path(file_path))
+        else:
+            self._remote_remove_file(self._normalize_path(path))
+
         self._remote_commit()
 
-    def created(self: Self, path: str):
+    def created(self: Self, path: str) -> str | None:
         """Get the creation time of a file
 
         In the Hypha artifact system, we might not have direct access to creation time,
@@ -534,7 +550,7 @@ class HyphaArtifact:
 
     def delete(
         self: Self, path: str, recursive: bool = False, maxdepth: int | None = None
-    ):
+    ) -> None:
         """Delete a file or directory from the artifact
 
         Args:
@@ -566,19 +582,40 @@ class HyphaArtifact:
         """
         try:
             with self.open(path, "r") as f:
-                partial_content = f.read(0)
-                if isinstance(partial_content, (bytes, str)):
-                    return True
-                return False
+                f.read(0)
+                return True
         except (FileNotFoundError, IOError, requests.RequestException):
             return False
+
+    @overload
+    def ls(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        detail: Literal[False],
+        **kwargs: Any,
+    ) -> list[str]: ...
+
+    @overload
+    def ls(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        detail: Literal[True],
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]: ...
+
+    @overload
+    def ls(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]: ...
 
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
-        detail: bool = True,
+        detail: Literal[True] | Literal[False] = True,
         **kwargs: Any,
-    ) -> list[str | dict[str, Any]]:
+    ) -> list[str] | list[dict[str, Any]]:
         """List files and directories in a directory
 
         Parameters
@@ -594,16 +631,12 @@ class HyphaArtifact:
         list
             List of files and directories in the directory
         """
-        result: list[JsonType] = self._remote_list_contents(path)
+        result: list[JsonType] = self._remote_list_contents(self._normalize_path(path))
 
-        if not detail:
-            return [
-                str(item.get("name", "")) if isinstance(item, dict) else ""
-                for item in result
-            ]
+        if detail:
+            return [item for item in result if isinstance(item, dict)]
 
-        # Convert to proper return type
-        return [item if isinstance(item, (str, dict)) else {} for item in result]
+        return [item.get("name", "") for item in result if isinstance(item, dict)]
 
     def info(
         self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
@@ -620,19 +653,16 @@ class HyphaArtifact:
         dict
             Dictionary with file information
         """
-        parent_path, filename = parent_and_filename(path)
+        normalized_path = self._normalize_path(path)
+        parent_path, filename = parent_and_filename(normalized_path)
 
         if parent_path is None:
             parent_path = ""
 
         listing = self.ls(parent_path)
         for item in listing:
-            if isinstance(item, dict) and item.get("name") == filename:
-                # It's a file
+            if item.get("name") == filename:
                 return item
-            elif isinstance(item, str) and item == filename:
-                # Return basic info for string items
-                return {"name": filename, "type": "file"}
 
         raise FileNotFoundError(f"Path not found: {path}")
 
@@ -692,6 +722,27 @@ class HyphaArtifact:
         result = self.ls(path, detail=False, **kwargs)
         return [str(item) for item in result]
 
+    @overload
+    def find(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        maxdepth: int | None = None,
+        withdirs: bool = False,
+        *,
+        detail: Literal[True],
+        **kwargs: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]: ...
+
+    @overload
+    def find(
+        self: Self,  # pylint: disable=unused-argument
+        path: str,
+        maxdepth: int | None = None,
+        withdirs: bool = False,
+        detail: Literal[False] = False,
+        **kwargs: dict[str, Any],
+    ) -> list[str]: ...
+
     def find(
         self: Self,  # pylint: disable=unused-argument
         path: str,
@@ -734,19 +785,12 @@ class HyphaArtifact:
 
             # Add items to results
             for item in items:
-                if isinstance(item, dict):
-                    item_type = item.get("type")
-                    item_name = item.get("name")
-                else:
-                    # Default values for non-dict items
-                    item_type = "file"
-                    item_name = str(item)
+                item_type = item.get("type")
+                item_name = item.get("name")
 
                 if (
-                    (item_type == "file" or (withdirs and item_type == "directory"))
-                    and isinstance(item, dict)
-                    and isinstance(item_name, str)
-                ):
+                    item_type == "file" or (withdirs and item_type == "directory")
+                ) and isinstance(item_name, str):
                     results[item_name] = item
 
                 # Recurse into subdirectories if depth allows

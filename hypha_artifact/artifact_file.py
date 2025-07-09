@@ -3,7 +3,8 @@
 import io
 import locale
 import os
-from typing import Callable, Self, Any
+from collections.abc import Callable
+from typing import Self, Any
 from types import TracebackType
 import requests
 from hypha_artifact.utils import clean_url, FileMode
@@ -16,7 +17,10 @@ class ArtifactHttpFile(io.IOBase):
     via the requests library instead of relying on Pyodide.
     """
 
-    _on_close: Callable[..., Any] | None = None
+    name: str | None
+    mode: str
+    auto_commit: bool
+    commit_func: Callable[[], Any] | None
 
     def __init__(
         self: Self,
@@ -25,6 +29,8 @@ class ArtifactHttpFile(io.IOBase):
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
+        auto_commit: bool = True,
+        commit_func: Callable[[], Any] | None = None,
     ) -> None:
         self._url = url
         self._pos = 0
@@ -34,6 +40,8 @@ class ArtifactHttpFile(io.IOBase):
         self.name = name
         self._closed = False
         self._buffer = io.BytesIO()
+        self._auto_commit = auto_commit
+        self._commit_func = commit_func
 
         if "r" in mode:
             # For read mode, download the content immediately
@@ -179,23 +187,18 @@ class ArtifactHttpFile(io.IOBase):
             return
 
         try:
-            if "w" in self._mode or "a" in self._mode:
+            if ("w" in self._mode or "a" in self._mode) and self._buffer.tell() > 0:
                 self._upload_content()
+                if self._auto_commit and self._commit_func:
+                    self._commit_func()
         finally:
             self._closed = True
             self._buffer.close()
-            if self._on_close is not None:
-                self._on_close()
 
     @property
-    def on_close(self: Self) -> Callable[..., Any] | None:
-        """Get on_close callback function"""
-        return self._on_close
-
-    @on_close.setter
-    def on_close(self: Self, func: Callable[..., Any] | None) -> None:
-        """Set on_close callback function"""
-        self._on_close = func
+    def closed(self: Self) -> bool:
+        """Return whether the file is closed"""
+        return self._closed
 
     def __enter__(self: Self) -> Self:
         """Enter context manager"""
