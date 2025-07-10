@@ -36,23 +36,23 @@ class AsyncHyphaArtifact:
     ----------
     artifact_alias : str
         The identifier or alias of the Hypha artifact to interact with.
-    artifact_url : str
-        The base URL for the Hypha artifact manager service.
-    token : str
-        The authentication token for accessing the artifact service.
-    workspace : str
+    workspace : str | None
         The workspace identifier associated with the artifact.
+    token : str | None
+        The authentication token for accessing the artifact service.
+    service_url : str | None
+        The base URL for the Hypha artifact manager service.
 
     Examples
     --------
     Using as an async context manager (recommended):
-    >>> async with AsyncHyphaArtifact("my-artifact", "workspace-id", "my-token") as artifact:
+    >>> async with AsyncHyphaArtifact("my-artifact", "workspace-id", "my-token", "https://hypha.aicell.io/public/services/artifact-manager") as artifact:
     ...     files = await artifact.ls("/")
     ...     async with artifact.open("data.csv", "r") as f:
     ...         content = await f.read()
 
     Or with explicit cleanup:
-    >>> artifact = AsyncHyphaArtifact("my-artifact", "workspace-id", "my-token")
+    >>> artifact = AsyncHyphaArtifact("my-artifact", "workspace-id", "my-token", "https://hypha.aicell.io/public/services/artifact-manager")
     >>> try:
     ...     files = await artifact.ls("/")
     ...     async with artifact.open("data.csv", "w") as f:
@@ -62,7 +62,7 @@ class AsyncHyphaArtifact:
     """
 
     token: str | None
-    workspace: str
+    workspace: str | None
     artifact_alias: str
     artifact_url: str
     _client: httpx.AsyncClient | None
@@ -70,7 +70,7 @@ class AsyncHyphaArtifact:
     def __init__(
         self: Self,
         artifact_id: str,
-        workspace: str,
+        workspace: str | None = None,
         token: str | None = None,
         service_url: str | None = None,
     ):
@@ -86,6 +86,9 @@ class AsyncHyphaArtifact:
             if workspace:
                 assert workspace == self.workspace, "Workspace mismatch"
         else:
+            assert (
+                workspace
+            ), "Workspace must be provided if artifact_id does not include it"
             self.workspace = workspace
             self.artifact_alias = artifact_id
         self.token = token
