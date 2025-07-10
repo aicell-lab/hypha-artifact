@@ -41,7 +41,7 @@ class HyphaArtifact:
 
     Examples
     --------
-    >>> artifact = HyphaArtifact("my-artifact", "workspace-id", "my-token")
+    >>> artifact = HyphaArtifact("artifact-id", "workspace-id", "my-token", "https://hypha.aicell.io/public/services/artifact-manager")
     >>> artifact.ls("/")
     ['data.csv', 'images/']
     >>> with artifact.open("data.csv", "r") as f:
