@@ -30,14 +30,14 @@ class HyphaArtifact:
 
     Attributes
     ----------
-    artifact_alias : str
+    artifact_id : str
         The identifier or alias of the Hypha artifact to interact with.
-    artifact_url : str
-        The base URL for the Hypha artifact manager service.
+    workspace : str | None
+        The workspace identifier associated with the artifact.
     token : str | None
         The authentication token for accessing the artifact service.
-    workspace : str
-        The workspace identifier associated with the artifact.
+    service_url : str | None
+        The base URL for the Hypha artifact manager service.
 
     Examples
     --------
@@ -58,7 +58,7 @@ class HyphaArtifact:
     def __init__(
         self: Self,
         artifact_id: str,
-        workspace: str,
+        workspace: str | None = None,
         token: str | None = None,
         service_url: str | None = None,
     ):
@@ -74,6 +74,9 @@ class HyphaArtifact:
             if workspace:
                 assert workspace == self.workspace, "Workspace mismatch"
         else:
+            assert (
+                workspace is not None
+            ), "Workspace must be provided if artifact_id does not contain a slash"
             self.workspace = workspace
             self.artifact_alias = artifact_id
         self.token = token
