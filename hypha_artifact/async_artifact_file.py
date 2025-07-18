@@ -90,11 +90,11 @@ class AsyncArtifactHttpFile:
             if range_header:
                 headers["Range"] = range_header
 
-            async with self._get_client() as client:
-                response = await client.get(cleaned_url, headers=headers, timeout=60)
-                response.raise_for_status()
-                self._buffer = io.BytesIO(response.content)
-                self._size = len(response.content)
+            client = self._get_client()
+            response = await client.get(cleaned_url, headers=headers, timeout=60)
+            response.raise_for_status()
+            self._buffer = io.BytesIO(response.content)
+            self._size = len(response.content)
         except httpx.RequestError as e:
             # More detailed error information for debugging
             status_code = (
@@ -121,12 +121,13 @@ class AsyncArtifactHttpFile:
                 "Content-Length": str(len(content)),
             }
 
-            async with self._get_client() as client:
-                response = await client.put(
-                    cleaned_url, content=content, headers=headers, timeout=60
-                )
-                response.raise_for_status()
-                return response
+            client = self._get_client()
+            response = await client.put(
+                cleaned_url, content=content, headers=headers, timeout=60
+            )
+
+            response.raise_for_status()
+            return response
         except httpx.HTTPStatusError as e:
             status_code = (
                 e.response.status_code if hasattr(e, "response") else "unknown"
