@@ -513,16 +513,41 @@ class AsyncHyphaArtifact:
         part_count = math.ceil(file_size / chunk_size)
         
         # Start multipart upload
-        multipart_info = await self._remote_put_file_start_multipart(
-            remote_path, part_count, download_weight=download_weight
-        )
-        upload_id = multipart_info["upload_id"]
-        parts_info = multipart_info["parts"]
+        try:
+            multipart_info = await self._remote_put_file_start_multipart(
+                remote_path, part_count, download_weight=download_weight
+            )
+            print(f"DEBUG: Multipart info response: {multipart_info}")  # Temporary debug
+            
+            upload_id = multipart_info["upload_id"]
+            
+            # Handle different possible response structures
+            if "parts" in multipart_info:
+                parts_info = multipart_info["parts"]
+            elif "urls" in multipart_info:
+                # Alternative structure where URLs might be in a different field
+                parts_info = multipart_info["urls"]
+            else:
+                # If no parts/urls, try to generate part info from upload_id
+                # This might be a case where we need to make separate calls for each part URL
+                raise ValueError(f"Unexpected multipart response structure: {multipart_info}")
+
+        except Exception as e:
+            raise IOError(f"Failed to start multipart upload: {str(e)}") from e
 
         async def upload_part(part_info: dict[str, Any], chunk_data: bytes) -> dict[str, Any]:
             """Upload a single part."""
-            part_number = part_info["part_number"]
-            upload_url = part_info["upload_url"]
+            part_number = part_info.get("part_number", parts_info.index(part_info) + 1)
+            
+            # Handle different possible URL field names
+            upload_url = None
+            for url_field in ["upload_url", "url", "presigned_url", "uploadUrl"]:
+                if url_field in part_info:
+                    upload_url = part_info[url_field]
+                    break
+            
+            if not upload_url:
+                raise KeyError(f"No upload URL found in part info: {part_info}")
 
             client = self._get_client()
             response = await client.put(
