@@ -276,7 +276,7 @@ class AsyncHyphaArtifact:
             "download_weight": download_weight,
         }
         response_content = await self._remote_post("put_file", params)
-        return response_content.decode()
+        return response_content.decode().strip('"')
 
     async def _remote_remove_file(
         self: Self,
@@ -321,17 +321,21 @@ class AsyncHyphaArtifact:
             "version": version,
         }
         response = await self._remote_get("get_file", params)
-        return response.decode("utf-8")
+        return response.decode("utf-8").strip('"')
 
-    async def _remote_create_multipart_upload(
+    async def _remote_put_file_start_multipart(
         self: Self,
         file_path: str,
+        part_count: int,
+        expires_in: int = 7200,
         download_weight: float = 1.0,
     ) -> dict[str, Any]:
-        """Create a multipart upload for a file.
+        """Start a multipart upload for a file.
 
         Args:
             file_path (str): The path within the artifact where the file will be stored.  
+            part_count (int): The number of parts for the multipart upload.
+            expires_in (int): Expiration time in seconds (default: 7200 = 2 hours).
             download_weight (float): The download weight for the file (default is 1.0).
 
         Returns:
@@ -339,30 +343,29 @@ class AsyncHyphaArtifact:
         """
         params: dict[str, Any] = {
             "file_path": file_path,
+            "part_count": part_count,
+            "expires_in": expires_in,
             "download_weight": download_weight,
         }
-        response_content = await self._remote_post("create-multipart-upload", params)
+        response_content = await self._remote_post("put_file_start_multipart", params)
         return json.loads(response_content.decode())
 
-    async def _remote_complete_multipart_upload(
+    async def _remote_put_file_complete_multipart(
         self: Self,
-        file_path: str,
         upload_id: str,
         parts: list[dict[str, Any]],
     ) -> None:
         """Complete a multipart upload.
 
         Args:
-            file_path (str): The path of the file being uploaded.
-            upload_id (str): The upload ID from create_multipart_upload.
+            upload_id (str): The upload ID from put_file_start_multipart.
             parts (list): List of completed parts with part_number and etag.
         """
         params: dict[str, Any] = {
-            "file_path": file_path,
             "upload_id": upload_id,
             "parts": parts,
         }
-        await self._remote_post("complete-multipart-upload", params)
+        await self._remote_post("put_file_complete_multipart", params)
 
     async def upload(
         self: Self,
@@ -503,8 +506,16 @@ class AsyncHyphaArtifact:
         download_weight: float = 1.0,
     ) -> None:
         """Upload a file using multipart upload with parallel uploads."""
-        # Create multipart upload
-        multipart_info = await self._remote_create_multipart_upload(remote_path, download_weight)
+        import math
+        
+        # Calculate part count based on file size and chunk size
+        file_size = local_path.stat().st_size
+        part_count = math.ceil(file_size / chunk_size)
+        
+        # Start multipart upload
+        multipart_info = await self._remote_put_file_start_multipart(
+            remote_path, part_count, download_weight=download_weight
+        )
         upload_id = multipart_info["upload_id"]
         parts_info = multipart_info["parts"]
 
@@ -555,7 +566,7 @@ class AsyncHyphaArtifact:
             )
 
             # Complete multipart upload
-            await self._remote_complete_multipart_upload(remote_path, upload_id, completed_parts)
+            await self._remote_put_file_complete_multipart(upload_id, completed_parts)
 
         except Exception as e:
             # If something goes wrong, we should ideally abort the multipart upload
