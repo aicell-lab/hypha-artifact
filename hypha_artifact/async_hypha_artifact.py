@@ -223,15 +223,19 @@ class AsyncHyphaArtifact:
             stage (bool): If True, edits are made to a staging version.
         """
 
-        params: dict[str, Any] = {
-            "manifest": manifest,
-            "type": artifact_type,
-            "config": config,
-            "secrets": secrets,
-            "version": version,
-            "comment": comment,
-            "stage": stage,
-        }
+        params: dict[str, Any] = {"stage": stage}
+        if manifest is not None:
+            params["manifest"] = manifest
+        if artifact_type is not None:
+            params["type"] = artifact_type
+        if config is not None:
+            params["config"] = config
+        if secrets is not None:
+            params["secrets"] = secrets
+        if version is not None:
+            params["version"] = version
+        if comment is not None:
+            params["comment"] = comment
         await self._remote_post("edit", params)
 
     async def _remote_commit(
@@ -249,10 +253,11 @@ class AsyncHyphaArtifact:
                 If None, a new version is typically created. Cannot be "stage".
             comment (str | None): A comment describing the commit.
         """
-        params: dict[str, str | None] = {
-            "version": version,
-            "comment": comment,
-        }
+        params: dict[str, Any] = {}
+        if version is not None:
+            params["version"] = version
+        if comment is not None:
+            params["comment"] = comment
         await self._remote_post("commit", params)
 
     async def _remote_put_file_url(
@@ -517,7 +522,6 @@ class AsyncHyphaArtifact:
             multipart_info = await self._remote_put_file_start_multipart(
                 remote_path, part_count, download_weight=download_weight
             )
-            print(f"DEBUG: Multipart info response: {multipart_info}")  # Temporary debug
             
             upload_id = multipart_info["upload_id"]
             

@@ -181,15 +181,19 @@ class HyphaArtifact:
             stage (bool): If True, edits are made to a staging version.
         """
 
-        params: dict[str, Any] = {
-            "manifest": manifest,
-            "type": type,
-            "config": config,
-            "secrets": secrets,
-            "version": version,
-            "comment": comment,
-            "stage": stage,
-        }
+        params: dict[str, Any] = {"stage": stage}
+        if manifest is not None:
+            params["manifest"] = manifest
+        if type is not None:
+            params["type"] = type
+        if config is not None:
+            params["config"] = config
+        if secrets is not None:
+            params["secrets"] = secrets
+        if version is not None:
+            params["version"] = version
+        if comment is not None:
+            params["comment"] = comment
         self._remote_post("edit", params)
 
     def _remote_commit(
@@ -207,10 +211,11 @@ class HyphaArtifact:
                 If None, a new version is typically created. Cannot be "stage".
             comment (str | None): A comment describing the commit.
         """
-        params: dict[str, str | None] = {
-            "version": version,
-            "comment": comment,
-        }
+        params: dict[str, Any] = {}
+        if version is not None:
+            params["version"] = version
+        if comment is not None:
+            params["comment"] = comment
         self._remote_post("commit", params)
 
     def _remote_put_file_url(
@@ -460,7 +465,6 @@ class HyphaArtifact:
             multipart_info = self._remote_put_file_start_multipart(
                 remote_path, part_count, download_weight=download_weight
             )
-            print(f"DEBUG: Multipart info response: {multipart_info}")  # Temporary debug
             
             upload_id = multipart_info["upload_id"]
             
