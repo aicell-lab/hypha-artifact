@@ -25,3 +25,6 @@ include-package-data = true
 [tool.setuptools.packages.find]
 include = ["hypha_artifact*"]
 exclude = ["tests*"]
+
+[project.scripts]
+hypha-artifact = "hypha_artifact.cli:main"
