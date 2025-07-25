@@ -160,9 +160,9 @@ class AsyncHyphaArtifact:
         response = await client.request(
             method,
             request_url,
-            json=cleaned_params if json_data else None,
-            params=cleaned_params if params else None,
-            headers={"Authorization": f"Bearer {self.token}"},
+            json=cleaned_params or {} if json_data is not None else None,
+            params=cleaned_params if params is not None else None,
+            headers={"Authorization": f"Bearer {self.token}"} if self.token else None,
             timeout=20,
         )
 
@@ -178,6 +178,9 @@ class AsyncHyphaArtifact:
             For put_file requests, returns the pre-signed URL as a string.
             For other requests, returns the response content.
         """
+        # Ensure params is never None - always use at least empty dict
+        if params is None:
+            params = {}
         return await self._remote_request(
             method_name,
             method="POST",
@@ -769,6 +772,7 @@ class AsyncHyphaArtifact:
             What to do if a file is not found
         """
         await self._remote_edit(stage=True)
+        
         # Handle recursive case
         if recursive and await self.isdir(path1):
             files = await self.find(path1, maxdepth=maxdepth, withdirs=False)

@@ -1,0 +1,9 @@
+name: "Updated Artifact"
+description: "This is an updated artifact with new metadata"
+version: "2.0"
+author: "Test User"
+tags:
+  - "example"
+  - "test"
+  - "updated"
+license: "MIT" 

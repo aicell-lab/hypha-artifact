@@ -14,12 +14,66 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict
 from dotenv import load_dotenv, find_dotenv
+import yaml
 
 from hypha_artifact.hypha_artifact import HyphaArtifact
 from hypha_artifact.async_hypha_artifact import AsyncHyphaArtifact
 
 # Load environment variables
 load_dotenv(dotenv_path=find_dotenv(usecwd=True))
+
+
+def load_file_content(file_path: str) -> Dict[str, Any]:
+    """Load content from JSON or YAML file."""
+    if not file_path:
+        return {}
+    
+    path = Path(file_path)
+    if not path.exists():
+        print(f"❌ File does not exist: {file_path}", file=sys.stderr)
+        sys.exit(1)
+    
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Try to determine format from extension
+        if path.suffix.lower() in ['.yaml', '.yml']:
+            if yaml is None:
+                print("❌ YAML support not available. Please install PyYAML: pip install PyYAML", file=sys.stderr)
+                sys.exit(1)
+            return yaml.safe_load(content)
+        elif path.suffix.lower() == '.json':
+            return json.loads(content)
+        else:
+            # Try JSON first, then YAML
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                if yaml is not None:
+                    try:
+                        return yaml.safe_load(content)
+                    except yaml.YAMLError:
+                        pass
+                print(f"❌ Could not parse file as JSON or YAML: {file_path}", file=sys.stderr)
+                sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error reading file {file_path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def suggest_staging_command(operation: str) -> str:
+    """Suggest the appropriate staging command for an operation."""
+    return f"""
+💡 This operation requires the artifact to be in staging mode.
+   You can either:
+   1. Put the artifact in staging mode first:
+      hypha-artifact --artifact-id=your-artifact edit --stage
+   2. Then retry your {operation} command
+   
+   Or use the Python API which handles staging automatically:
+   artifact.{operation}(...)
+"""
 
 
 def get_connection_params() -> tuple[str, str, str]:
@@ -93,12 +147,119 @@ def format_file_listing(items: list, detail: bool = True) -> None:
 
 
 # Command implementations
+
+def cmd_edit(args) -> None:
+    """Edit artifact manifest, config, or stage the artifact."""
+    artifact = create_artifact(args.artifact_id, args.workspace, args.token, args.server_url)
+    
+    try:
+        # Load manifest and config from files if provided
+        manifest = load_file_content(args.manifest) if args.manifest else None
+        config = load_file_content(args.config) if args.config else None
+        
+        # Prepare edit arguments
+        edit_kwargs = {}
+        if manifest:
+            edit_kwargs['manifest'] = manifest
+        if config:
+            edit_kwargs['config'] = config
+        if args.version:
+            edit_kwargs['version'] = args.version
+        if args.stage:
+            edit_kwargs['stage'] = True
+        if args.comment:
+            edit_kwargs['comment'] = args.comment
+        
+        # Perform edit
+        if edit_kwargs:
+            artifact._remote_edit(**edit_kwargs)
+            
+            # Print what was done
+            actions = []
+            if manifest:
+                actions.append("manifest updated")
+            if config:
+                actions.append("config updated")  
+            if args.stage:
+                actions.append("artifact staged")
+            if args.version and args.version != "stage":
+                actions.append(f"version set to {args.version}")
+                
+            print(f"✅ Artifact edited: {', '.join(actions)}")
+        else:
+            print("❌ No changes specified. Use --manifest, --config, --version, or --stage", file=sys.stderr)
+            sys.exit(1)
+            
+    except Exception as e:
+        error_str = str(e)
+        if "staging" in error_str.lower() or "stage" in error_str.lower():
+            print(f"❌ Error editing artifact: {e}", file=sys.stderr)
+            print("💡 The artifact may already be in staging mode or require different staging options", file=sys.stderr)
+        else:
+            print(f"❌ Error editing artifact: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_commit(args) -> None:
+    """Commit staged changes to the artifact."""
+    artifact = create_artifact(args.artifact_id, args.workspace, args.token, args.server_url)
+    
+    try:
+        # Prepare commit arguments
+        commit_kwargs = {}
+        if args.version:
+            commit_kwargs['version'] = args.version
+        if args.comment:
+            commit_kwargs['comment'] = args.comment
+            
+        # Perform commit
+        result = artifact._remote_commit(**commit_kwargs)
+        
+        if args.version:
+            print(f"✅ Artifact committed as version {args.version}")
+        else:
+            print("✅ Artifact committed successfully")
+            
+    except Exception as e:
+        error_str = str(e)
+        if "staging" in error_str.lower() or "stage" in error_str.lower():
+            print(f"❌ Error committing artifact: {e}", file=sys.stderr)
+            print("💡 The artifact may not be in staging mode. Use 'edit --stage' first.", file=sys.stderr)
+        else:
+            print(f"❌ Error committing artifact: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_discard(args) -> None:
+    """Discard staged changes to the artifact."""
+    artifact = create_artifact(args.artifact_id, args.workspace, args.token, args.server_url)
+    
+    try:
+        # Perform discard
+        result = artifact._remote_discard()
+        print("✅ Staged changes discarded successfully")
+        
+    except Exception as e:
+        error_str = str(e)
+        if "staging" in error_str.lower() or "stage" in error_str.lower():
+            print(f"❌ Error discarding changes: {e}", file=sys.stderr)
+            print("💡 The artifact may not have any staged changes to discard.", file=sys.stderr)
+        else:
+            print(f"❌ Error discarding changes: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_ls(args) -> None:
     """List files and directories in artifact."""
     artifact = create_artifact(args.artifact_id, args.workspace, args.token, args.server_url)
     
     try:
-        items = artifact.ls(args.path, detail=args.detail)
+        # Use stage parameter if provided
+        kwargs = {'detail': args.detail}
+        if hasattr(args, 'stage') and args.stage:
+            kwargs['version'] = 'stage'
+        
+        items = artifact.ls(args.path, **kwargs)
         format_file_listing(items, args.detail)
     except Exception as e:
         print(f"❌ Error listing {args.path}: {e}", file=sys.stderr)
@@ -110,18 +271,23 @@ def cmd_cat(args) -> None:
     artifact = create_artifact(args.artifact_id, args.workspace, args.token, args.server_url)
     
     try:
+        # Prepare kwargs for version/stage support
+        kwargs = {'recursive': args.recursive}
+        if hasattr(args, 'stage') and args.stage:
+            kwargs['version'] = 'stage'
+            
         if args.paths:
             # Multiple files - process main path plus additional paths
             all_paths = [args.path] + args.paths
             for path in all_paths:
                 if len(all_paths) > 1:
                     print(f"\n==> {path} <==")
-                content = artifact.cat(path, recursive=args.recursive)
+                content = artifact.cat(path, **kwargs)
                 if content is not None:
                     print(content)
         else:
             # Single file
-            content = artifact.cat(args.path, recursive=args.recursive)
+            content = artifact.cat(args.path, **kwargs)
             if content is not None:
                 print(content)
     except Exception as e:
@@ -134,10 +300,31 @@ def cmd_cp(args) -> None:
     artifact = create_artifact(args.artifact_id, args.workspace, args.token, args.server_url)
     
     try:
+        # Check if source exists before attempting copy
+        if not artifact.exists(args.source):
+            print(f"❌ Source file does not exist: {args.source}", file=sys.stderr)
+            sys.exit(1)
+            
         artifact.copy(args.source, args.destination, recursive=args.recursive, maxdepth=args.maxdepth)
         print(f"✅ Copied {args.source} to {args.destination}")
     except Exception as e:
-        print(f"❌ Error copying: {e}", file=sys.stderr)
+        error_str = str(e)
+        if "staging" in error_str.lower() or "edit" in error_str.lower():
+            print(f"❌ Error copying: {e}", file=sys.stderr)
+            print(suggest_staging_command("copy"), file=sys.stderr)
+        elif "500 Server Error" in error_str and "commit" in error_str:
+            # This is likely a commit error - check if copy actually worked
+            try:
+                if artifact.exists(args.destination):
+                    print(f"✅ Copied {args.source} to {args.destination}")
+                    print(f"⚠️  Note: Copy succeeded but commit failed: {e}")
+                    print("The copied file is available for use even without explicit commit.")
+                    return
+            except:
+                pass  # If exists check fails, fall through to error handling
+            print(f"❌ Error copying: {e}", file=sys.stderr)
+        else:
+            print(f"❌ Error copying: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -147,10 +334,35 @@ def cmd_rm(args) -> None:
     
     try:
         for path in args.paths:
-            artifact.rm(path, recursive=args.recursive)
-            print(f"✅ Removed {path}")
+            # Check if file exists before attempting removal
+            if not artifact.exists(path):
+                print(f"❌ File does not exist: {path}", file=sys.stderr)
+                continue
+                
+            try:
+                artifact.rm(path, recursive=args.recursive)
+                print(f"✅ Removed {path}")
+            except Exception as e:
+                error_str = str(e)
+                if "staging" in error_str.lower() or "edit" in error_str.lower():
+                    print(f"❌ Error removing {path}: {e}", file=sys.stderr)
+                    print(suggest_staging_command("rm"), file=sys.stderr)
+                elif "500 Server Error" in error_str and "commit" in error_str:
+                    # This is likely a commit error - check if removal actually worked
+                    try:
+                        if not artifact.exists(path):
+                            print(f"✅ Removed {path}")
+                            print(f"⚠️  Note: Removal succeeded but commit failed: {e}")
+                            print("The file has been removed even without explicit commit.")
+                            continue
+                    except:
+                        pass  # If exists check fails, fall through to error handling
+                    print(f"❌ Error removing {path}: {e}", file=sys.stderr)
+                else:
+                    print(f"❌ Error removing {path}: {e}", file=sys.stderr)
+                
     except Exception as e:
-        print(f"❌ Error removing: {e}", file=sys.stderr)
+        print(f"❌ Error in remove operation: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -213,7 +425,12 @@ def cmd_head(args) -> None:
     artifact = create_artifact(args.artifact_id, args.workspace, args.token, args.server_url)
     
     try:
-        content = artifact.head(args.path, size=args.bytes)
+        # Prepare kwargs for version/stage support
+        kwargs = {'size': args.bytes}
+        if hasattr(args, 'stage') and args.stage:
+            kwargs['version'] = 'stage'
+            
+        content = artifact.head(args.path, **kwargs)
         # Handle both text and binary content
         try:
             print(content.decode('utf-8'))
@@ -268,22 +485,28 @@ def cmd_upload(args) -> None:
             
         remote_path = args.remote_path or local_path.name
         
-        # Use unified upload method
+        # Use the Python API which handles staging automatically
         artifact.upload(
-            args.local_path,
-            remote_path,
+            local_path=local_path,
+            remote_path=remote_path,
             recursive=args.recursive,
             enable_multipart=args.enable_multipart,
             multipart_threshold=args.multipart_threshold,
-            chunk_size=args.chunk_size,
+            chunk_size=args.chunk_size
         )
         
         if local_path.is_file():
             print(f"✅ Uploaded file {args.local_path} to {remote_path}")
         else:
-            print(f"✅ Uploaded folder {args.local_path} to {remote_path}")
+            print(f"✅ Uploaded directory {args.local_path} to {remote_path}")
+            
     except Exception as e:
-        print(f"❌ Error uploading: {e}", file=sys.stderr)
+        error_str = str(e)
+        if "staging" in error_str.lower() or "edit" in error_str.lower():
+            print(f"❌ Error uploading: {e}", file=sys.stderr)
+            print(suggest_staging_command("upload"), file=sys.stderr)
+        else:
+            print(f"❌ Error uploading: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -333,6 +556,7 @@ Examples:
     ls_parser.add_argument("path", nargs="?", default="/", help="Path to list (default: /)")
     ls_parser.add_argument("--detail", action="store_true", default=True, help="Show detailed information")
     ls_parser.add_argument("--no-detail", dest="detail", action="store_false", help="Show names only")
+    ls_parser.add_argument("--stage", action="store_true", help="List files from staged version")
     ls_parser.set_defaults(func=cmd_ls)
     
     # cat command
@@ -340,6 +564,7 @@ Examples:
     cat_parser.add_argument("path", help="File path to display")
     cat_parser.add_argument("paths", nargs="*", help="Additional file paths")
     cat_parser.add_argument("-r", "--recursive", action="store_true", help="Recursively cat directory contents")
+    cat_parser.add_argument("--stage", action="store_true", help="Read file from staged version")
     cat_parser.set_defaults(func=cmd_cat)
     
     # cp command
@@ -379,6 +604,7 @@ Examples:
     head_parser = subparsers.add_parser("head", help="Show first bytes of file")
     head_parser.add_argument("path", help="File path")
     head_parser.add_argument("-n", "--bytes", type=int, default=1024, help="Number of bytes to show")
+    head_parser.add_argument("--stage", action="store_true", help="Read file from staged version")
     head_parser.set_defaults(func=cmd_head)
     
     # size command
@@ -390,6 +616,25 @@ Examples:
     exists_parser = subparsers.add_parser("exists", help="Check if paths exist")
     exists_parser.add_argument("paths", nargs="+", help="Paths to check")
     exists_parser.set_defaults(func=cmd_exists)
+    
+    # edit command
+    edit_parser = subparsers.add_parser("edit", help="Edit artifact manifest, config, or put in staging mode")
+    edit_parser.add_argument("--manifest", help="Path to manifest YAML/JSON file")
+    edit_parser.add_argument("--config", help="Path to config YAML/JSON file")
+    edit_parser.add_argument("--version", help="Version to edit or 'new' to create new version")
+    edit_parser.add_argument("--stage", action="store_true", help="Put artifact in staging mode")
+    edit_parser.add_argument("--comment", help="Comment describing the changes")
+    edit_parser.set_defaults(func=cmd_edit)
+    
+    # commit command
+    commit_parser = subparsers.add_parser("commit", help="Commit staged changes")
+    commit_parser.add_argument("--version", help="Custom version name for the commit")
+    commit_parser.add_argument("--comment", help="Comment describing the commit")
+    commit_parser.set_defaults(func=cmd_commit)
+    
+    # discard command
+    discard_parser = subparsers.add_parser("discard", help="Discard staged changes")
+    discard_parser.set_defaults(func=cmd_discard)
     
     # upload command
     upload_parser = subparsers.add_parser("upload", help="Upload local file or folder to artifact")

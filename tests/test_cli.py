@@ -413,8 +413,8 @@ class TestUploadDownloadCommands:
         cmd_upload(args)
         
         mock_artifact.upload.assert_called_once_with(
-            'local.txt',
-            '/remote.txt',
+            local_path=Path('local.txt'),
+            remote_path='/remote.txt',
             recursive=True,
             enable_multipart=False,
             multipart_threshold=100*1024*1024,
@@ -449,15 +449,15 @@ class TestUploadDownloadCommands:
         cmd_upload(args)
         
         mock_artifact.upload.assert_called_once_with(
-            './my-folder',
-            '/remote-folder',
+            local_path=Path('my-folder'),
+            remote_path='/remote-folder',
             recursive=True,
             enable_multipart=False,
             multipart_threshold=100*1024*1024,
             chunk_size=10*1024*1024
         )
         captured = capsys.readouterr()
-        assert "✅ Uploaded folder ./my-folder to /remote-folder" in captured.out
+        assert "✅ Uploaded directory ./my-folder to /remote-folder" in captured.out
 
     @patch('hypha_artifact.cli.create_artifact')
     @patch('builtins.open', new_callable=mock_open)
