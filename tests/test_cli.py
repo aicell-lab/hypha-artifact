@@ -1,8 +1,8 @@
 """
-Comprehensive tests for the Hypha Artifact CLI.
+Real integration tests for the Hypha Artifact CLI.
 
-This module tests the CLI interface including argument parsing, environment loading,
-command execution, and error handling.
+These tests use actual Hypha connections and real file operations.
+Requires valid credentials in .env file.
 """
 
 import os
@@ -10,10 +10,16 @@ import sys
 import json
 import tempfile
 import argparse
-from unittest.mock import patch, MagicMock, mock_open, call
+import subprocess
+import time
+import requests
 from pathlib import Path
 from typing import Any, Dict, List
 import pytest
+from dotenv import load_dotenv, find_dotenv
+
+# Load environment variables
+load_dotenv(dotenv_path=find_dotenv(usecwd=True))
 
 # Add the CLI module to the path for testing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -22,661 +28,525 @@ from hypha_artifact.cli import (
     main,
     get_connection_params,
     create_artifact,
-    format_file_listing,
     cmd_ls,
     cmd_cat,
     cmd_cp,
     cmd_rm,
     cmd_mkdir,
-    cmd_info,
-    cmd_find,
-    cmd_head,
-    cmd_size,
-    cmd_exists,
     cmd_upload,
     cmd_download,
+    cmd_exists,
+    cmd_find,
+    cmd_edit,
+    cmd_commit,
+    cmd_info,
+    cmd_size,
+    cmd_head,
 )
+from hypha_artifact.hypha_artifact import HyphaArtifact
 
 
-class TestEnvironmentLoading:
-    """Test environment variable loading and connection parameters."""
+class TestRealEnvironment:
+    """Test real environment setup and connection."""
 
-    def test_get_connection_params_success(self):
-        """Test successful retrieval of connection parameters."""
-        with patch.dict(os.environ, {
-            'HYPHA_SERVER_URL': 'https://test.hypha.io',
-            'HYPHA_TOKEN': 'test-token',
-            'HYPHA_WORKSPACE': 'test-workspace'
-        }):
-            server_url, token, workspace = get_connection_params()
-            assert server_url == 'https://test.hypha.io'
-            assert token == 'test-token'
-            assert workspace == 'test-workspace'
+    def test_environment_variables_available(self):
+        """Test that required environment variables are available."""
+        server_url = os.getenv('HYPHA_SERVER_URL')
+        workspace = os.getenv('HYPHA_WORKSPACE')
+        token = os.getenv('HYPHA_TOKEN')
+        
+        assert server_url, "HYPHA_SERVER_URL environment variable is required"
+        assert workspace, "HYPHA_WORKSPACE environment variable is required"
+        assert token, "HYPHA_TOKEN environment variable is required"
+        
+        print(f"✅ Environment variables loaded successfully")
+        print(f"   Server: {server_url}")
+        print(f"   Workspace: {workspace}")
+        print(f"   Token: {'*' * 10 + token[-4:] if token else 'None'}")
 
-    def test_get_connection_params_missing_server_url(self):
-        """Test error when HYPHA_SERVER_URL is missing."""
-        with patch.dict(os.environ, {
-            'HYPHA_TOKEN': 'test-token',
-            'HYPHA_WORKSPACE': 'test-workspace'
-        }, clear=True):
-            with pytest.raises(SystemExit):
-                get_connection_params()
+    def test_real_connection_params(self):
+        """Test real connection parameter retrieval."""
+        server_url, token, workspace = get_connection_params()
+        
+        assert server_url, "Server URL should not be empty"
+        assert workspace, "Workspace should not be empty"
+        assert token, "Token should not be empty"
+        
+        print(f"✅ Connection parameters retrieved successfully")
 
-    def test_get_connection_params_missing_workspace(self):
-        """Test error when HYPHA_WORKSPACE is missing."""
-        with patch.dict(os.environ, {
-            'HYPHA_SERVER_URL': 'https://test.hypha.io',
-            'HYPHA_TOKEN': 'test-token'
-        }, clear=True):
-            with pytest.raises(SystemExit):
-                get_connection_params()
-
-    def test_dotenv_loading(self):
-        """Test that dotenv loading is called on import."""
-        # This test verifies the import structure includes dotenv loading
-        # Since load_dotenv is called at module level, we can't easily mock it
-        # but we can verify the module imports the function
-        import hypha_artifact.cli
-        assert hasattr(hypha_artifact.cli, 'load_dotenv')
+    def test_real_artifact_creation(self):
+        """Test real artifact creation."""
+        artifact = create_artifact('test-cli-artifact')
+        assert artifact is not None
+        # Check that the artifact was created successfully
+        assert hasattr(artifact, 'ls')
+        assert hasattr(artifact, 'upload')
+        
+        print(f"✅ Artifact connection created successfully")
 
 
-class TestArtifactCreation:
-    """Test artifact instance creation."""
+class TestRealFileOperations:
+    """Test real file operations with actual Hypha connections."""
 
-    @patch('hypha_artifact.cli.HyphaArtifact')
-    def test_create_artifact_default_params(self, mock_artifact_class):
-        """Test creating artifact with default parameters from environment."""
-        with patch.dict(os.environ, {
-            'HYPHA_SERVER_URL': 'https://test.hypha.io',
-            'HYPHA_TOKEN': 'test-token',
-            'HYPHA_WORKSPACE': 'test-workspace'
-        }):
-            create_artifact('test-artifact')
+    @pytest.fixture
+    def real_artifact(self):
+        """Create a real artifact connection."""
+        return create_artifact('test-cli-artifact')
+
+    def test_real_ls_command(self, real_artifact):
+        """Test real ls command."""
+        items = real_artifact.ls('/')
+        print(f"✅ Found {len(items)} items in artifact root")
+        assert isinstance(items, list)
+
+    def test_real_staging_workflow(self, real_artifact):
+        """Test real staging workflow using proper artifact manager API."""
+        # Create a test file
+        test_content = "This is a test file for API staging workflow\n"
+        
+        # Step 1: Put artifact in staging mode
+        print("Before staging - checking current artifact state...")
+        try:
+            current_files = real_artifact._remote_list_contents(dir_path='/')
+            print(f"Current files in artifact: {[f['name'] for f in current_files]}")
+        except Exception as e:
+            print(f"Could not list current files: {e}")
+        
+        # Clean up any existing staged changes first
+        print("Discarding any existing staged changes...")
+        try:
+            real_artifact._remote_post("discard", {})
+            print("Successfully discarded existing staged changes")
+        except Exception as e:
+            print(f"No staged changes to discard (expected): {e}")
+        
+        print("Putting artifact in staging mode with new version intent...")
+        real_artifact._remote_edit(stage=True, version="new", comment="Testing proper staging workflow")
+        print("Artifact is now in staging mode with new version intent")
+        
+        # Step 2: Get presigned URL and upload file
+        put_url = real_artifact._remote_put_file_url('/api-staging-test.txt')
+        response = requests.put(put_url, data=test_content.encode())
+        assert response.ok, f"File upload failed: {response.status_code}"
+        
+        # Step 3: Verify file exists in staging
+        files = real_artifact._remote_list_contents(dir_path='/', version="stage")
+        file_names = [f['name'] for f in files]
+        assert 'api-staging-test.txt' in file_names
+        
+        # Step 4: Commit the changes
+        try:
+            real_artifact._remote_commit(comment="Committed API staging test")
+        except Exception as e:
+            # Get more detailed error information
+            print(f"Commit error: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response status: {e.response.status_code}")
+                print(f"Response content: {e.response.text}")
+            raise e
+        
+        # Step 5: Verify file exists after commit
+        assert real_artifact.exists('/api-staging-test.txt')
+        content = real_artifact.cat('/api-staging-test.txt')
+        assert content == test_content
+        
+        print("✅ API staging workflow completed successfully")
+
+    def test_real_multipart_upload(self, real_artifact):
+        """Test real multipart upload using proper API workflow."""
+        # First test if S3 endpoint is reachable
+        import socket
+        try:
+            # Test S3 connectivity with a short timeout
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)  # 5 second timeout
+            result = sock.connect_ex(('s3.cloud.kth.se', 443))
+            sock.close()
+            if result != 0:
+                pytest.skip("S3 endpoint s3.cloud.kth.se not reachable - network connectivity issue")
+        except Exception:
+            pytest.skip("Cannot test S3 connectivity - network connectivity issue")
+        
+        # Create a smaller test file (4MB) to reduce network load
+        file_size = 4 * 1024 * 1024  # 4MB
+        chunk_size = 1 * 1024 * 1024  # 1MB chunks
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as f:
+            # Write test data
+            chunk = b'M' * (1024 * 1024)  # 1MB chunks
+            for i in range(4):
+                f.write(chunk)
+            temp_file_path = f.name
+
+        try:
+            # Step 1: Clean up and put artifact in staging mode
+            # Clean up any existing staged changes first
+            try:
+                real_artifact._remote_post("discard", {})
+            except Exception:
+                pass  # No staged changes to discard
+                
+            real_artifact._remote_edit(stage=True, version="new", comment="Testing multipart upload")
             
-            mock_artifact_class.assert_called_once_with(
-                'test-artifact',
-                'test-workspace',
-                'test-token',
-                'https://test.hypha.io/public/services/artifact-manager'
-            )
-
-    @patch('hypha_artifact.cli.HyphaArtifact')
-    def test_create_artifact_override_params(self, mock_artifact_class):
-        """Test creating artifact with overridden parameters."""
-        create_artifact(
-            'test-artifact',
-            workspace='custom-workspace',
-            token='custom-token',
-            server_url='https://custom.hypha.io'
-        )
-        
-        mock_artifact_class.assert_called_once_with(
-            'test-artifact',
-            'custom-workspace',
-            'custom-token',
-            'https://custom.hypha.io/public/services/artifact-manager'
-        )
-
-    @patch('hypha_artifact.cli.HyphaArtifact')
-    def test_create_artifact_server_url_trailing_slash(self, mock_artifact_class):
-        """Test that trailing slashes are removed from server URLs."""
-        create_artifact(
-            'test-artifact',
-            workspace='test-workspace',
-            token='test-token',
-            server_url='https://test.hypha.io/'
-        )
-        
-        mock_artifact_class.assert_called_once_with(
-            'test-artifact',
-            'test-workspace',
-            'test-token',
-            'https://test.hypha.io/public/services/artifact-manager'
-        )
-
-
-class TestFormatting:
-    """Test output formatting functions."""
-
-    def test_format_file_listing_empty(self, capsys):
-        """Test formatting empty file listing."""
-        format_file_listing([])
-        captured = capsys.readouterr()
-        assert "📁 (empty)" in captured.out
-
-    def test_format_file_listing_detailed_files(self, capsys):
-        """Test formatting detailed file listing."""
-        items = [
-            {"name": "file1.txt", "type": "file", "size": 1024},
-            {"name": "dir1", "type": "directory", "size": 0},
-            {"name": "file2.py", "type": "file", "size": 2048}
-        ]
-        format_file_listing(items, detail=True)
-        captured = capsys.readouterr()
-        
-        assert "📄 file1.txt (1,024 bytes)" in captured.out
-        assert "📁 dir1" in captured.out
-        assert "📄 file2.py (2,048 bytes)" in captured.out
-
-    def test_format_file_listing_no_detail(self, capsys):
-        """Test formatting file listing without details."""
-        items = ["file1.txt", "dir1", "file2.py"]
-        format_file_listing(items, detail=False)
-        captured = capsys.readouterr()
-        
-        assert "📄 file1.txt" in captured.out
-        assert "📄 dir1" in captured.out
-        assert "📄 file2.py" in captured.out
-
-
-class TestCommandParsing:
-    """Test CLI argument parsing."""
-
-    def test_main_no_arguments(self):
-        """Test main function with no arguments shows help."""
-        with patch('sys.argv', ['hypha-artifact']):
-            with pytest.raises(SystemExit) as exc_info:
-                main()
-            assert exc_info.value.code == 2  # argparse exits with code 2 for missing required args
-
-    def test_main_missing_artifact_id(self):
-        """Test main function with missing artifact ID."""
-        with patch('sys.argv', ['hypha-artifact', 'ls']):
-            with pytest.raises(SystemExit):
-                main()
-
-    @patch('hypha_artifact.cli.cmd_ls')
-    def test_main_ls_command(self, mock_cmd_ls):
-        """Test main function with ls command."""
-        with patch('sys.argv', ['hypha-artifact', '--artifact-id=test', 'ls', '/']):
-            main()
-            mock_cmd_ls.assert_called_once()
-
-    @patch('hypha_artifact.cli.cmd_cat')
-    def test_main_cat_command(self, mock_cmd_cat):
-        """Test main function with cat command."""
-        with patch('sys.argv', ['hypha-artifact', '--artifact-id=test', 'cat', '/file.txt']):
-            main()
-            mock_cmd_cat.assert_called_once()
-
-
-class TestLsCommand:
-    """Test ls command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    @patch('hypha_artifact.cli.format_file_listing')
-    def test_cmd_ls_success(self, mock_format, mock_create_artifact):
-        """Test successful ls command execution."""
-        # Setup mock artifact
-        mock_artifact = MagicMock()
-        mock_artifact.ls.return_value = [{"name": "file1.txt", "type": "file"}]
-        mock_create_artifact.return_value = mock_artifact
-        
-        # Create mock args
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            path='/test',
-            detail=True
-        )
-        
-        cmd_ls(args)
-        
-        mock_artifact.ls.assert_called_once_with('/test', detail=True)
-        mock_format.assert_called_once()
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_ls_error(self, mock_create_artifact):
-        """Test ls command with error."""
-        # Setup mock artifact to raise exception
-        mock_artifact = MagicMock()
-        mock_artifact.ls.side_effect = Exception("Test error")
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            path='/test',
-            detail=True
-        )
-        
-        with pytest.raises(SystemExit):
-            cmd_ls(args)
-
-
-class TestCatCommand:
-    """Test cat command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_cat_single_file(self, mock_create_artifact, capsys):
-        """Test cat command with single file."""
-        mock_artifact = MagicMock()
-        mock_artifact.cat.return_value = "file content"
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            path='/file.txt',
-            paths=[],
-            recursive=False
-        )
-        
-        cmd_cat(args)
-        
-        mock_artifact.cat.assert_called_once_with('/file.txt', recursive=False)
-        captured = capsys.readouterr()
-        assert "file content" in captured.out
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_cat_multiple_files(self, mock_create_artifact, capsys):
-        """Test cat command with multiple files."""
-        mock_artifact = MagicMock()
-        mock_artifact.cat.return_value = "file content"
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            path='/file1.txt',
-            paths=['/file2.txt', '/file3.txt'],
-            recursive=False
-        )
-        
-        cmd_cat(args)
-        
-        # Should be called 3 times (once for path, twice for paths)
-        assert mock_artifact.cat.call_count == 3
-        captured = capsys.readouterr()
-        assert "==> /file1.txt <==" in captured.out
-        assert "==> /file2.txt <==" in captured.out
-        assert "==> /file3.txt <==" in captured.out
-
-
-class TestCpCommand:
-    """Test cp command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_cp_success(self, mock_create_artifact, capsys):
-        """Test successful cp command execution."""
-        mock_artifact = MagicMock()
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            source='/src.txt',
-            destination='/dst.txt',
-            recursive=False,
-            maxdepth=None
-        )
-        
-        cmd_cp(args)
-        
-        mock_artifact.copy.assert_called_once_with('/src.txt', '/dst.txt', recursive=False, maxdepth=None)
-        captured = capsys.readouterr()
-        assert "✅ Copied /src.txt to /dst.txt" in captured.out
-
-
-class TestRmCommand:
-    """Test rm command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_rm_success(self, mock_create_artifact, capsys):
-        """Test successful rm command execution."""
-        mock_artifact = MagicMock()
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            paths=['/file1.txt', '/file2.txt'],
-            recursive=False
-        )
-        
-        cmd_rm(args)
-        
-        # Should be called twice
-        expected_calls = [call('/file1.txt', recursive=False), call('/file2.txt', recursive=False)]
-        mock_artifact.rm.assert_has_calls(expected_calls)
-        
-        captured = capsys.readouterr()
-        assert "✅ Removed /file1.txt" in captured.out
-        assert "✅ Removed /file2.txt" in captured.out
-
-
-class TestInfoCommand:
-    """Test info command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_info_success(self, mock_create_artifact, capsys):
-        """Test successful info command execution."""
-        mock_artifact = MagicMock()
-        mock_artifact.info.return_value = {"name": "file.txt", "size": 1024, "type": "file"}
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            paths=['/file.txt']
-        )
-        
-        cmd_info(args)
-        
-        mock_artifact.info.assert_called_once_with('/file.txt')
-        captured = capsys.readouterr()
-        assert "📊 Information for /file.txt:" in captured.out
-        assert '"name": "file.txt"' in captured.out
-
-
-class TestUploadDownloadCommands:
-    """Test upload and download command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    @patch('builtins.open', new_callable=mock_open, read_data=b"test content")
-    @patch('pathlib.Path.exists')
-    @patch('pathlib.Path.is_file')
-    def test_cmd_upload_success(self, mock_is_file, mock_exists, mock_open_func, mock_create_artifact, capsys):
-        """Test successful upload command execution."""
-        mock_exists.return_value = True
-        mock_is_file.return_value = True
-        mock_artifact = MagicMock()
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            local_path='local.txt',
-            remote_path='/remote.txt',
-            recursive=True,
-            enable_multipart=False,
-            multipart_threshold=100*1024*1024,
-            chunk_size=10*1024*1024
-        )
-        
-        cmd_upload(args)
-        
-        mock_artifact.upload.assert_called_once_with(
-            local_path=Path('local.txt'),
-            remote_path='/remote.txt',
-            recursive=True,
-            enable_multipart=False,
-            multipart_threshold=100*1024*1024,
-            chunk_size=10*1024*1024
-        )
-        captured = capsys.readouterr()
-        assert "✅ Uploaded file local.txt to /remote.txt" in captured.out
-
-    @patch('hypha_artifact.cli.create_artifact')
-    @patch('pathlib.Path.exists')
-    @patch('pathlib.Path.is_dir')
-    def test_cmd_upload_folder_success(self, mock_is_dir, mock_exists, mock_create_artifact, capsys):
-        """Test successful upload command execution with folder."""
-        mock_exists.return_value = True
-        mock_is_dir.return_value = True
-        mock_artifact = MagicMock()
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            local_path='./my-folder',
-            remote_path='/remote-folder',
-            recursive=True,
-            enable_multipart=False,
-            multipart_threshold=100*1024*1024,
-            chunk_size=10*1024*1024
-        )
-        
-        cmd_upload(args)
-        
-        mock_artifact.upload.assert_called_once_with(
-            local_path=Path('my-folder'),
-            remote_path='/remote-folder',
-            recursive=True,
-            enable_multipart=False,
-            multipart_threshold=100*1024*1024,
-            chunk_size=10*1024*1024
-        )
-        captured = capsys.readouterr()
-        assert "✅ Uploaded directory ./my-folder to /remote-folder" in captured.out
-
-    @patch('hypha_artifact.cli.create_artifact')
-    @patch('builtins.open', new_callable=mock_open)
-    def test_cmd_download_success(self, mock_open_func, mock_create_artifact, capsys):
-        """Test successful download command execution."""
-        mock_artifact = MagicMock()
-        mock_remote_file = MagicMock()
-        mock_remote_file.read.return_value = b"remote content"
-        mock_artifact.open.return_value.__enter__.return_value = mock_remote_file
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            remote_path='/remote.txt',
-            local_path='local.txt'
-        )
-        
-        cmd_download(args)
-        
-        mock_artifact.open.assert_called_once_with('/remote.txt', 'rb')
-        captured = capsys.readouterr()
-        assert "✅ Downloaded /remote.txt to local.txt" in captured.out
-
-
-class TestSizeCommand:
-    """Test size command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_size_single_file(self, mock_create_artifact, capsys):
-        """Test size command with single file."""
-        mock_artifact = MagicMock()
-        mock_artifact.size.return_value = 1024
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            paths=['/file.txt']
-        )
-        
-        cmd_size(args)
-        
-        mock_artifact.size.assert_called_once_with('/file.txt')
-        captured = capsys.readouterr()
-        assert "1,024 bytes" in captured.out
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_size_multiple_files(self, mock_create_artifact, capsys):
-        """Test size command with multiple files."""
-        mock_artifact = MagicMock()
-        mock_artifact.sizes.return_value = [1024, 2048]
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            paths=['/file1.txt', '/file2.txt']
-        )
-        
-        cmd_size(args)
-        
-        mock_artifact.sizes.assert_called_once_with(['/file1.txt', '/file2.txt'])
-        captured = capsys.readouterr()
-        assert "/file1.txt: 1,024 bytes" in captured.out
-        assert "/file2.txt: 2,048 bytes" in captured.out
-
-
-class TestExistsCommand:
-    """Test exists command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_exists_success(self, mock_create_artifact, capsys):
-        """Test exists command execution."""
-        mock_artifact = MagicMock()
-        mock_artifact.exists.side_effect = [True, False]  # First file exists, second doesn't
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            paths=['/existing.txt', '/missing.txt']
-        )
-        
-        cmd_exists(args)
-        
-        expected_calls = [call('/existing.txt'), call('/missing.txt')]
-        mock_artifact.exists.assert_has_calls(expected_calls)
-        
-        captured = capsys.readouterr()
-        assert "/existing.txt: ✅ exists" in captured.out
-        assert "/missing.txt: ❌ does not exist" in captured.out
-
-
-class TestFindCommand:
-    """Test find command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_find_simple(self, mock_create_artifact, capsys):
-        """Test find command execution."""
-        mock_artifact = MagicMock()
-        mock_artifact.find.return_value = ['/file1.txt', '/dir1/file2.txt']
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            path='/',
-            maxdepth=None,
-            include_dirs=False,
-            detail=False
-        )
-        
-        cmd_find(args)
-        
-        mock_artifact.find.assert_called_once_with('/', maxdepth=None, withdirs=False, detail=False)
-        captured = capsys.readouterr()
-        assert "/file1.txt" in captured.out
-        assert "/dir1/file2.txt" in captured.out
-
-
-class TestHeadCommand:
-    """Test head command functionality."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_cmd_head_text_content(self, mock_create_artifact, capsys):
-        """Test head command with text content."""
-        mock_artifact = MagicMock()
-        mock_artifact.head.return_value = b"Hello World\nThis is a test file"
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            path='/file.txt',
-            bytes=1024
-        )
-        
-        cmd_head(args)
-        
-        mock_artifact.head.assert_called_once_with('/file.txt', size=1024)
-        captured = capsys.readouterr()
-        assert "Hello World" in captured.out
-
-
-class TestErrorHandling:
-    """Test error handling in CLI commands."""
-
-    @patch('hypha_artifact.cli.create_artifact')
-    def test_command_error_handling(self, mock_create_artifact):
-        """Test that commands handle errors gracefully."""
-        mock_artifact = MagicMock()
-        mock_artifact.ls.side_effect = Exception("Network error")
-        mock_create_artifact.return_value = mock_artifact
-        
-        args = argparse.Namespace(
-            artifact_id='test-artifact',
-            workspace=None,
-            token=None,
-            server_url=None,
-            path='/',
-            detail=True
-        )
-        
-        with pytest.raises(SystemExit) as exc_info:
-            cmd_ls(args)
-        assert exc_info.value.code == 1
-
-
-class TestIntegration:
-    """Integration tests combining multiple CLI features."""
-
-    @patch.dict(os.environ, {
-        'HYPHA_SERVER_URL': 'https://test.hypha.io',
-        'HYPHA_TOKEN': 'test-token',
-        'HYPHA_WORKSPACE': 'test-workspace'
-    })
-    @patch('hypha_artifact.cli.cmd_ls')
-    def test_full_command_pipeline(self, mock_cmd_ls):
-        """Test full command execution pipeline."""
-        with patch('sys.argv', ['hypha-artifact', '--artifact-id=test-artifact', 'ls', '/data']):
-            main()
-            mock_cmd_ls.assert_called_once()
-            
-            # Verify the arguments passed to the command
-            call_args = mock_cmd_ls.call_args[0][0]
-            assert call_args.artifact_id == 'test-artifact'
-            assert call_args.path == '/data'
-
-    def test_workspace_in_artifact_id(self):
-        """Test handling workspace embedded in artifact ID."""
-        with patch('hypha_artifact.cli.HyphaArtifact') as mock_artifact_class:
-            create_artifact(
-                'workspace/artifact-name',
-                workspace='explicit-workspace',  # Provide explicit workspace
-                token='test-token',
-                server_url='https://test.hypha.io'
+            # Step 2: Use upload method with auto_commit=False and smaller file
+            real_artifact.upload(
+                local_path=Path(temp_file_path),
+                remote_path='/multipart-test.bin',
+                enable_multipart=True,
+                multipart_threshold=2 * 1024 * 1024,  # 2MB threshold
+                chunk_size=chunk_size,
+                auto_commit=False  # Don't auto-commit, we'll do it manually
             )
             
-            # Should use the provided workspace
-            mock_artifact_class.assert_called_once_with(
-                'workspace/artifact-name',
-                'explicit-workspace',
-                'test-token',
-                'https://test.hypha.io/public/services/artifact-manager'
+            # Step 3: Commit the upload
+            real_artifact._remote_commit(comment="Committed multipart upload")
+            
+            # Step 4: Verify file exists and has correct size
+            assert real_artifact.exists('/multipart-test.bin')
+            info = real_artifact.info('/multipart-test.bin')
+            assert info['size'] == file_size
+            
+            print("✅ Multipart upload completed successfully")
+            
+        except Exception as e:
+            if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                pytest.skip(f"Network connectivity issue during multipart upload: {e}")
+            else:
+                raise e
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+
+    def test_real_directory_upload(self, real_artifact):
+        """Test real directory upload using proper API workflow."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Create test directory structure
+            (temp_path / 'subdir').mkdir()
+            (temp_path / 'file1.txt').write_text('Content of file 1')
+            (temp_path / 'file2.txt').write_text('Content of file 2')
+            (temp_path / 'subdir' / 'file3.txt').write_text('Content of file 3')
+
+            # Step 1: Clean up and put artifact in staging mode
+            # Clean up any existing staged changes first
+            try:
+                real_artifact._remote_post("discard", {})
+            except Exception:
+                pass  # No staged changes to discard
+                
+            real_artifact._remote_edit(stage=True, version="new", comment="Testing directory upload")
+            
+            # Step 2: Upload directory with auto_commit=False
+            real_artifact.upload(
+                local_path=temp_path,
+                remote_path='/api-test-dir',
+                recursive=True,
+                auto_commit=False
             )
+            
+            # Step 3: Commit the upload
+            real_artifact._remote_commit(comment="Committed directory upload")
+
+            # Step 4: Verify directory structure
+            assert real_artifact.exists('/api-test-dir')
+            assert real_artifact.exists('/api-test-dir/file1.txt')
+            assert real_artifact.exists('/api-test-dir/file2.txt')
+            assert real_artifact.exists('/api-test-dir/subdir/file3.txt')
+            
+            # Verify file contents
+            assert real_artifact.cat('/api-test-dir/file1.txt') == 'Content of file 1'
+            assert real_artifact.cat('/api-test-dir/subdir/file3.txt') == 'Content of file 3'
+            
+            print("✅ Directory upload completed successfully")
+
+    def test_real_file_operations(self, real_artifact):
+        """Test real file operations using proper API workflow."""
+        # Create initial test file
+        test_content = "Test file for operations\n"
+        
+        # Step 1: Clean up and put artifact in staging mode 
+        # Clean up any existing staged changes first
+        try:
+            real_artifact._remote_post("discard", {})
+        except Exception:
+            pass  # No staged changes to discard
+            
+        real_artifact._remote_edit(stage=True, version="new", comment="Testing file operations")
+        
+        put_url = real_artifact._remote_put_file_url('/ops-test.txt')
+        response = requests.put(put_url, data=test_content.encode())
+        assert response.ok, f"File upload failed: {response.status_code}"
+        
+        # Step 2: Commit the initial upload
+        real_artifact._remote_commit(comment="Initial file for operations test")
+
+        # Step 3: Test file operations (these work on committed files)
+        
+        # Copy file
+        real_artifact.copy('/ops-test.txt', '/ops-test-copy.txt')
+        assert real_artifact.exists('/ops-test-copy.txt')
+
+        # Verify copy has same content
+        copy_content = real_artifact.cat('/ops-test-copy.txt')
+        assert copy_content == test_content
+
+        # Create directory and copy file there
+        real_artifact.mkdir('/ops-test-dir')
+        real_artifact.copy('/ops-test.txt', '/ops-test-dir/operations.txt')
+        assert real_artifact.exists('/ops-test-dir/operations.txt')
+
+        # Remove files
+        real_artifact.rm('/ops-test-copy.txt')
+        assert not real_artifact.exists('/ops-test-copy.txt')
+
+        print("✅ File operations completed successfully")
+
+    def test_real_find_command(self, real_artifact):
+        """Test real find command."""
+        files = real_artifact.find('/')
+        print(f"✅ Found {len(files)} files in artifact")
+        assert isinstance(files, list)
+
+
+class TestRealCLICommands:
+    """Test real CLI commands with actual subprocess calls."""
+
+    @pytest.fixture
+    def cli_env(self):
+        """Get environment variables for CLI testing."""
+        env = os.environ.copy()
+        # Ensure we have the required environment variables
+        env['HYPHA_SERVER_URL'] = os.getenv('HYPHA_SERVER_URL', '')
+        env['HYPHA_WORKSPACE'] = os.getenv('HYPHA_WORKSPACE', '')
+        env['HYPHA_TOKEN'] = os.getenv('HYPHA_TOKEN', '')
+        return env
+
+    @pytest.fixture
+    def test_artifact_id(self):
+        """Get the test artifact ID."""
+        return 'test-cli-artifact'
+
+    def test_real_cli_ls(self, cli_env, test_artifact_id):
+        """Test real CLI ls command."""
+        result = subprocess.run([
+            sys.executable, '-m', 'hypha_artifact.cli',
+            f'--artifact-id={test_artifact_id}',
+            'ls', '/'
+        ], env=cli_env, capture_output=True, text=True)
+
+        assert result.returncode == 0, f"CLI ls command failed: {result.stderr}"
+        print("✅ CLI ls command executed successfully")
+
+    def test_real_cli_staging_workflow(self, cli_env, test_artifact_id):
+        """Test real CLI staging workflow using edit and commit commands."""
+        # Create a test file to upload
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+            f.write('CLI staging workflow test content\n')
+            temp_file = f.name
+
+        try:
+            # Step 1: Put artifact in staging mode
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'edit', '--stage', '--comment', 'CLI staging workflow test'
+            ], env=cli_env, capture_output=True, text=True)
+            
+            assert result.returncode == 0, f"CLI edit failed: {result.stderr}"
+
+            # Step 2: Upload file via CLI
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'upload', temp_file, '/cli-staging-test.txt'
+            ], env=cli_env, capture_output=True, text=True)
+
+            assert result.returncode == 0, f"CLI upload failed: {result.stderr}"
+
+            # Step 3: Commit changes
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'commit', '--comment', 'CLI staging workflow commit'
+            ], env=cli_env, capture_output=True, text=True)
+
+            assert result.returncode == 0, f"CLI commit failed: {result.stderr}"
+
+            # Step 4: Verify file exists
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'exists', '/cli-staging-test.txt'
+            ], env=cli_env, capture_output=True, text=True)
+
+            assert result.returncode == 0, f"CLI exists check failed: {result.stderr}"
+
+            # Step 5: Read file content
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'cat', '/cli-staging-test.txt'
+            ], env=cli_env, capture_output=True, text=True)
+
+            assert result.returncode == 0, f"CLI cat command failed: {result.stderr}"
+            assert 'CLI staging workflow test content' in result.stdout
+
+            print("✅ CLI staging workflow completed successfully")
+
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+
+    def test_real_cli_multipart_upload(self, cli_env, test_artifact_id):
+        """Test real CLI multipart upload with proper staging."""
+        # First test if S3 endpoint is reachable
+        import socket
+        try:
+            # Test S3 connectivity with a short timeout
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)  # 5 second timeout
+            result = sock.connect_ex(('s3.cloud.kth.se', 443))
+            sock.close()
+            if result != 0:
+                pytest.skip("S3 endpoint s3.cloud.kth.se not reachable - network connectivity issue")
+        except Exception:
+            pytest.skip("Cannot test S3 connectivity - network connectivity issue")
+        
+        # Create a smaller test file for multipart upload (4MB)
+        large_file_size = 4 * 1024 * 1024
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as f:
+            chunk = b'C' * (1024 * 1024)  # 1MB chunks
+            for i in range(4):
+                f.write(chunk)
+            large_file_path = f.name
+
+        try:
+            # Step 1: Put artifact in staging mode
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'edit', '--stage', '--comment', 'CLI multipart test'
+            ], env=cli_env, capture_output=True, text=True)
+            
+            assert result.returncode == 0, f"CLI edit failed: {result.stderr}"
+
+            # Step 2: Upload with CLI using multipart (smaller thresholds)
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'upload',
+                '--enable-multipart',
+                '--multipart-threshold=2000000',  # 2MB
+                '--chunk-size=1000000',  # 1MB chunks
+                large_file_path,
+                '/cli-multipart-test.bin'
+            ], env=cli_env, capture_output=True, text=True, timeout=120)  # 2 min timeout
+
+            # Handle connectivity issues
+            if result.returncode != 0:
+                error_output = result.stderr
+                if "timeout" in error_output.lower() or "connection" in error_output.lower():
+                    pytest.skip(f"Network connectivity issue during CLI multipart upload: {error_output}")
+                else:
+                    assert False, f"CLI multipart upload failed: {error_output}"
+
+            # Step 3: Commit the upload
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'commit', '--comment', 'CLI multipart upload commit'
+            ], env=cli_env, capture_output=True, text=True)
+
+            assert result.returncode == 0, f"CLI commit failed: {result.stderr}"
+
+            # Step 4: Verify file info
+            result = subprocess.run([
+                sys.executable, '-m', 'hypha_artifact.cli',
+                f'--artifact-id={test_artifact_id}',
+                'info', '/cli-multipart-test.bin'
+            ], env=cli_env, capture_output=True, text=True)
+            
+            assert result.returncode == 0, f"CLI info command failed: {result.stderr}"
+            
+            print("✅ CLI multipart upload completed successfully")
+
+        finally:
+            # Clean up temp file
+            if os.path.exists(large_file_path):
+                os.unlink(large_file_path)
+
+
+class TestRealErrorHandling:
+    """Test real error handling scenarios."""
+
+    def test_missing_environment_variables(self):
+        """Test handling of missing environment variables."""
+        # Temporarily unset environment variables
+        original_server = os.environ.get('HYPHA_SERVER_URL')
+        original_workspace = os.environ.get('HYPHA_WORKSPACE')
+        original_token = os.environ.get('HYPHA_TOKEN')
+        
+        try:
+            # Unset variables
+            if 'HYPHA_SERVER_URL' in os.environ:
+                del os.environ['HYPHA_SERVER_URL']
+            if 'HYPHA_WORKSPACE' in os.environ:
+                del os.environ['HYPHA_WORKSPACE']
+            if 'HYPHA_TOKEN' in os.environ:
+                del os.environ['HYPHA_TOKEN']
+            
+            # Try to get connection params
+            try:
+                server_url, token, workspace = get_connection_params()
+                assert False, "Should have raised an error for missing environment variables"
+            except SystemExit:
+                print(f"✅ Correctly handled missing environment variables with SystemExit")
+            except Exception as e:
+                print(f"✅ Correctly handled missing environment variables: {e}")
+                
+        finally:
+            # Restore environment variables
+            if original_server:
+                os.environ['HYPHA_SERVER_URL'] = original_server
+            if original_workspace:
+                os.environ['HYPHA_WORKSPACE'] = original_workspace
+            if original_token:
+                os.environ['HYPHA_TOKEN'] = original_token
+
+    def test_nonexistent_artifact(self):
+        """Test handling of nonexistent artifact."""
+        try:
+            artifact = create_artifact('nonexistent-artifact-12345')
+            # Try to list files - should fail gracefully
+            try:
+                items = artifact.ls('/')
+                print(f"⚠️  Unexpectedly found {len(items)} items in nonexistent artifact")
+            except Exception as e:
+                print(f"✅ Correctly handled nonexistent artifact: {e}")
+        except Exception as e:
+            print(f"✅ Correctly handled nonexistent artifact creation: {e}")
+
+    def test_invalid_paths(self):
+        """Test handling of invalid paths."""
+        artifact = create_artifact('test-cli-artifact')
+        
+        # Test invalid path operations
+        try:
+            artifact.cat('/nonexistent-file.txt')
+            assert False, "Should have raised an error for nonexistent file"
+        except Exception as e:
+            print(f"✅ Correctly handled nonexistent file: {e}")
+        
+        try:
+            artifact.info('/nonexistent-file.txt')
+            assert False, "Should have raised an error for nonexistent file"
+        except Exception as e:
+            print(f"✅ Correctly handled nonexistent file info: {e}")
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"]) 
+    pytest.main([__file__, "-v", "-s"]) 

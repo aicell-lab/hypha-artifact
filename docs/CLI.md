@@ -7,7 +7,7 @@ A comprehensive command-line interface for managing Hypha artifacts.
 Install the package to make the `hypha-artifact` command available:
 
 ```bash
-pip install -e .
+pip install -U hypha-artifact
 ```
 
 ## Configuration
@@ -54,7 +54,77 @@ hypha-artifact --artifact-id=ARTIFACT_ID [GLOBAL_OPTIONS] COMMAND [COMMAND_OPTIO
 
 ## Commands
 
-### List Files (`ls`)
+### Artifact Management Commands
+
+#### Edit Artifact (`edit`)
+
+Edit artifact manifest, config, or put the artifact in staging mode:
+
+```bash
+# Put artifact in staging mode
+hypha-artifact --artifact-id=my-artifact edit --stage
+
+# Put artifact in staging mode with comment
+hypha-artifact --artifact-id=my-artifact edit --stage --comment "Starting new changes"
+
+# Edit manifest from file
+hypha-artifact --artifact-id=my-artifact edit --manifest manifest.yaml
+
+# Edit config from file  
+hypha-artifact --artifact-id=my-artifact edit --config config.json
+
+# Create new version and stage
+hypha-artifact --artifact-id=my-artifact edit --version "new" --stage
+
+# Combine manifest, config, and staging
+hypha-artifact --artifact-id=my-artifact edit --manifest manifest.yaml --config config.json --stage --comment "Major update"
+```
+
+**Options:**
+- `--manifest PATH`: Path to manifest YAML/JSON file to update
+- `--config PATH`: Path to config YAML/JSON file to update
+- `--version VERSION`: Version to edit (or 'new' to create new version)
+- `--stage`: Put artifact in staging mode for file modifications
+- `--comment COMMENT`: Comment describing the changes
+
+**Note:** Most file operations (upload, copy, remove) require the artifact to be in staging mode first.
+
+#### Commit Changes (`commit`)
+
+Commit staged changes to create a permanent version:
+
+```bash
+# Commit staged changes
+hypha-artifact --artifact-id=my-artifact commit
+
+# Commit with comment
+hypha-artifact --artifact-id=my-artifact commit --comment "Added new dataset"
+
+# Commit with specific version name
+hypha-artifact --artifact-id=my-artifact commit --version "v1.2.0"
+
+# Commit with both version and comment
+hypha-artifact --artifact-id=my-artifact commit --version "release-2024" --comment "Production release"
+```
+
+**Options:**
+- `--version VERSION`: Custom version name for the commit, if not provided, the system will determine it as "v1", "v2", etc.
+- `--comment COMMENT`: Comment describing the commit
+
+#### Discard Changes (`discard`)
+
+Discard staged changes without committing:
+
+```bash
+# Discard all staged changes
+hypha-artifact --artifact-id=my-artifact discard
+```
+
+This will revert the artifact to its last committed state, discarding all staged modifications.
+
+### File Browsing Commands
+
+#### List Files (`ls`)
 
 List files and directories in an artifact:
 
@@ -67,14 +137,18 @@ hypha-artifact --artifact-id=my-artifact ls /data
 
 # List with names only (no details)
 hypha-artifact --artifact-id=my-artifact ls --no-detail /
+
+# List files from staged version
+hypha-artifact --artifact-id=my-artifact ls --stage /
 ```
 
 **Options:**
 - `path`: Path to list (default: `/`)
 - `--detail`: Show detailed information (default)
 - `--no-detail`: Show names only
+- `--stage`: List files from staged version instead of committed version
 
-### Display File Contents (`cat`)
+#### Display File Contents (`cat`)
 
 Display the contents of files:
 
@@ -87,19 +161,45 @@ hypha-artifact --artifact-id=my-artifact cat /file1.txt /file2.txt
 
 # Recursively display all files in directory
 hypha-artifact --artifact-id=my-artifact cat --recursive /data/
+
+# Display from staged version
+hypha-artifact --artifact-id=my-artifact cat --stage /data.txt
 ```
 
 **Options:**
 - `path`: File path to display
 - `paths`: Additional file paths
 - `-r, --recursive`: Recursively display directory contents
+- `--stage`: Read file from staged version
 
-### Copy Files (`cp`)
+#### File Head (`head`)
+
+Show the first bytes of a file:
+
+```bash
+# Show first 1024 bytes (default)
+hypha-artifact --artifact-id=my-artifact head /data.txt
+
+# Show first 500 bytes
+hypha-artifact --artifact-id=my-artifact head --bytes=500 /data.txt
+
+# Show from staged version
+hypha-artifact --artifact-id=my-artifact head --stage /data.txt
+```
+
+**Options:**
+- `path`: File path
+- `-n, --bytes`: Number of bytes to show (default: 1024)
+- `--stage`: Read file from staged version
+
+### File Operations Commands
+
+#### Copy Files (`cp`)
 
 Copy files or directories within an artifact:
 
 ```bash
-# Copy file
+# Copy file (requires staging mode)
 hypha-artifact --artifact-id=my-artifact cp /source.txt /destination.txt
 
 # Copy directory recursively
@@ -115,12 +215,14 @@ hypha-artifact --artifact-id=my-artifact cp --recursive --maxdepth=2 /src /dst
 - `-r, --recursive`: Copy directories recursively
 - `--maxdepth`: Maximum recursion depth
 
-### Remove Files (`rm`)
+**Note:** Requires artifact to be in staging mode. Use `edit --stage` first.
+
+#### Remove Files (`rm`)
 
 Remove files or directories:
 
 ```bash
-# Remove files
+# Remove files (requires staging mode)
 hypha-artifact --artifact-id=my-artifact rm /file1.txt /file2.txt
 
 # Remove directory recursively
@@ -131,12 +233,14 @@ hypha-artifact --artifact-id=my-artifact rm --recursive /directory
 - `paths`: Paths to remove
 - `-r, --recursive`: Remove directories recursively
 
-### Create Directories (`mkdir`)
+**Note:** Requires artifact to be in staging mode. Use `edit --stage` first.
 
-Create directories (note: in Hypha artifacts, directories are created implicitly):
+#### Create Directories (`mkdir`)
+
+Create directories:
 
 ```bash
-# Create directories
+# Create directories (requires staging mode)
 hypha-artifact --artifact-id=my-artifact mkdir /new-dir /another-dir
 
 # Create with parent directories
@@ -147,7 +251,11 @@ hypha-artifact --artifact-id=my-artifact mkdir --parents /deep/nested/dir
 - `paths`: Directory paths to create
 - `-p, --parents`: Create parent directories (default: true)
 
-### File Information (`info`)
+**Note:** Requires artifact to be in staging mode. Use `edit --stage` first.
+
+### File Information Commands
+
+#### File Information (`info`)
 
 Get detailed information about files or directories:
 
@@ -162,7 +270,7 @@ hypha-artifact --artifact-id=my-artifact info /file1.txt /dir1
 **Options:**
 - `paths`: Paths to get information for
 
-### Find Files (`find`)
+#### Find Files (`find`)
 
 Find files recursively:
 
@@ -189,23 +297,7 @@ hypha-artifact --artifact-id=my-artifact find --maxdepth=3 /
 - `--include-dirs`: Include directories in results
 - `--detail`: Show detailed information
 
-### File Head (`head`)
-
-Show the first bytes of a file:
-
-```bash
-# Show first 1024 bytes (default)
-hypha-artifact --artifact-id=my-artifact head /data.txt
-
-# Show first 500 bytes
-hypha-artifact --artifact-id=my-artifact head --bytes=500 /data.txt
-```
-
-**Options:**
-- `path`: File path
-- `-n, --bytes`: Number of bytes to show (default: 1024)
-
-### File Size (`size`)
+#### File Size (`size`)
 
 Get file sizes:
 
@@ -220,7 +312,7 @@ hypha-artifact --artifact-id=my-artifact size /file1.txt /file2.txt
 **Options:**
 - `paths`: File paths
 
-### Check Existence (`exists`)
+#### Check Existence (`exists`)
 
 Check if paths exist:
 
@@ -235,7 +327,9 @@ hypha-artifact --artifact-id=my-artifact exists /file1.txt /dir1 /missing.txt
 **Options:**
 - `paths`: Paths to check
 
-### Upload Files and Folders (`upload`)
+### File Transfer Commands
+
+#### Upload Files and Folders (`upload`)
 
 Upload local files or folders to the artifact with optional multipart support for large files:
 
@@ -261,9 +355,6 @@ hypha-artifact --artifact-id=my-artifact upload --no-recursive ./flat-folder /da
 # Force multipart upload for any file
 hypha-artifact --artifact-id=my-artifact upload --enable-multipart large-file.zip /data/
 
-# Upload with multipart for large files in folder
-hypha-artifact --artifact-id=my-artifact upload --enable-multipart ./large-dataset /datasets/
-
 # Customize multipart settings
 hypha-artifact --artifact-id=my-artifact upload --multipart-threshold=50000000 --chunk-size=5000000 big-file.tar.gz /backups/
 ```
@@ -277,7 +368,9 @@ hypha-artifact --artifact-id=my-artifact upload --multipart-threshold=50000000 -
 - `--multipart-threshold`: File size threshold for automatic multipart upload in bytes (default: 100MB)
 - `--chunk-size`: Size of each part in multipart upload in bytes (default: 10MB)
 
-### Download Files (`download`) 
+**Note:** Uploads automatically handle staging, but you may need to commit changes afterward.
+
+#### Download Files (`download`) 
 
 Download files from the artifact to local filesystem:
 
@@ -296,117 +389,136 @@ hypha-artifact --artifact-id=my-artifact download /documents/report.pdf ./report
 - `remote_path`: Remote file path in artifact
 - `local_path`: Local file path (optional, defaults to same name)
 
-## Examples
+## Workflow Examples
 
-### Basic File Operations
+### Basic Workflow
 
 ```bash
-# Set up environment
-export HYPHA_SERVER_URL=https://hypha.aicell.io
-export HYPHA_TOKEN=your_token
-export HYPHA_WORKSPACE=your_workspace
+# 1. Put artifact in staging mode
+hypha-artifact --artifact-id=my-data edit --stage
 
-# List artifact contents
-hypha-artifact --artifact-id=my-data ls /
-
-# Upload a local file
+# 2. Upload files
 hypha-artifact --artifact-id=my-data upload data.csv /datasets/data.csv
 
-# View file contents
-hypha-artifact --artifact-id=my-data cat /datasets/data.csv
-
-# Copy file within artifact
+# 3. Make modifications
 hypha-artifact --artifact-id=my-data cp /datasets/data.csv /backup/data-backup.csv
 
-# Download file
-hypha-artifact --artifact-id=my-data download /datasets/data.csv ./local-data.csv
-
-# Remove file
-hypha-artifact --artifact-id=my-data rm /backup/data-backup.csv
+# 4. Commit changes
+hypha-artifact --artifact-id=my-data commit --comment "Added dataset and backup"
 ```
 
-### Working with Directories
+### Working with Versions
 
 ```bash
-# Create directory structure
-hypha-artifact --artifact-id=my-data mkdir /projects/analysis /projects/results
+# Create a new version and stage it
+hypha-artifact --artifact-id=my-project edit --version "v2.0.0" --stage --comment "Starting v2.0"
 
+# Make changes
+hypha-artifact --artifact-id=my-project upload new-features/ /features/
+
+# Commit with version info
+hypha-artifact --artifact-id=my-project commit --version "v2.0.0" --comment "Released version 2.0"
+```
+
+### Discarding Changes
+
+```bash
+# Start making changes
+hypha-artifact --artifact-id=my-data edit --stage
+hypha-artifact --artifact-id=my-data upload test-file.txt /
+
+# Decide to discard instead of committing
+hypha-artifact --artifact-id=my-data discard
+```
+
+### Working with Configuration
+
+```bash
+# Update both manifest and config
+hypha-artifact --artifact-id=my-model edit --manifest model-manifest.yaml --config model-config.json --stage
+
+# Upload model files
+hypha-artifact --artifact-id=my-model upload model.pkl /models/model.pkl
+
+# Commit everything
+hypha-artifact --artifact-id=my-model commit --comment "Updated model with new config"
+```
+
+## Advanced Usage Examples
+
+### Batch Operations
+
+```bash
 # Upload multiple files
-hypha-artifact --artifact-id=my-data upload script.py /projects/analysis/script.py
-hypha-artifact --artifact-id=my-data upload results.json /projects/results/results.json
+for file in *.csv; do
+  hypha-artifact --artifact-id=my-data upload "$file" "/datasets/$file"
+done
 
-# Find all Python files
-hypha-artifact --artifact-id=my-data find / | grep "\.py$"
-
-# Copy entire directory
-hypha-artifact --artifact-id=my-data cp --recursive /projects /archive/projects-backup
-
-# List directory with details
-hypha-artifact --artifact-id=my-data ls --detail /projects
+# Check existence of multiple files
+hypha-artifact --artifact-id=my-data exists /config.json /data.csv /model.pkl
 ```
 
-### Advanced Usage
+### Large File Handling
 
 ```bash
-# Get detailed information about files
-hypha-artifact --artifact-id=my-data info /datasets/data.csv /projects/script.py
+# Upload large files with optimized settings
+hypha-artifact --artifact-id=my-data upload --enable-multipart --chunk-size=20971520 large-dataset.tar.gz /data/
 
-# Find files with size information
-hypha-artifact --artifact-id=my-data find --detail / | grep "file"
-
-# Check if multiple files exist
-hypha-artifact --artifact-id=my-data exists /config.json /data.csv /missing.txt
-
-# Get file sizes
-hypha-artifact --artifact-id=my-data size /datasets/data.csv /projects/results.json
-
-# Preview file contents
-hypha-artifact --artifact-id=my-data head --bytes=200 /datasets/data.csv
-
-# Upload large files with multipart
-hypha-artifact --artifact-id=my-data upload --enable-multipart --chunk-size=20971520 large-model.bin /models/
-
-# Upload entire project folder
-hypha-artifact --artifact-id=my-data upload ./my-ml-project /projects/ml-project --enable-multipart
-
-# Upload only specific file types from folder (using shell)
-find ./data -name "*.csv" -exec hypha-artifact --artifact-id=my-data upload {} /datasets/ \;
+# Upload entire large project
+hypha-artifact --artifact-id=my-data upload --enable-multipart ./large-ml-project /projects/ml-project
 ```
 
-### Using with Different Workspaces
+### Staged vs Committed Content
 
 ```bash
-# Override workspace
-hypha-artifact --artifact-id=shared-data --workspace=public-workspace ls /
+# View committed version
+hypha-artifact --artifact-id=my-data ls /
+hypha-artifact --artifact-id=my-data cat /config.json
 
-# Use workspace in artifact ID
-hypha-artifact --artifact-id=public-workspace/shared-data ls /
+# Make changes in staging
+hypha-artifact --artifact-id=my-data edit --stage
+hypha-artifact --artifact-id=my-data upload new-config.json /config.json
 
-# Override multiple parameters
-hypha-artifact --workspace=test --token=test-token --artifact-id=test-data ls /
+# View staged version
+hypha-artifact --artifact-id=my-data ls --stage /
+hypha-artifact --artifact-id=my-data cat --stage /config.json
+
+# Compare the two versions before committing
+diff <(hypha-artifact --artifact-id=my-data cat /config.json) <(hypha-artifact --artifact-id=my-data cat --stage /config.json)
 ```
 
 ## Error Handling
 
-The CLI provides clear error messages:
+The CLI provides clear error messages and helpful suggestions:
 
-- ❌ Missing environment variables
-- ❌ File not found
-- ❌ Permission denied  
-- ❌ Network errors
-- ✅ Success confirmations
+- ❌ **Missing environment variables**: Clear instructions on what to set
+- ❌ **File not found**: Specific path information
+- ❌ **Staging required**: Suggestions to use `edit --stage` first
+- ❌ **Permission denied**: Authentication troubleshooting
+- ❌ **Network errors**: Connection troubleshooting
+- ✅ **Success confirmations**: Clear feedback on completed operations
 
-## Tips
+Common error scenarios:
 
-1. **Use .env files**: Store your credentials safely in a `.env` file in your project directory
-2. **Tab completion**: Most shells support tab completion for command and file names
-3. **Batch operations**: Use shell loops for batch operations:
-   ```bash
-   for file in *.txt; do
-     hypha-artifact --artifact-id=my-data upload "$file" "/uploads/$file"
-   done
-   ```
-4. **Combine with other tools**: Pipe CLI output to other commands:
-   ```bash
-   hypha-artifact --artifact-id=my-data ls --no-detail / | grep "\.csv$"
-   ``` 
+```bash
+# Trying to modify without staging
+$ hypha-artifact --artifact-id=my-data upload file.txt /
+❌ Error uploading: Artifact must be in staging mode
+💡 This operation requires the artifact to be in staging mode.
+   Use: hypha-artifact --artifact-id=my-data edit --stage
+
+# Missing credentials
+$ hypha-artifact --artifact-id=my-data ls /
+❌ Missing HYPHA_TOKEN environment variable
+```
+
+## Tips and Best Practices
+
+1. **Always stage before modifications**: Use `edit --stage` before upload, copy, or remove operations
+2. **Use meaningful commit messages**: Include `--comment` with your commits for better tracking
+3. **Version your important changes**: Use `--version` for significant updates
+4. **Check before committing**: Use `--stage` flag with `ls` and `cat` to preview changes
+5. **Use .env files**: Store credentials safely in a `.env` file
+6. **Combine operations**: Chain commands for complex workflows
+7. **Use multipart for large files**: Enable `--enable-multipart` for files over 100MB
+8. **Verify uploads**: Use `exists` and `size` commands to verify successful transfers 
