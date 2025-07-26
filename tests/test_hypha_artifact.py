@@ -7,6 +7,7 @@ against an actual Hypha artifact service.
 """
 
 from typing import Any
+from pathlib import Path
 import pytest
 from conftest import ArtifactTestMixin
 from hypha_artifact import HyphaArtifact
@@ -160,3 +161,91 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         # Verify the partial content matches the expected first 10 bytes
         expected_content = test_content[:10]
         self._validate_file_content(partial_content, expected_content)
+
+    def test_multipart_upload_large_file(self, artifact: Any) -> None:
+        """Test multipart upload with a large file."""
+        import tempfile
+        import os
+        
+        # Create a temporary large file (20MB to test multipart)
+        chunk_size = 10 * 1024 * 1024  # 10MB chunks
+        file_size = 20 * 1024 * 1024   # 20MB total
+        
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            # Write test data in chunks
+            test_data = b"A" * 1024  # 1KB of 'A's
+            for _ in range(file_size // len(test_data)):
+                temp_file.write(test_data)
+            temp_file_path = temp_file.name
+        
+        try:
+            remote_path = "large_multipart_test.bin"
+            
+            # Upload using multipart
+            artifact.upload(
+                temp_file_path,
+                remote_path,
+                enable_multipart=True,
+                chunk_size=chunk_size,
+                multipart_threshold=1024,  # Low threshold to force multipart
+            )
+            
+            # Verify the file exists
+            assert artifact.exists(remote_path), f"Uploaded file {remote_path} should exist"
+            
+            # Verify file size matches
+            info = artifact.info(remote_path)
+            assert info.get("size") == file_size, f"File size should be {file_size} bytes"
+            
+            # Clean up remote file
+            artifact.rm(remote_path)
+            
+        finally:
+            # Clean up local temp file
+            os.unlink(temp_file_path)
+
+    def test_upload_folder(self, artifact: Any) -> None:
+        """Test uploading a folder with multiple files."""
+        import tempfile
+        import os
+        
+        # Create a temporary folder structure
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create test files
+            (temp_path / "file1.txt").write_text("Content of file 1")
+            (temp_path / "file2.txt").write_text("Content of file 2")
+            
+            # Create subdirectory
+            subdir = temp_path / "subdir"
+            subdir.mkdir()
+            (subdir / "file3.txt").write_text("Content of file 3")
+            
+            # Upload folder
+            remote_folder = "test_folder_upload"
+            artifact.upload(
+                temp_path,
+                remote_folder,
+                recursive=True,
+            )
+            
+            # Verify files were uploaded
+            files = artifact.ls(remote_folder, detail=False)
+            expected_files = {"file1.txt", "file2.txt", "subdir"}
+            actual_files = set(files)
+            
+            assert expected_files.issubset(actual_files), f"Expected files {expected_files} not found in {actual_files}"
+            
+            # Verify subdirectory file
+            subdir_files = artifact.ls(f"{remote_folder}/subdir", detail=False)
+            assert "file3.txt" in subdir_files, "Subdirectory file should be uploaded"
+            
+            # Verify file contents
+            content1 = artifact.cat(f"{remote_folder}/file1.txt")
+            assert content1 == "Content of file 1", "File content should match"
+            
+            # Clean up
+            artifact.rm(f"{remote_folder}/file1.txt")
+            artifact.rm(f"{remote_folder}/file2.txt")
+            artifact.rm(f"{remote_folder}/subdir/file3.txt")

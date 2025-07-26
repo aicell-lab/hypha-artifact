@@ -7,6 +7,9 @@ and manipulating files stored in Hypha artifacts.
 """
 
 import json
+import os
+import asyncio
+from pathlib import Path
 from typing import Literal, Self, overload, Any
 import httpx
 from hypha_artifact.utils import (
@@ -157,9 +160,9 @@ class AsyncHyphaArtifact:
         response = await client.request(
             method,
             request_url,
-            json=cleaned_params if json_data else None,
-            params=cleaned_params if params else None,
-            headers={"Authorization": f"Bearer {self.token}"},
+            json=cleaned_params or {} if json_data is not None else None,
+            params=cleaned_params if params is not None else None,
+            headers={"Authorization": f"Bearer {self.token}"} if self.token else None,
             timeout=20,
         )
 
@@ -175,6 +178,9 @@ class AsyncHyphaArtifact:
             For put_file requests, returns the pre-signed URL as a string.
             For other requests, returns the response content.
         """
+        # Ensure params is never None - always use at least empty dict
+        if params is None:
+            params = {}
         return await self._remote_request(
             method_name,
             method="POST",
@@ -220,15 +226,19 @@ class AsyncHyphaArtifact:
             stage (bool): If True, edits are made to a staging version.
         """
 
-        params: dict[str, Any] = {
-            "manifest": manifest,
-            "type": artifact_type,
-            "config": config,
-            "secrets": secrets,
-            "version": version,
-            "comment": comment,
-            "stage": stage,
-        }
+        params: dict[str, Any] = {"stage": stage}
+        if manifest is not None:
+            params["manifest"] = manifest
+        if artifact_type is not None:
+            params["type"] = artifact_type
+        if config is not None:
+            params["config"] = config
+        if secrets is not None:
+            params["secrets"] = secrets
+        if version is not None:
+            params["version"] = version
+        if comment is not None:
+            params["comment"] = comment
         await self._remote_post("edit", params)
 
     async def _remote_commit(
@@ -246,10 +256,11 @@ class AsyncHyphaArtifact:
                 If None, a new version is typically created. Cannot be "stage".
             comment (str | None): A comment describing the commit.
         """
-        params: dict[str, str | None] = {
-            "version": version,
-            "comment": comment,
-        }
+        params: dict[str, Any] = {}
+        if version is not None:
+            params["version"] = version
+        if comment is not None:
+            params["comment"] = comment
         await self._remote_post("commit", params)
 
     async def _remote_put_file_url(
@@ -273,7 +284,7 @@ class AsyncHyphaArtifact:
             "download_weight": download_weight,
         }
         response_content = await self._remote_post("put_file", params)
-        return response_content.decode()
+        return response_content.decode().strip('"')
 
     async def _remote_remove_file(
         self: Self,
@@ -318,7 +329,283 @@ class AsyncHyphaArtifact:
             "version": version,
         }
         response = await self._remote_get("get_file", params)
-        return response.decode("utf-8")
+        return response.decode("utf-8").strip('"')
+
+    async def _remote_put_file_start_multipart(
+        self: Self,
+        file_path: str,
+        part_count: int,
+        expires_in: int = 7200,
+        download_weight: float = 1.0,
+    ) -> dict[str, Any]:
+        """Start a multipart upload for a file.
+
+        Args:
+            file_path (str): The path within the artifact where the file will be stored.  
+            part_count (int): The number of parts for the multipart upload.
+            expires_in (int): Expiration time in seconds (default: 7200 = 2 hours).
+            download_weight (float): The download weight for the file (default is 1.0).
+
+        Returns:
+            dict: Multipart upload information including upload_id and parts.
+        """
+        params: dict[str, Any] = {
+            "file_path": file_path,
+            "part_count": part_count,
+            "expires_in": expires_in,
+            "download_weight": download_weight,
+        }
+        response_content = await self._remote_post("put_file_start_multipart", params)
+        return json.loads(response_content.decode())
+
+    async def _remote_put_file_complete_multipart(
+        self: Self,
+        upload_id: str,
+        parts: list[dict[str, Any]],
+    ) -> None:
+        """Complete a multipart upload.
+
+        Args:
+            upload_id (str): The upload ID from put_file_start_multipart.
+            parts (list): List of completed parts with part_number and etag.
+        """
+        params: dict[str, Any] = {
+            "upload_id": upload_id,
+            "parts": parts,
+        }
+        await self._remote_post("put_file_complete_multipart", params)
+
+    async def upload(
+        self: Self,
+        local_path: str | Path,
+        remote_path: str = "",
+        recursive: bool = True,
+        enable_multipart: bool = False,
+        multipart_threshold: int = 100 * 1024 * 1024,  # 100MB
+        chunk_size: int = 10 * 1024 * 1024,  # 10MB per part
+        max_parallel_uploads: int = 4,
+        download_weight: float = 1.0,
+        auto_commit: bool = True,
+    ) -> None:
+        """Upload a file or folder to the artifact with optional multipart upload.
+
+        Parameters
+        ----------
+        local_path: str or Path
+            Path to the local file or folder to upload
+        remote_path: str
+            Path within the artifact where the content will be stored (default: same name)
+        recursive: bool
+            Whether to upload subdirectories recursively when uploading folders (default: True)
+        enable_multipart: bool
+            Force multipart upload even for small files (default: False)
+        multipart_threshold: int
+            File size threshold for automatic multipart upload (default: 100MB)
+        chunk_size: int
+            Size of each part in multipart upload (default: 10MB)
+        max_parallel_uploads: int
+            Maximum number of parallel part uploads (default: 4)
+        download_weight: float
+            Download weight for files (default: 1.0)
+        auto_commit: bool
+            Whether to automatically commit after upload (default: True)
+        """
+        local_path = Path(local_path)
+        if not local_path.exists():
+            raise FileNotFoundError(f"Local path does not exist: {local_path}")
+
+        # If no remote_path specified, use the local name
+        if not remote_path:
+            remote_path = local_path.name
+
+        if local_path.is_file():
+            # Upload single file
+            file_size = local_path.stat().st_size
+            use_multipart = enable_multipart or file_size >= multipart_threshold
+
+            if auto_commit:
+                await self._remote_edit(stage=True)
+
+            if use_multipart and file_size > chunk_size:
+                await self._upload_multipart(
+                    local_path, remote_path, chunk_size, max_parallel_uploads, download_weight
+                )
+            else:
+                await self._upload_single(local_path, remote_path, download_weight)
+
+            if auto_commit:
+                await self._remote_commit()
+
+        elif local_path.is_dir():
+            # Upload folder
+            if auto_commit:
+                await self._remote_edit(stage=True)
+
+            try:
+                files_to_upload = []
+                if recursive:
+                    for file_path in local_path.rglob("*"):
+                        if file_path.is_file():
+                            relative_path = file_path.relative_to(local_path)
+                            remote_file_path = f"{remote_path}/{relative_path}".strip("/")
+                            files_to_upload.append((file_path, remote_file_path))
+                else:
+                    for file_path in local_path.iterdir():
+                        if file_path.is_file():
+                            remote_file_path = f"{remote_path}/{file_path.name}".strip("/")
+                            files_to_upload.append((file_path, remote_file_path))
+
+                # Upload files concurrently
+                upload_tasks = []
+                for local_file_path, remote_file_path in files_to_upload:
+                    file_size = local_file_path.stat().st_size
+                    use_multipart = enable_multipart or file_size >= multipart_threshold
+
+                    if use_multipart and file_size > chunk_size:
+                        task = self._upload_multipart(
+                            local_file_path, remote_file_path, chunk_size, max_parallel_uploads, download_weight
+                        )
+                    else:
+                        task = self._upload_single(local_file_path, remote_file_path, download_weight)
+                    
+                    upload_tasks.append(task)
+
+                # Wait for all uploads to complete
+                await asyncio.gather(*upload_tasks)
+
+                if auto_commit:
+                    await self._remote_commit()
+                    
+            except Exception as e:
+                raise IOError(f"Folder upload failed: {str(e)}") from e
+        else:
+            raise ValueError(f"Path is neither a file nor a directory: {local_path}")
+
+    async def _upload_single(
+        self: Self,
+        local_path: Path,
+        remote_path: str,
+        download_weight: float = 1.0,
+    ) -> None:
+        """Upload a file using single upload."""
+        upload_url = await self._remote_put_file_url(remote_path, download_weight)
+        
+        with open(local_path, 'rb') as f:
+            content = f.read()
+            
+        client = self._get_client()
+        response = await client.put(
+            upload_url,
+            content=content,
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(len(content)),
+            },
+            timeout=300,  # 5 minutes for large files
+        )
+        response.raise_for_status()
+
+    async def _upload_multipart(
+        self: Self,
+        local_path: Path,
+        remote_path: str,
+        chunk_size: int,
+        max_parallel_uploads: int,
+        download_weight: float = 1.0,
+    ) -> None:
+        """Upload a file using multipart upload with parallel uploads."""
+        import math
+        
+        # Calculate part count based on file size and chunk size
+        file_size = local_path.stat().st_size
+        part_count = math.ceil(file_size / chunk_size)
+        
+        # Start multipart upload
+        try:
+            multipart_info = await self._remote_put_file_start_multipart(
+                remote_path, part_count, download_weight=download_weight
+            )
+            
+            upload_id = multipart_info["upload_id"]
+            
+            # Handle different possible response structures
+            if "parts" in multipart_info:
+                parts_info = multipart_info["parts"]
+            elif "urls" in multipart_info:
+                # Alternative structure where URLs might be in a different field
+                parts_info = multipart_info["urls"]
+            else:
+                # If no parts/urls, try to generate part info from upload_id
+                # This might be a case where we need to make separate calls for each part URL
+                raise ValueError(f"Unexpected multipart response structure: {multipart_info}")
+
+        except Exception as e:
+            raise IOError(f"Failed to start multipart upload: {str(e)}") from e
+
+        async def upload_part(part_info: dict[str, Any], chunk_data: bytes) -> dict[str, Any]:
+            """Upload a single part."""
+            part_number = part_info.get("part_number", parts_info.index(part_info) + 1)
+            
+            # Handle different possible URL field names
+            upload_url = None
+            for url_field in ["upload_url", "url", "presigned_url", "uploadUrl"]:
+                if url_field in part_info:
+                    upload_url = part_info[url_field]
+                    break
+            
+            if not upload_url:
+                raise KeyError(f"No upload URL found in part info: {part_info}")
+
+            client = self._get_client()
+            response = await client.put(
+                upload_url,
+                content=chunk_data,
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": str(len(chunk_data)),
+                },
+                timeout=300,
+            )
+            response.raise_for_status()
+
+            # Get ETag from response
+            etag = response.headers.get("ETag", "").strip('"')
+            return {
+                "part_number": part_number,
+                "etag": etag
+            }
+
+        try:
+            # Read all chunks into memory (for smaller files this should be fine)
+            chunks = []
+            with open(local_path, 'rb') as f:
+                for part_info in parts_info:
+                    chunk_data = f.read(chunk_size)
+                    if not chunk_data:
+                        break
+                    chunks.append((part_info, chunk_data))
+
+            # Upload parts in parallel with semaphore to limit concurrency
+            semaphore = asyncio.Semaphore(max_parallel_uploads)
+            
+            async def upload_with_semaphore(part_info_chunk):
+                async with semaphore:
+                    return await upload_part(part_info_chunk[0], part_info_chunk[1])
+
+            # Upload all parts in parallel
+            completed_parts = await asyncio.gather(
+                *[upload_with_semaphore(chunk) for chunk in chunks]
+            )
+
+            # Complete multipart upload
+            await self._remote_put_file_complete_multipart(upload_id, completed_parts)
+
+        except Exception as e:
+            # If something goes wrong, we should ideally abort the multipart upload
+            # but the API doesn't seem to have an abort endpoint in the docs
+            raise IOError(f"Multipart upload failed: {str(e)}") from e
+
+
 
     async def _remote_list_contents(
         self: Self,
@@ -485,6 +772,7 @@ class AsyncHyphaArtifact:
             What to do if a file is not found
         """
         await self._remote_edit(stage=True)
+        
         # Handle recursive case
         if recursive and await self.isdir(path1):
             files = await self.find(path1, maxdepth=maxdepth, withdirs=False)
