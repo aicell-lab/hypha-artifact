@@ -4,7 +4,7 @@
 
 ## Overview
 
-The HyphaArtifact library provides both synchronous and asynchronous file-system-like interfaces that follow the fsspec specification, making it easy to interact with Hypha artifacts in a familiar way. 
+The HyphaArtifact library provides both synchronous and asynchronous file-system-like interfaces that follow the fsspec specification, making it easy to interact with Hypha artifacts in a familiar way.
 
 **⚡ Recommendation: Use `AsyncHyphaArtifact` for better performance and scalability in most applications, especially when dealing with multiple file operations or integrating with async frameworks.**
 
@@ -24,6 +24,7 @@ pip install hypha-artifact
 ```
 
 For Pyodide environments:
+
 ```python
 import micropip
 await micropip.install("hypha-artifact")
@@ -531,6 +532,7 @@ Both `HyphaArtifact` and `AsyncHyphaArtifact` classes use HTTP requests to inter
 5. Use HTTP Range headers for efficient partial file reading
 
 The async version provides better performance when:
+
 - Handling multiple file operations concurrently
 - Integrating with async web frameworks (FastAPI, aiohttp, etc.)
 - Building scalable applications with many I/O operations

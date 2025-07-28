@@ -16,7 +16,7 @@ pip install -U hypha-artifact
 
 The CLI uses the same environment variables as the hypha-apps-cli:
 
-- `HYPHA_SERVER_URL`: The Hypha server URL (e.g., https://hypha.aicell.io)
+- `HYPHA_SERVER_URL`: The Hypha server URL (e.g., [https://hypha.aicell.io](https://hypha.aicell.io))
 - `HYPHA_TOKEN`: Your authentication token
 - `HYPHA_WORKSPACE`: Your workspace name
 - `HYPHA_CLIENT_ID`: Optional client ID (defaults to "hypha-artifact-cli")
@@ -24,11 +24,13 @@ The CLI uses the same environment variables as the hypha-apps-cli:
 ### Setup
 
 1. Copy the example environment file:
+
    ```bash
    cp .env.example .env
    ```
 
 2. Edit `.env` with your values:
+
    ```bash
    HYPHA_SERVER_URL=https://hypha.aicell.io
    HYPHA_TOKEN=your_token_here
@@ -81,6 +83,7 @@ hypha-artifact --artifact-id=my-artifact edit --manifest manifest.yaml --config 
 ```
 
 **Options:**
+
 - `--manifest PATH`: Path to manifest YAML/JSON file to update
 - `--config PATH`: Path to config YAML/JSON file to update
 - `--version VERSION`: Version to edit (or 'new' to create new version)
@@ -108,6 +111,7 @@ hypha-artifact --artifact-id=my-artifact commit --version "release-2024" --comme
 ```
 
 **Options:**
+
 - `--version VERSION`: Custom version name for the commit, if not provided, the system will determine it as "v1", "v2", etc.
 - `--comment COMMENT`: Comment describing the commit
 
@@ -143,6 +147,7 @@ hypha-artifact --artifact-id=my-artifact ls --stage /
 ```
 
 **Options:**
+
 - `path`: Path to list (default: `/`)
 - `--detail`: Show detailed information (default)
 - `--no-detail`: Show names only
@@ -167,6 +172,7 @@ hypha-artifact --artifact-id=my-artifact cat --stage /data.txt
 ```
 
 **Options:**
+
 - `path`: File path to display
 - `paths`: Additional file paths
 - `-r, --recursive`: Recursively display directory contents
@@ -188,6 +194,7 @@ hypha-artifact --artifact-id=my-artifact head --stage /data.txt
 ```
 
 **Options:**
+
 - `path`: File path
 - `-n, --bytes`: Number of bytes to show (default: 1024)
 - `--stage`: Read file from staged version
@@ -210,6 +217,7 @@ hypha-artifact --artifact-id=my-artifact cp --recursive --maxdepth=2 /src /dst
 ```
 
 **Options:**
+
 - `source`: Source path
 - `destination`: Destination path
 - `-r, --recursive`: Copy directories recursively
@@ -230,6 +238,7 @@ hypha-artifact --artifact-id=my-artifact rm --recursive /directory
 ```
 
 **Options:**
+
 - `paths`: Paths to remove
 - `-r, --recursive`: Remove directories recursively
 
@@ -248,6 +257,7 @@ hypha-artifact --artifact-id=my-artifact mkdir --parents /deep/nested/dir
 ```
 
 **Options:**
+
 - `paths`: Directory paths to create
 - `-p, --parents`: Create parent directories (default: true)
 
@@ -268,6 +278,7 @@ hypha-artifact --artifact-id=my-artifact info /file1.txt /dir1
 ```
 
 **Options:**
+
 - `paths`: Paths to get information for
 
 #### Find Files (`find`)
@@ -292,6 +303,7 @@ hypha-artifact --artifact-id=my-artifact find --maxdepth=3 /
 ```
 
 **Options:**
+
 - `path`: Base path to search from (default: `/`)
 - `--maxdepth`: Maximum recursion depth
 - `--include-dirs`: Include directories in results
@@ -310,6 +322,7 @@ hypha-artifact --artifact-id=my-artifact size /file1.txt /file2.txt
 ```
 
 **Options:**
+
 - `paths`: File paths
 
 #### Check Existence (`exists`)
@@ -325,6 +338,7 @@ hypha-artifact --artifact-id=my-artifact exists /file1.txt /dir1 /missing.txt
 ```
 
 **Options:**
+
 - `paths`: Paths to check
 
 ### File Transfer Commands
@@ -360,6 +374,7 @@ hypha-artifact --artifact-id=my-artifact upload --multipart-threshold=50000000 -
 ```
 
 **Options:**
+
 - `local_path`: Local file or folder path to upload
 - `remote_path`: Remote path in artifact (optional, defaults to same name)
 - `--recursive`: Upload subdirectories recursively when uploading folders (default: true)
@@ -370,7 +385,7 @@ hypha-artifact --artifact-id=my-artifact upload --multipart-threshold=50000000 -
 
 **Note:** Uploads automatically handle staging, but you may need to commit changes afterward.
 
-#### Download Files (`download`) 
+#### Download Files (`download`)
 
 Download files from the artifact to local filesystem:
 
@@ -386,6 +401,7 @@ hypha-artifact --artifact-id=my-artifact download /documents/report.pdf ./report
 ```
 
 **Options:**
+
 - `remote_path`: Remote file path in artifact
 - `local_path`: Local file path (optional, defaults to same name)
 
@@ -521,4 +537,4 @@ $ hypha-artifact --artifact-id=my-data ls /
 5. **Use .env files**: Store credentials safely in a `.env` file
 6. **Combine operations**: Chain commands for complex workflows
 7. **Use multipart for large files**: Enable `--enable-multipart` for files over 100MB
-8. **Verify uploads**: Use `exists` and `size` commands to verify successful transfers 
+8. **Verify uploads**: Use `exists` and `size` commands to verify successful transfers

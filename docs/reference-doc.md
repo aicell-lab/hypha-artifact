@@ -5,6 +5,7 @@ This repository demonstrates how to use the Hypha Apps CLI to manage application
 ## Overview
 
 The Hypha Apps CLI (`hypha_apps_cli`) is a command-line tool that allows you to:
+
 - Install apps to a Hypha server
 - Start and stop running apps
 - List installed and running apps
@@ -21,10 +22,12 @@ Before using the CLI, ensure you have:
 
 1. **Python 3.7+** installed
 2. **hypha-rpc >= 0.20.71** installed:
+
    ```bash
    pip install "hypha-rpc>=0.20.71"
    ```
-3. Access to a **Hypha server** (e.g., https://hypha.aicell.io or your self-hosted instance)
+
+3. Access to a **Hypha server** (e.g., [https://hypha.aicell.io](https://hypha.aicell.io) or your self-hosted instance)
 4. A valid **authentication token** from your Hypha server
 
 ## Environment Setup
@@ -45,7 +48,7 @@ HYPHA_CLIENT_ID=my-hypha-app-client
 
 To get your authentication token:
 
-1. Visit your Hypha server dashboard (e.g., https://hypha.aicell.io)
+1. Visit your Hypha server dashboard (e.g., [https://hypha.aicell.io](https://hypha.aicell.io))
 2. Log in to your account
 3. Go to "My Workspace"
 4. Find the "Development" tab
@@ -59,6 +62,7 @@ Your workspace name should match the workspace you want to deploy apps to on you
 ## CLI Commands Reference
 
 All commands use the format:
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli [COMMAND] [OPTIONS]
 ```
@@ -90,6 +94,7 @@ python -m hypha_rpc.utils.hypha_apps_cli install \
 ```
 
 **Options:**
+
 - `--app-id`: Unique identifier for your app (required)
 - `--source`: Path to your main Python file (required)
 - `--manifest`: Path to your manifest.yaml file (required)
@@ -166,7 +171,6 @@ When you specify `--files=./directory`, the CLI will:
    - **Binary files** (`.png`, `.jpg`, `.pdf`, etc.): Base64 encoded
 4. **Upload files** with relative paths preserved
 
-
 ### File Size and Limitations
 
 **Small files only**: In the CLI, however, since we serialize all the data in one rpc call, it is not recommended to upload large files. The typical use of this is to upload source code files along with some assets.
@@ -193,6 +197,7 @@ python test_workflow.py
 ```
 
 This script will automatically:
+
 1. Install the demo app
 2. Start the app
 3. List running apps
@@ -203,9 +208,10 @@ This script will automatically:
 
 You can also test manually step by step:
 
-#### 1. Install the demo app:
+#### 1. Install the demo app
 
 Basic installation:
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli install \
   --app-id hello-demo \
@@ -214,6 +220,7 @@ python -m hypha_rpc.utils.hypha_apps_cli install \
 ```
 
 Or with example files:
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli install \
   --app-id hello-demo \
@@ -222,22 +229,26 @@ python -m hypha_rpc.utils.hypha_apps_cli install \
   --files=example-files
 ```
 
-#### 2. Start the app:
+#### 2. Start the app
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli start --app-id hello-demo
 ```
 
-#### 3. List running apps to verify:
+#### 3. List running apps to verify
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli list-running
 ```
 
-#### 4. Stop the app when done:
+#### 4. Stop the app when done
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli stop --app-id hello-demo
 ```
 
-#### 5. Uninstall the app:
+#### 5. Uninstall the app
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli uninstall --app-id hello-demo
 ```
@@ -246,7 +257,7 @@ python -m hypha_rpc.utils.hypha_apps_cli uninstall --app-id hello-demo
 
 When you install and start an app, you'll see output like:
 
-```
+```bash
 📦 Installing app 'hello-demo' from main.py with manifest manifest.yaml...
 ✅ App installation completed
 📦 App info: {
@@ -265,7 +276,7 @@ When you install and start an app, you'll see output like:
 
 ## Project Structure
 
-```
+```pseudo
 my-hypha-app/
 ├── main.py                     # Demo app source code
 ├── manifest.yaml               # App configuration
@@ -286,7 +297,9 @@ my-hypha-app/
 ## Files Explained
 
 ### `main.py`
+
 Simple Hypha app that exports a `setup` function:
+
 ```python
 from hypha_rpc import api
 
@@ -302,7 +315,9 @@ api.export({
 ```
 
 ### `manifest.yaml`
+
 App configuration file:
+
 ```yaml
 type: "web-python"
 name: "Hello World"
@@ -317,9 +332,11 @@ requirements:
 ### Common Issues
 
 1. **Missing environment variables:**
-   ```
+
+   ```bash
    ❌ Missing environment variables. Set HYPHA_SERVER_URL, HYPHA_TOKEN, HYPHA_WORKSPACE
    ```
+
    **Solution:** Ensure your `.env` file contains all required variables.
 
 2. **Connection errors:**
@@ -339,11 +356,13 @@ requirements:
 ### Getting Help
 
 For detailed help on any command:
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli [COMMAND] --help
 ```
 
 For general CLI help:
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli --help
 ```
@@ -353,6 +372,7 @@ python -m hypha_rpc.utils.hypha_apps_cli --help
 ### Custom Client ID
 
 You can set a custom client ID in your `.env` file:
+
 ```bash
 HYPHA_CLIENT_ID=my-custom-client-id
 ```
@@ -362,6 +382,7 @@ HYPHA_CLIENT_ID=my-custom-client-id
 When using `--files`, you can include additional static files or resources. See the [Working with Additional Files](#working-with-additional-files) section above for comprehensive details.
 
 Quick example:
+
 ```bash
 python -m hypha_rpc.utils.hypha_apps_cli install \
   --app-id my-app \

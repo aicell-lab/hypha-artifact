@@ -179,11 +179,13 @@ asyncio.run(main())
 The Artifact Manager has been optimized for better performance and more predictable version management. Key improvements include:
 
 #### 1. Explicit Version Control
+
 - **No Automatic Versioning**: Simply adding files to a staged artifact does not create a new version
 - **Explicit Intent Required**: You must use `version="new"` when editing to create new versions
 - **Predictable Costs**: Prevents unexpected version proliferation that can lead to high storage costs
 
 #### 2. Direct File Placement
+
 - **Optimized Upload**: Files are placed directly in their final S3 destination based on version intent
 - **No File Copying**: Eliminates expensive file copying operations during commit
 - **Fast Commits**: Commit operations are now metadata-only and complete quickly regardless of file size
@@ -210,6 +212,7 @@ await artifact_manager.commit(artifact_id=dataset.id, version="v2.0")  # Creates
 ```
 
 #### 4. Performance Benefits
+
 - **Large File Support**: Adding large files is much faster since they're placed directly in final location
 - **Reduced S3 Costs**: No duplicate file storage during staging process
 - **Fast Commits**: Commit operations complete in seconds, not minutes, regardless of data size
@@ -276,7 +279,6 @@ await artifact_manager.commit(dataset.id)
 print("Valid dataset committed.")
 ```
 
-
 ---
 
 ## API References
@@ -324,7 +326,6 @@ Creates a new artifact or collection with the specified manifest. The artifact i
   - `S3_PUBLIC_ENDPOINT_URL`: The public endpoint URL of the S3 storage for the artifact. If the S3 server is not public, you can set this to the public endpoint URL. Default: `None`.
 - `overwrite`: Optional. A boolean flag to overwrite the existing artifact with the same alias. Default is `False`.
 
-
 **Note 1: If you set `stage=True`, you must call `commit()` to finalize the artifact.**
 
 **Example:**
@@ -369,6 +370,7 @@ When multiple notations are used together, the most specific permission takes pr
 **Example Permissions:**
 
 1. **Public Read-Only Access:**
+
    ```json
    {
      "permissions": {
@@ -376,9 +378,11 @@ When multiple notations are used together, the most specific permission takes pr
      }
    }
    ```
+
    This grants read-only access to everyone, including anonymous users.
 
 2. **Read, Write and Create Access for Logged-In Users:**
+
    ```json
    {
      "permissions": {
@@ -386,9 +390,11 @@ When multiple notations are used together, the most specific permission takes pr
      }
    }
    ```
+
    This allows all authenticated users to read, write and create, but restricts access for anonymous users.
 
 3. **Full Access for a Specific User:**
+
    ```json
    {
      "permissions": {
@@ -396,6 +402,7 @@ When multiple notations are used together, the most specific permission takes pr
      }
    }
    ```
+
    This grants a specific user full access to the artifact, including reading, writing, creating, and managing files.
 
 **Permission Hierarchy:**
@@ -441,6 +448,7 @@ Edits an existing artifact's manifest. The new manifest is staged until committe
 - `comment`: Optional. A comment to describe the changes made to the artifact.
 
 **Important Notes:**
+
 - **Version Validation**: The system now strictly validates the `version` parameter. You cannot specify arbitrary custom version names during edit.
 - **Staging Intent System**: When you use `version="new"` with `stage=True`, the system stores an "intent" to create a new version, which allows you to specify a custom version name later during `commit()`.
 - **Historical Version Editing**: You can edit specific existing versions by providing their exact version name (e.g., `version="v1"`), but the version must already exist.
@@ -531,6 +539,7 @@ A dictionary containing the artifact reverted to its last committed state.
 - Raises an error if no staged changes exist
 
 **Example:**
+
 ```python
 # Create an artifact and make some changes
 artifact = await artifact_manager.create(type="dataset", manifest={"name": "Test"}, stage=True)
@@ -708,9 +717,10 @@ vectors = await artifact_manager.list_vectors(artifact_id="example-id", limit=20
 
 ### `put_file(artifact_id: str, file_path: str, download_weight: float = 0, use_proxy: bool = None, use_local_url: bool = False, expires_in: float = 3600) -> str`
 
-Generates a pre-signed URL to upload a file to the artifact in S3. The URL can be used with an HTTP `PUT` request to upload the file. 
+Generates a pre-signed URL to upload a file to the artifact in S3. The URL can be used with an HTTP `PUT` request to upload the file.
 
 **File Placement Optimization:** Files are placed directly in their final destination based on version intent:
+
 - If the artifact has `new_version` intent (set via `version="new"` during edit), files are uploaded to the new version location
 - Otherwise, files are uploaded to the existing latest version location
 - This eliminates the need for expensive file copying during commit operations
@@ -839,6 +849,7 @@ get_url = await artifact_manager.get_file(artifact_id="example-dataset", file_pa
 Initiates a multipart upload for large files and generates pre-signed URLs for uploading each part. This is useful for files larger than 100MB or when you need to upload files in chunks with parallel processing.
 
 **File Placement Optimization:** Like `put_file`, files are placed directly in their final destination based on version intent:
+
 - If the artifact has `new_version` intent (set via `version="new"` during edit), files are uploaded to the new version location
 - Otherwise, files are uploaded to the existing latest version location
 
@@ -850,15 +861,17 @@ Initiates a multipart upload for large files and generates pre-signed URLs for u
 - `expires_in`: The expiration time in seconds for the multipart upload session and part URLs. Defaults to 3600 (1 hour).
 
 **Returns:** A dictionary containing:
+
 - `upload_id`: The unique identifier for this multipart upload session
 - `parts`: A list of part information, each containing:
   - `part_number`: The sequential part number (1-indexed)
   - `url`: The pre-signed URL for uploading this specific part
 
 **Important Notes:**
+
 - Each part (except the last) must be at least 5MB in size
 - Part URLs expire after the specified `expires_in` time
-- The multipart upload session must be completed with `put_file_complete_multipart` 
+- The multipart upload session must be completed with `put_file_complete_multipart`
 - If not completed within the expiration time, the session will be automatically cleaned up
 
 **Example:**
@@ -909,10 +922,12 @@ Completes a multipart upload by combining all uploaded parts into the final file
   - `etag`: The ETag returned by S3 when the part was uploaded (without quotes)
 
 **Returns:** A dictionary containing:
+
 - `success`: Boolean indicating whether the multipart upload was completed successfully
 - `message`: A descriptive message about the operation result
 
 **Important Notes:**
+
 - All parts must be uploaded before calling this function
 - Parts must be provided in the correct order with accurate ETags
 - ETags should be provided without surrounding quotes
@@ -1166,6 +1181,7 @@ results = await artifact_manager.list(
 ```
 
 **Example: Return both staged and committed artifacts:**
+
 ```python
 # Retrieve all artifacts regardless of staging status
 all_artifacts = await artifact_manager.list(
@@ -1331,6 +1347,7 @@ else:
 ```
 
 ---
+
 ### `set_secret(artifact_id: str, secret_key: str, secret_value: str) -> None`
 
 Sets or removes a secret value for an artifact. This operation requires read_write permissions.
@@ -1418,9 +1435,10 @@ print("Datasets in the gallery:", datasets)
 The `Artifact Manager` provides an HTTP API for retrieving artifact manifests, data, file statistics, and managing zip files. These endpoints are designed for public-facing web applications that need to interact with datasets, models, or applications.
 
 ---
+
 ### Artifact Metadata and File Access Endpoints
 
-#### Endpoints:
+#### Endpoints
 
 - `/{workspace}/artifacts/`: List all top-level artifacts in the workspace.
   - **Query Parameters**:
@@ -1457,21 +1475,22 @@ The `Artifact Manager` provides an HTTP API for retrieving artifact manifests, d
     - `use_proxy`: (Optional) Boolean to control whether to use the S3 proxy
     - `use_local_url`: (Optional) Boolean to generate local/cluster-internal URLs
 
-#### Request Format:
+#### Request Format
 
 - **Method**: `GET`
-- **Headers**: 
+- **Headers**:
   - `Authorization`: Optional. The user's token for accessing private artifacts (obtained via login logic or created by `api.generate_token()`). Not required for public artifacts.
 
-#### Path Parameters:
+#### Path Parameters
 
 - **workspace**: The workspace in which the artifact is stored.
 - **artifact_alias**: The alias or ID of the artifact to access. This can be generated by `create` or `edit` functions or be an alias under the current workspace.
 - **file_path**: (Optional) The relative path to a file within the artifact.
 
-#### Response Examples:
+#### Response Examples
 
-- **Artifact Manifest**: 
+- **Artifact Manifest**:
+
   ```json
   {
       "manifest": {
@@ -1485,6 +1504,7 @@ The `Artifact Manager` provides an HTTP API for retrieving artifact manifests, d
   ```
 
 - **Files in Artifact**:
+
   ```json
   [
       {"name": "example.txt", "type": "file"},
@@ -1494,7 +1514,7 @@ The `Artifact Manager` provides an HTTP API for retrieving artifact manifests, d
 
 - **Download File**: A redirect to a pre-signed URL for the file.
 
-#### Authentication for Workspace-Level Endpoint:
+#### Authentication for Workspace-Level Endpoint
 
 The `/{workspace}/artifacts/` endpoint requires authentication to access private artifacts:
 
@@ -1503,6 +1523,7 @@ The `/{workspace}/artifacts/` endpoint requires authentication to access private
 - **Token generation**: Use `api.generate_token()` to create a token for authenticated requests
 
 **Example with Authentication**:
+
 ```python
 import requests
 
@@ -1529,6 +1550,7 @@ The Artifact Manager provides HTTP endpoints for uploading files directly to art
 Upload a single file by streaming it directly to S3 storage. This endpoint is efficient for handling files of any size as it streams the request body directly to S3 without local temporary storage.
 
 **Request Format:**
+
 - **Method**: `PUT`
 - **Path Parameters**:
   - **workspace**: The workspace containing the artifact
@@ -1543,6 +1565,7 @@ Upload a single file by streaming it directly to S3 storage. This endpoint is ef
 - **Body**: Raw file content
 
 **Response:**
+
 ```json
 {
     "success": true,
@@ -1551,6 +1574,7 @@ Upload a single file by streaming it directly to S3 storage. This endpoint is ef
 ```
 
 **Example Usage:**
+
 ```python
 import asyncio
 import httpx
@@ -1594,6 +1618,7 @@ For large files, the Artifact Manager supports multipart uploads which allow upl
 Initiate a multipart upload and get presigned URLs for all parts.
 
 **Request Format:**
+
 - **Method**: `POST`
 - **Path Parameters**:
   - **workspace**: The workspace containing the artifact
@@ -1604,6 +1629,7 @@ Initiate a multipart upload and get presigned URLs for all parts.
   - **expires_in**: (Optional) Number of seconds for presigned URLs to expire. Defaults to 3600.
 
 **Response:**
+
 ```json
 {
     "upload_id": "abc123...",
@@ -1622,11 +1648,13 @@ Initiate a multipart upload and get presigned URLs for all parts.
 Complete the multipart upload and finalize the file in S3.
 
 **Request Format:**
+
 - **Method**: `POST`
 - **Path Parameters**:
   - **workspace**: The workspace containing the artifact
   - **artifact_alias**: The alias or ID of the artifact
 - **Body**:
+
 ```json
 {
     "upload_id": "abc123...",
@@ -1639,6 +1667,7 @@ Complete the multipart upload and finalize the file in S3.
 ```
 
 **Response:**
+
 ```json
 {
     "success": true,
@@ -1647,6 +1676,7 @@ Complete the multipart upload and finalize the file in S3.
 ```
 
 **Complete Multipart Upload Example:**
+
 ```python
 import asyncio
 import httpx
@@ -1742,6 +1772,7 @@ asyncio.run(upload_large_file())
 ```
 
 **Important Notes:**
+
 - **Part Limits**: Maximum 10,000 parts per multipart upload
 - **Part Size**: Each part must be at least 5MB (except the last part)
 - **ETags**: The ETag returned from S3 when uploading each part must be included in the completion request
@@ -1750,6 +1781,7 @@ asyncio.run(upload_large_file())
 - **Parallel Uploads**: Using `asyncio.gather()` for parallel uploads significantly improves performance for large files
 
 **Advanced Example with Optimized Chunking:**
+
 ```python
 import asyncio
 import httpx
@@ -1866,25 +1898,25 @@ async def upload_large_file_optimized(file_path, artifact_alias, workspace, toke
 
 ### Dynamic Zip File Creation Endpoint
 
-#### Endpoint:
+#### Endpoint
 
 - `/{workspace}/artifacts/{artifact_alias}/create-zip-file`: Stream a dynamically created zip file containing selected or all files in the artifact.
 
-#### Request Format:
+#### Request Format
 
 - **Method**: `GET`
-- **Query Parameters**: 
+- **Query Parameters**:
   - **file**: (Optional) A list of files to include in the zip file. If omitted, all files in the artifact are included.
   - **token**: (Optional) User token for private artifact access.
   - **version**: (Optional) The version of the artifact to fetch files from.
 
-#### Response:
+#### Response
 
 - Streams the zip file back to the client.
 - **Headers**:
   - `Content-Disposition`: Attachment with the artifact alias as the filename.
 
-#### Download Count Behavior:
+#### Download Count Behavior
 
 When using the `create-zip-file` endpoint, the artifact's download count is incremented based on the files included in the zip:
 
@@ -1925,7 +1957,7 @@ else:
 
 These endpoints allow direct access to zip file contents stored in the artifact without requiring the entire zip file to be downloaded or extracted.
 
-#### Endpoints:
+#### Endpoints
 
 1. **`/{workspace}/artifacts/{artifact_alias}/zip-files/{zip_file_path:path}?path=...`**  
    - Access the contents of a zip file, specifying the path within the zip file using a query parameter (`?path=`).
@@ -1937,12 +1969,12 @@ These endpoints allow direct access to zip file contents stored in the artifact 
 
 #### Endpoint 1: `/{workspace}/artifacts/{artifact_alias}/zip-files/{zip_file_path:path}?path=...`
 
-##### Functionality:
+##### Functionality
 
 - **If `path` ends with `/`:** Lists the contents of the directory specified by `path` inside the zip file.
 - **If `path` specifies a file:** Streams the file content from the zip.
 
-##### Request Format:
+##### Request Format
 
 - **Method**: `GET`
 - **Path Parameters**:
@@ -1952,9 +1984,10 @@ These endpoints allow direct access to zip file contents stored in the artifact 
 - **Query Parameters**:
   - **path**: (Optional) The relative path inside the zip file. Defaults to the root directory.
 
-##### Response Examples:
+##### Response Examples
 
 1. **Listing Directory Contents**:
+
     ```json
     [
         {"type": "file", "name": "example.txt", "size": 123, "last_modified": 1732363845.0},
@@ -1969,12 +2002,12 @@ These endpoints allow direct access to zip file contents stored in the artifact 
 
 #### Endpoint 2: `/{workspace}/artifacts/{artifact_alias}/zip-files/{zip_file_path:path}/~/{path:path}`
 
-##### Functionality:
+##### Functionality
 
 - **If `path` ends with `/`:** Lists the contents of the directory specified by `path` inside the zip file.
 - **If `path` specifies a file:** Streams the file content from the zip.
 
-##### Request Format:
+##### Request Format
 
 - **Method**: `GET`
 - **Path Parameters**:
@@ -1983,9 +2016,10 @@ These endpoints allow direct access to zip file contents stored in the artifact 
   - **zip_file_path**: Path to the zip file within the artifact.
   - **path**: (Optional) The relative path inside the zip file. Defaults to the root directory.
 
-##### Response Examples:
+##### Response Examples
 
 1. **Listing Directory Contents**:
+
     ```json
     [
         {"type": "file", "name": "example.txt", "size": 123, "last_modified": 1732363845.0},
@@ -2000,7 +2034,7 @@ These endpoints allow direct access to zip file contents stored in the artifact 
 
 #### Example Usage for Both Endpoints
 
-##### Listing Directory Contents:
+##### Listing Directory Contents
 
 ```python
 import requests
@@ -2024,7 +2058,7 @@ response = requests.get(
 print(response.json())
 ```
 
-##### Fetching a File:
+##### Fetching a File
 
 ```python
 # Using the query parameter method
@@ -2306,16 +2340,19 @@ When using Jinja2 templates, the following variables are available:
 **URL Pattern**: `GET /{workspace}/site/{artifact_alias}/{file_path:path}`
 
 **Parameters**:
+
 - **workspace**: The workspace containing the site
 - **artifact_alias**: The alias of the site artifact
 - **file_path**: (Optional) Path to the file within the site. Defaults to `index.html`
 
 **Query Parameters**:
+
 - **stage**: (Optional) Boolean to serve from staged version instead of committed version
 - **token**: (Optional) User token for private site access
 - **version**: (Optional) Specific version to serve
 
 **Features**:
+
 - **Automatic MIME Type Detection**: Files are served with appropriate Content-Type headers
 - **Template Rendering**: Files listed in `templates` config are rendered with Jinja2
 - **Custom Headers**: Headers specified in config are added to responses
@@ -2509,7 +2546,7 @@ The Artifact Manager follows specific rules for version handling during `create`
    - **Existing version update**: When committing updates to existing versions, the version parameter is ignored
    - Version names must be unique - the system validates that specified versions don't already exist
 
-**Example: Version Handling in Practice**
+#### Example: Version Handling in Practice
 
 ```python
 # Create an artifact in staging mode
@@ -2561,6 +2598,7 @@ committed = await artifact_manager.commit(artifact_id=artifact.id)
 ```
 
 **Key Benefits of the New System:**
+
 - **Explicit Control**: Version creation only happens when explicitly requested with `version="new"`
 - **Cost Efficient**: No file copying during commit - files are placed directly in final destinations
 - **Predictable**: No surprise version creation from simply adding files
