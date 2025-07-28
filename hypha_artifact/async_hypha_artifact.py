@@ -154,6 +154,7 @@ class AsyncHyphaArtifact:
         request_url = f"{self.artifact_url}/{artifact_method}"
         client = self._get_client()
 
+        # TODO: ensure json/params are never empty
         response = await client.request(
             method,
             request_url,
@@ -484,6 +485,7 @@ class AsyncHyphaArtifact:
         on_error: "raise" or "ignore"
             What to do if a file is not found
         """
+        # TODO: Remove auto-edit & auto-commit
         await self._remote_edit(stage=True)
         # Handle recursive case
         if recursive and await self.isdir(path1):
