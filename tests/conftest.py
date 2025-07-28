@@ -9,7 +9,7 @@ import os
 import uuid
 import asyncio
 from collections.abc import Callable
-from typing import Any, Callable
+from typing import Any
 import pytest
 from hypha_rpc import connect_to_server  # type: ignore
 from dotenv import load_dotenv
