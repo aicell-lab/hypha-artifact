@@ -540,6 +540,7 @@ def cmd_exists(args) -> None:
         sys.exit(1)
 
 
+# TODO: remove because redundant with copy
 def cmd_upload(args) -> None:
     """Upload a local file or folder to artifact."""
     artifact = create_artifact(
