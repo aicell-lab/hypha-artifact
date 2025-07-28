@@ -842,9 +842,9 @@ class HyphaArtifact:
         path: str
             Path to the file to remove
         recursive: bool, optional
-            Not used, included for fsspec compatibility
+            If True and path is a directory, remove all files under this directory
         maxdepth: int or None, optional
-            Not used, included for fsspec compatibility
+            Maximum recursion depth when recursive=True
 
         Returns
         -------

@@ -243,7 +243,7 @@ def cmd_commit(args) -> None:
             commit_kwargs["comment"] = args.comment
 
         # Perform commit
-        result = artifact._remote_commit(**commit_kwargs)
+        artifact._remote_commit(**commit_kwargs)
 
         if args.version:
             print(f"✅ Artifact committed as version {args.version}")
@@ -271,7 +271,7 @@ def cmd_discard(args) -> None:
 
     try:
         # Perform discard
-        result = artifact._remote_discard()
+        artifact._remote_discard()
         print("✅ Staged changes discarded successfully")
 
     except Exception as e:
