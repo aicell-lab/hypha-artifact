@@ -9,8 +9,8 @@ against an actual Hypha artifact service.
 from typing import Any
 import pytest
 import pytest_asyncio
-from hypha_artifact import AsyncHyphaArtifact
 from conftest import ArtifactTestMixin
+from hypha_artifact import AsyncHyphaArtifact
 
 
 @pytest_asyncio.fixture(scope="function", name="async_artifact")

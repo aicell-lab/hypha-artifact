@@ -1,12 +1,19 @@
 # HyphaArtifact Documentation
 
-`HyphaArtifact` and `AsyncHyphaArtifact` are fsspec-compatible interfaces for Hypha artifacts that provide a file-system like interface to interact with remote Hypha artifacts. This allows for operations such as reading, writing, listing, and manipulating files stored in Hypha artifacts.
+`HyphaArtifact` and `AsyncHyphaArtifact` are fsspec-compatible interfaces for
+Hypha artifacts that provide a file-system like interface to interact with
+remote Hypha artifacts. This allows for operations such as reading,
+writing, listing, and manipulating files stored in Hypha artifacts.
 
 ## Overview
 
-The HyphaArtifact library provides both synchronous and asynchronous file-system-like interfaces that follow the fsspec specification, making it easy to interact with Hypha artifacts in a familiar way.
+The HyphaArtifact library provides both synchronous and asynchronous
+file-system-like interfaces that follow the fsspec specification,
+making it easy to interact with Hypha artifacts in a familiar way.
 
-**⚡ Recommendation: Use `AsyncHyphaArtifact` for better performance and scalability in most applications, especially when dealing with multiple file operations or integrating with async frameworks.**
+**⚡ Recommendation: Use `AsyncHyphaArtifact` for better performance and
+scalability in most applications, especially when dealing with multiple file
+operations or integrating with async frameworks.**
 
 Both classes support various file operations including:
 
@@ -32,7 +39,10 @@ await micropip.install("hypha-artifact")
 
 ## Authentication
 
-For accessing hypha artifact in a workspace, you need to have a workspace token. You can get the workspace token from the workspace's development page in the hypha app. If the artifact is public, you can still perform operations on it without a token.
+For accessing hypha artifact in a workspace, you need to have a workspace token.
+You can get the workspace token from the workspace's development page in the
+hypha app. If the artifact is public, you can still perform operations on it
+without a token.
 
 ## Quick Start
 
@@ -148,7 +158,9 @@ async with async_artifact:
 
 #### Reading a Partial File with HTTP Range
 
-One of the key features of both `HyphaArtifact` and `AsyncHyphaArtifact` is the ability to read only part of a file using HTTP Range headers, which is more efficient than downloading the entire file:
+One of the key features of both `HyphaArtifact` and `AsyncHyphaArtifact` is the
+ability to read only part of a file using HTTP Range headers, which is
+more efficient than downloading the entire file:
 
 ```python
 # Synchronous - Read only the first 10 bytes
@@ -523,7 +535,8 @@ asyncio.run(main())
 
 ## Implementation Details
 
-Both `HyphaArtifact` and `AsyncHyphaArtifact` classes use HTTP requests to interact with the Hypha artifact service. Under the hood, they:
+Both `HyphaArtifact` and `AsyncHyphaArtifact` classes use HTTP requests to
+interact with the Hypha artifact service. Under the hood, they:
 
 1. Use the `requests` library (sync) or `aiohttp` library (async) to make HTTP requests
 2. Authenticate using a personal token
@@ -546,7 +559,8 @@ The async version provides better performance when:
 4. Use partial file reading with HTTP Range headers for large files
 5. Use meaningful directory structures within artifacts
 6. Handle errors appropriately in your application
-7. For async operations, prefer concurrent execution using `asyncio.gather()` when possible
+7. For async operations, prefer concurrent execution using `asyncio.gather()`
+when possible
 
 ## Advanced Configuration
 

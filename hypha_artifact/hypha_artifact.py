@@ -6,10 +6,11 @@ using the fsspec specification, allowing for operations like reading, writing, l
 and manipulating files stored in Hypha artifacts.
 """
 
+import math
 import json
-import os
 from pathlib import Path
 from typing import Literal, Self, overload, Any
+from httpx import HTTPError
 import requests
 from hypha_artifact.utils import (
     remove_none,
@@ -311,7 +312,7 @@ class HyphaArtifact:
         """Start a multipart upload for a file.
 
         Args:
-            file_path (str): The path within the artifact where the file will be stored.  
+            file_path (str): The path within the artifact where the file will be stored.
             part_count (int): The number of parts for the multipart upload.
             expires_in (int): Expiration time in seconds (default: 7200 = 2 hours).
             download_weight (float): The download weight for the file (default is 1.0).
@@ -389,7 +390,7 @@ class HyphaArtifact:
             if auto_commit:
                 try:
                     self._remote_edit(stage=True)
-                except Exception as e:
+                except HTTPError as e:
                     # If already staged, that's fine - continue
                     if "already" not in str(e).lower():
                         raise
@@ -398,7 +399,9 @@ class HyphaArtifact:
             use_multipart = enable_multipart or file_size >= multipart_threshold
 
             if use_multipart and file_size > chunk_size:
-                self._upload_multipart(local_path, remote_path, chunk_size, download_weight)
+                self._upload_multipart(
+                    local_path, remote_path, chunk_size, download_weight
+                )
             else:
                 self._upload_single(local_path, remote_path, download_weight)
 
@@ -421,7 +424,7 @@ class HyphaArtifact:
             if auto_commit:
                 try:
                     self._remote_edit(stage=True)
-                except Exception as e:
+                except HTTPError as e:
                     # If already staged, that's fine - continue
                     if "already" not in str(e).lower():
                         raise
@@ -432,12 +435,16 @@ class HyphaArtifact:
                     for file_path in local_path.rglob("*"):
                         if file_path.is_file():
                             relative_path = file_path.relative_to(local_path)
-                            remote_file_path = f"{remote_path}/{relative_path}".strip("/")
+                            remote_file_path = f"{remote_path}/{relative_path}".strip(
+                                "/"
+                            )
                             files_to_upload.append((file_path, remote_file_path))
                 else:
                     for file_path in local_path.iterdir():
                         if file_path.is_file():
-                            remote_file_path = f"{remote_path}/{file_path.name}".strip("/")
+                            remote_file_path = f"{remote_path}/{file_path.name}".strip(
+                                "/"
+                            )
                             files_to_upload.append((file_path, remote_file_path))
 
                 # Upload each file
@@ -446,9 +453,16 @@ class HyphaArtifact:
                     use_multipart = enable_multipart or file_size >= multipart_threshold
 
                     if use_multipart and file_size > chunk_size:
-                        self._upload_multipart(local_file_path, remote_file_path, chunk_size, download_weight)
+                        self._upload_multipart(
+                            local_file_path,
+                            remote_file_path,
+                            chunk_size,
+                            download_weight,
+                        )
                     else:
-                        self._upload_single(local_file_path, remote_file_path, download_weight)
+                        self._upload_single(
+                            local_file_path, remote_file_path, download_weight
+                        )
 
                 if auto_commit:
                     try:
@@ -462,7 +476,7 @@ class HyphaArtifact:
                             print(f"✅ Folder uploaded successfully to {remote_path}")
                             return
                         raise
-                    
+
             except Exception as e:
                 raise IOError(f"Folder upload failed: {str(e)}") from e
         else:
@@ -476,10 +490,10 @@ class HyphaArtifact:
     ) -> None:
         """Upload a file using single upload."""
         upload_url = self._remote_put_file_url(remote_path, download_weight)
-        
-        with open(local_path, 'rb') as f:
+
+        with open(local_path, "rb") as f:
             content = f.read()
-            
+
         response = requests.put(
             upload_url,
             data=content,
@@ -499,20 +513,18 @@ class HyphaArtifact:
         download_weight: float = 1.0,
     ) -> None:
         """Upload a file using multipart upload (sequential for sync version)."""
-        import math
-        
         # Calculate part count based on file size and chunk size
         file_size = local_path.stat().st_size
         part_count = math.ceil(file_size / chunk_size)
-        
+
         # Start multipart upload
         try:
             multipart_info = self._remote_put_file_start_multipart(
                 remote_path, part_count, download_weight=download_weight
             )
-            
+
             upload_id = multipart_info["upload_id"]
-            
+
             # Handle different possible response structures
             if "parts" in multipart_info:
                 parts_info = multipart_info["parts"]
@@ -522,7 +534,9 @@ class HyphaArtifact:
             else:
                 # If no parts/urls, try to generate part info from upload_id
                 # This might be a case where we need to make separate calls for each part URL
-                raise ValueError(f"Unexpected multipart response structure: {multipart_info}")
+                raise ValueError(
+                    f"Unexpected multipart response structure: {multipart_info}"
+                )
 
         except Exception as e:
             raise IOError(f"Failed to start multipart upload: {str(e)}") from e
@@ -530,20 +544,25 @@ class HyphaArtifact:
         completed_parts = []
 
         try:
-            with open(local_path, 'rb') as f:
+            with open(local_path, "rb") as f:
                 for i, part_info in enumerate(parts_info):
                     part_number = part_info.get("part_number", i + 1)
-                    
+
                     # Handle different possible URL field names
                     upload_url = None
-                    for url_field in ["upload_url", "url", "presigned_url", "uploadUrl"]:
+                    for url_field in [
+                        "upload_url",
+                        "url",
+                        "presigned_url",
+                        "uploadUrl",
+                    ]:
                         if url_field in part_info:
                             upload_url = part_info[url_field]
                             break
-                    
+
                     if not upload_url:
                         raise KeyError(f"No upload URL found in part info: {part_info}")
-                    
+
                     # Read chunk
                     chunk_data = f.read(chunk_size)
                     if not chunk_data:
@@ -563,10 +582,7 @@ class HyphaArtifact:
 
                     # Get ETag from response
                     etag = response.headers.get("ETag", "").strip('"')
-                    completed_parts.append({
-                        "part_number": part_number,
-                        "etag": etag
-                    })
+                    completed_parts.append({"part_number": part_number, "etag": etag})
 
             # Complete multipart upload
             self._remote_put_file_complete_multipart(upload_id, completed_parts)
@@ -575,8 +591,6 @@ class HyphaArtifact:
             # If something goes wrong, we should ideally abort the multipart upload
             # but the API doesn't seem to have an abort endpoint in the docs
             raise IOError(f"Multipart upload failed: {str(e)}") from e
-
-
 
     def _remote_list_contents(
         self: Self,
@@ -745,11 +759,11 @@ class HyphaArtifact:
         """
         try:
             self._remote_edit(stage=True)
-        except Exception as e:
+        except HTTPError as e:
             # If already staged, that's fine - continue
             if "already" not in str(e).lower():
                 raise
-                
+
         # Handle recursive case
         if recursive and self.isdir(path1):
             files = self.find(path1, maxdepth=maxdepth, withdirs=False)
@@ -838,7 +852,7 @@ class HyphaArtifact:
         """
         try:
             self._remote_edit(stage=True)
-        except Exception as e:
+        except HTTPError as e:
             # If already staged, that's fine - continue
             if "already" not in str(e).lower():
                 raise
@@ -1148,7 +1162,7 @@ class HyphaArtifact:
             return sorted(all_files.keys())
 
     def mkdir(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path: str,
         create_parents: bool = True,  # pylint: disable=unused-argument
         **kwargs: Any,  # pylint: disable=unused-argument
@@ -1167,24 +1181,24 @@ class HyphaArtifact:
         """
         # Normalize the path
         path = self._normalize_path(path)
-        if not path.endswith('/'):
-            path += '/'
-        
+        if not path.endswith("/"):
+            path += "/"
+
         # Create .keep file to establish directory in S3
         keep_file_path = f"{path}.keep"
-        
+
         try:
             # Stage the artifact if needed
             self._remote_edit(stage=True)
-        except Exception as e:
+        except HTTPError as e:
             # If already staged, that's fine - continue
             if "already" not in str(e).lower():
                 raise
-        
+
         try:
             # Create an empty .keep file
             upload_url = self._remote_put_file_url(keep_file_path, 1.0)
-            
+
             response = requests.put(
                 upload_url,
                 data=b"",  # Empty content
@@ -1195,7 +1209,7 @@ class HyphaArtifact:
                 timeout=30,
             )
             response.raise_for_status()
-            
+
             # Try to commit
             try:
                 self._remote_commit()
@@ -1209,7 +1223,7 @@ class HyphaArtifact:
                         print(f"✅ Directory created successfully at {path}")
                         return
                 raise
-                
+
         except Exception as e:
             raise IOError(f"Failed to create directory {path}: {str(e)}") from e
 

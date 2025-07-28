@@ -1,8 +1,14 @@
 # Artifact Manager
 
-The `Artifact Manager` is an essential Hypha service for managing resources such as datasets, AI models, and applications. It allows for structured resource management, providing APIs to create collections, manage datasets, track download statistics, enforce schemas, and control access permissions. The `Artifact Manager` can be used as a backend for web applications, supporting complex operations like indexing, searching, and schema validation.
+The `Artifact Manager` is an essential Hypha service for managing resources such
+ as datasets, AI models, and applications. It allows for structured resource management,
+ providing APIs to create collections, manage datasets, track download
+ statistics, enforce schemas, and control access permissions. The `Artifact Manager`
+ can be used as a backend for web applications, supporting complex operations
+ like indexing, searching, and schema validation.
 
-**Note:** The `Artifact Manager` is available only when S3 storage is enabled on your Hypha server.
+**Note:** The `Artifact Manager` is available only when S3 storage is enabled on
+your Hypha server.
 
 ---
 
@@ -10,7 +16,10 @@ The `Artifact Manager` is an essential Hypha service for managing resources such
 
 ### Step 1: Connecting to the Artifact Manager Service
 
-To use the `Artifact Manager`, start by connecting to the Hypha server. This connection allows you to interact with the artifact registry, including creating, editing, and deleting datasets, as well as managing permissions and tracking download statistics.
+To use the `Artifact Manager`, start by connecting to the Hypha server. This
+connection allows you to interact with the artifact registry, including
+creating, editing, and deleting datasets, as well as managing permissions and
+tracking download statistics.
 
 ```python
 from hypha_rpc import connect_to_server
@@ -24,7 +33,8 @@ artifact_manager = await server.get_service("public/artifact-manager")
 
 ### Step 2: Creating a Dataset Gallery Collection
 
-Once connected, you can create a collection that organizes datasets, providing metadata and access permissions for each.
+Once connected, you can create a collection that organizes datasets, providing
+metadata and access permissions for each.
 
 ```python
 # Define metadata for the dataset gallery
@@ -33,7 +43,8 @@ gallery_manifest = {
     "description": "A collection for organizing datasets",
 }
 
-# Create the collection with read access for everyone and create access for authenticated users
+# Create the collection with read access for everyone and create access for
+# authenticated users
 collection = await artifact_manager.create(
     alias="dataset-gallery",
     type="collection",
@@ -43,11 +54,15 @@ collection = await artifact_manager.create(
 print("Dataset Gallery created with ID:", collection.id)
 ```
 
-**Tips: The returned `collection.id` is the unique identifier for the collection with the format `workspace_id/alias`. You can use this ID to refer to the collection in subsequent operations. You can also use only `alias` as a shortcut, however, this only works in the same workspace.**
+**Tips: The returned `collection.id` is the unique identifier for the
+collection with the format `workspace_id/alias`. You can use this ID to refer
+to the collection in subsequent operations. You can also use only `alias` as
+a shortcut, however, this only works in the same workspace.**
 
 ### Step 3: Adding a Dataset to the Gallery
 
-After creating the gallery, you can add datasets to it, with each dataset having its own metadata and permissions.
+After creating the gallery, you can add datasets to it, with each dataset having
+its own metadata and permissions.
 
 ```python
 # Define metadata for the new dataset
@@ -70,9 +85,12 @@ print("Dataset added to the gallery.")
 
 ### Step 4: Uploading Files to the Dataset with Download Statistics
 
-Each dataset can contain multiple files. Use pre-signed URLs for secure uploads and set `download_weight` to track file downloads.
+Each dataset can contain multiple files. Use pre-signed URLs for secure uploads
+and set `download_weight` to track file downloads.
 
-**Important:** Adding files to a staged artifact does NOT automatically create a new version. You must explicitly specify `version="new"` when editing if you want to create a new version upon commit.
+**Important:** Adding files to a staged artifact does NOT automatically create a
+new version. You must explicitly specify `version="new"` when editing if you
+want to create a new version upon commit.
 
 ```python
 # Generate a pre-signed URL to upload a file with a specific download weight
@@ -90,7 +108,9 @@ print("File uploaded to the dataset.")
 
 ### Step 5: Committing the Dataset
 
-After uploading files, commit the dataset to finalize its status in the collection. Since no `version="new"` was specified when staging or adding files, this will create the initial version v0.
+After uploading files, commit the dataset to finalize its status in the
+collection. Since no `version="new"` was specified when staging or adding
+files, this will create the initial version v0.
 
 ```python
 # Commit the dataset to finalize its status
@@ -112,7 +132,8 @@ print("Datasets in the gallery:", datasets)
 
 ## Full Example: Creating and Managing a Dataset Gallery
 
-Here's a complete example showing how to connect to the service, create a dataset gallery, add a dataset, upload files, and commit the dataset.
+Here's a complete example showing how to connect to the service, create a
+dataset gallery, add a dataset, upload files, and commit the dataset.
 
 ```python
 import asyncio
@@ -176,12 +197,15 @@ asyncio.run(main())
 
 ### Understanding the New Version Control System
 
-The Artifact Manager has been optimized for better performance and more predictable version management. Key improvements include:
+The Artifact Manager has been optimized for better performance and more
+predictable version management. Key improvements include:
 
 #### 1. Explicit Version Control
 
-- **No Automatic Versioning**: Simply adding files to a staged artifact does not create a new version
-- **Explicit Intent Required**: You must use `version="new"` when editing to create new versions
+- **No Automatic Versioning**: Simply adding files to a staged artifact does
+not create a new version
+- **Explicit Intent Required**: You must use `version="new"` when editing to
+- create new versions
 - **Predictable Costs**: Prevents unexpected version proliferation that can lead to high storage costs
 
 #### 2. Direct File Placement
@@ -425,7 +449,7 @@ The following list shows how permission expansions work:
 
 ---
 
-### `edit(artifact_id: str, manifest: dict = None, type: str = None,  permissions: dict = None, config: dict = None, secrets: dict = None, version: str = None, stage: bool = False, comment: str = None) -> None`
+### `edit(artifact_id: str, manifest: dict = None, type: str = None, permissions: dict = None, config: dict = None, secrets: dict = None, version: str = None, stage: bool = False, comment: str = None) -> None`
 
 Edits an existing artifact's manifest. The new manifest is staged until committed if staging mode is enabled.
 

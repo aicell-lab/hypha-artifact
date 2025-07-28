@@ -6,8 +6,8 @@ using the fsspec specification, allowing for operations like reading, writing, l
 and manipulating files stored in Hypha artifacts.
 """
 
+import math
 import json
-import os
 import asyncio
 from pathlib import Path
 from typing import Literal, Self, overload, Any
@@ -341,7 +341,7 @@ class AsyncHyphaArtifact:
         """Start a multipart upload for a file.
 
         Args:
-            file_path (str): The path within the artifact where the file will be stored.  
+            file_path (str): The path within the artifact where the file will be stored.
             part_count (int): The number of parts for the multipart upload.
             expires_in (int): Expiration time in seconds (default: 7200 = 2 hours).
             download_weight (float): The download weight for the file (default is 1.0).
@@ -428,7 +428,11 @@ class AsyncHyphaArtifact:
 
             if use_multipart and file_size > chunk_size:
                 await self._upload_multipart(
-                    local_path, remote_path, chunk_size, max_parallel_uploads, download_weight
+                    local_path,
+                    remote_path,
+                    chunk_size,
+                    max_parallel_uploads,
+                    download_weight,
                 )
             else:
                 await self._upload_single(local_path, remote_path, download_weight)
@@ -447,12 +451,16 @@ class AsyncHyphaArtifact:
                     for file_path in local_path.rglob("*"):
                         if file_path.is_file():
                             relative_path = file_path.relative_to(local_path)
-                            remote_file_path = f"{remote_path}/{relative_path}".strip("/")
+                            remote_file_path = f"{remote_path}/{relative_path}".strip(
+                                "/"
+                            )
                             files_to_upload.append((file_path, remote_file_path))
                 else:
                     for file_path in local_path.iterdir():
                         if file_path.is_file():
-                            remote_file_path = f"{remote_path}/{file_path.name}".strip("/")
+                            remote_file_path = f"{remote_path}/{file_path.name}".strip(
+                                "/"
+                            )
                             files_to_upload.append((file_path, remote_file_path))
 
                 # Upload files concurrently
@@ -463,11 +471,17 @@ class AsyncHyphaArtifact:
 
                     if use_multipart and file_size > chunk_size:
                         task = self._upload_multipart(
-                            local_file_path, remote_file_path, chunk_size, max_parallel_uploads, download_weight
+                            local_file_path,
+                            remote_file_path,
+                            chunk_size,
+                            max_parallel_uploads,
+                            download_weight,
                         )
                     else:
-                        task = self._upload_single(local_file_path, remote_file_path, download_weight)
-                    
+                        task = self._upload_single(
+                            local_file_path, remote_file_path, download_weight
+                        )
+
                     upload_tasks.append(task)
 
                 # Wait for all uploads to complete
@@ -475,7 +489,7 @@ class AsyncHyphaArtifact:
 
                 if auto_commit:
                     await self._remote_commit()
-                    
+
             except Exception as e:
                 raise IOError(f"Folder upload failed: {str(e)}") from e
         else:
@@ -489,10 +503,10 @@ class AsyncHyphaArtifact:
     ) -> None:
         """Upload a file using single upload."""
         upload_url = await self._remote_put_file_url(remote_path, download_weight)
-        
-        with open(local_path, 'rb') as f:
+
+        with open(local_path, "rb") as f:
             content = f.read()
-            
+
         client = self._get_client()
         response = await client.put(
             upload_url,
@@ -514,20 +528,18 @@ class AsyncHyphaArtifact:
         download_weight: float = 1.0,
     ) -> None:
         """Upload a file using multipart upload with parallel uploads."""
-        import math
-        
         # Calculate part count based on file size and chunk size
         file_size = local_path.stat().st_size
         part_count = math.ceil(file_size / chunk_size)
-        
+
         # Start multipart upload
         try:
             multipart_info = await self._remote_put_file_start_multipart(
                 remote_path, part_count, download_weight=download_weight
             )
-            
+
             upload_id = multipart_info["upload_id"]
-            
+
             # Handle different possible response structures
             if "parts" in multipart_info:
                 parts_info = multipart_info["parts"]
@@ -537,22 +549,26 @@ class AsyncHyphaArtifact:
             else:
                 # If no parts/urls, try to generate part info from upload_id
                 # This might be a case where we need to make separate calls for each part URL
-                raise ValueError(f"Unexpected multipart response structure: {multipart_info}")
+                raise ValueError(
+                    f"Unexpected multipart response structure: {multipart_info}"
+                )
 
         except Exception as e:
             raise IOError(f"Failed to start multipart upload: {str(e)}") from e
 
-        async def upload_part(part_info: dict[str, Any], chunk_data: bytes) -> dict[str, Any]:
+        async def upload_part(
+            part_info: dict[str, Any], chunk_data: bytes
+        ) -> dict[str, Any]:
             """Upload a single part."""
             part_number = part_info.get("part_number", parts_info.index(part_info) + 1)
-            
+
             # Handle different possible URL field names
             upload_url = None
             for url_field in ["upload_url", "url", "presigned_url", "uploadUrl"]:
                 if url_field in part_info:
                     upload_url = part_info[url_field]
                     break
-            
+
             if not upload_url:
                 raise KeyError(f"No upload URL found in part info: {part_info}")
 
@@ -570,15 +586,12 @@ class AsyncHyphaArtifact:
 
             # Get ETag from response
             etag = response.headers.get("ETag", "").strip('"')
-            return {
-                "part_number": part_number,
-                "etag": etag
-            }
+            return {"part_number": part_number, "etag": etag}
 
         try:
             # Read all chunks into memory (for smaller files this should be fine)
             chunks = []
-            with open(local_path, 'rb') as f:
+            with open(local_path, "rb") as f:
                 for part_info in parts_info:
                     chunk_data = f.read(chunk_size)
                     if not chunk_data:
@@ -587,7 +600,7 @@ class AsyncHyphaArtifact:
 
             # Upload parts in parallel with semaphore to limit concurrency
             semaphore = asyncio.Semaphore(max_parallel_uploads)
-            
+
             async def upload_with_semaphore(part_info_chunk):
                 async with semaphore:
                     return await upload_part(part_info_chunk[0], part_info_chunk[1])
@@ -604,8 +617,6 @@ class AsyncHyphaArtifact:
             # If something goes wrong, we should ideally abort the multipart upload
             # but the API doesn't seem to have an abort endpoint in the docs
             raise IOError(f"Multipart upload failed: {str(e)}") from e
-
-
 
     async def _remote_list_contents(
         self: Self,
@@ -772,7 +783,7 @@ class AsyncHyphaArtifact:
             What to do if a file is not found
         """
         await self._remote_edit(stage=True)
-        
+
         # Handle recursive case
         if recursive and await self.isdir(path1):
             files = await self.find(path1, maxdepth=maxdepth, withdirs=False)
