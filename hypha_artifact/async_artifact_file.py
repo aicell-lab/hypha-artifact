@@ -19,8 +19,6 @@ class AsyncArtifactHttpFile:
 
     name: str | None
     mode: str
-    auto_commit: bool
-    commit_func: Callable[[], Awaitable[None]] | None
 
     def __init__(
         self: Self,
@@ -29,8 +27,6 @@ class AsyncArtifactHttpFile:
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
-        auto_commit: bool = False,
-        commit_func: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._url_func = url_func
         self._url: str | None = None
@@ -41,8 +37,6 @@ class AsyncArtifactHttpFile:
         self.name = name
         self._closed = False
         self._buffer = io.BytesIO()
-        self._auto_commit = auto_commit
-        self._commit_func = commit_func
         self._client: httpx.AsyncClient | None = None
 
         if "r" in mode:
@@ -67,7 +61,7 @@ class AsyncArtifactHttpFile:
         """Async context manager exit."""
         await self.close()
 
-    async def _get_url(self: Self) -> str:
+    async def get_url(self: Self) -> str:
         """Get the URL for this file."""
         if self._url is None:
             self._url = await self._url_func()
@@ -82,7 +76,7 @@ class AsyncArtifactHttpFile:
     async def _download_content(self: Self, range_header: str | None = None) -> None:
         """Download content from URL into buffer, optionally using a range header."""
         try:
-            url = await self._get_url()
+            url = await self.get_url()
             # Clean the URL by removing any surrounding quotes and converting to string if needed
             cleaned_url = clean_url(url)
 
@@ -113,7 +107,7 @@ class AsyncArtifactHttpFile:
         """Upload buffer content to URL"""
         try:
             content = self._buffer.getvalue()
-            url = await self._get_url()
+            url = await self.get_url()
             cleaned_url = clean_url(url)
 
             headers = {
@@ -206,8 +200,6 @@ class AsyncArtifactHttpFile:
         try:
             if ("w" in self._mode or "a" in self._mode) and self._buffer.tell() > 0:
                 await self._upload_content()
-                if self._auto_commit and self._commit_func:
-                    await self._commit_func()
         finally:
             self._closed = True
             self._buffer.close()
