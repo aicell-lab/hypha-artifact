@@ -9,14 +9,14 @@ and manipulating files stored in Hypha artifacts.
 import json
 from typing import Literal, Self, overload, Any
 import httpx
-from hypha_artifact.utils import (
+from .utils import (
     remove_none,
     parent_and_filename,
     FileMode,
     OnError,
     JsonType,
 )
-from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
+from .async_artifact_file import AsyncArtifactHttpFile
 
 
 class AsyncHyphaArtifact:

@@ -7,7 +7,7 @@ from collections.abc import Callable, Awaitable
 from typing import Self
 from types import TracebackType
 import httpx
-from hypha_artifact.utils import clean_url, FileMode
+from .utils import clean_url, FileMode
 
 
 class AsyncArtifactHttpFile:

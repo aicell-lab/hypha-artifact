@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Self, Any
 from types import TracebackType
 import requests
-from hypha_artifact.utils import clean_url, FileMode
+from .utils import clean_url, FileMode
 
 
 class ArtifactHttpFile(io.IOBase):
