@@ -29,7 +29,7 @@ class AsyncArtifactHttpFile:
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
-        auto_commit: bool = True,
+        auto_commit: bool = False,
         commit_func: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._url_func = url_func

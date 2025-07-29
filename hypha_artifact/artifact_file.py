@@ -29,7 +29,7 @@ class ArtifactHttpFile(io.IOBase):
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
-        auto_commit: bool = True,
+        auto_commit: bool = False,
         commit_func: Callable[[], Any] | None = None,
     ) -> None:
         self._url = url

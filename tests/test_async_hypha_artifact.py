@@ -43,7 +43,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
         # Create a test file
         async with async_artifact:
-            async with async_artifact.open(test_file_path, "w") as f:
+            async with async_artifact.open(test_file_path, "w", auto_commit=True) as f:
                 await f.write(test_content)
 
             # Verify the file was created
@@ -76,7 +76,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
         async with async_artifact:
             # Ensure the test file exists (create if needed)
             if not await async_artifact.exists(test_file_path):
-                async with async_artifact.open(test_file_path, "w") as f:
+                async with async_artifact.open(
+                    test_file_path, "w", auto_commit=True
+                ) as f:
                     await f.write(test_content)
 
             # Read the file content
@@ -94,7 +96,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
         async with async_artifact:
             # Create a source file if it doesn't exist
             if not await async_artifact.exists(source_path):
-                async with async_artifact.open(source_path, "w") as f:
+                async with async_artifact.open(source_path, "w", auto_commit=True) as f:
                     await f.write(test_content)
 
             assert await async_artifact.exists(
@@ -102,7 +104,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             ), f"Source file {source_path} should exist before copying"
 
             # Copy the file
-            await async_artifact.copy(source_path, copy_path)
+            await async_artifact.copy(source_path, copy_path, auto_commit=True)
             await self._async_validate_copy_operation(
                 async_artifact, source_path, copy_path, test_content
             )
@@ -113,7 +115,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
         async with async_artifact:
             # Create a test file to check existence
             test_file_path = "async_existence_test.txt"
-            async with async_artifact.open(test_file_path, "w") as f:
+            async with async_artifact.open(test_file_path, "w", auto_commit=True) as f:
                 await f.write("Testing file existence")
 
             # Test for existing file
@@ -135,7 +137,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             removal_test_file = "async_file_to_remove.txt"
 
             # Ensure the file exists first
-            async with async_artifact.open(removal_test_file, "w") as f:
+            async with async_artifact.open(
+                removal_test_file, "w", auto_commit=True
+            ) as f:
                 await f.write("This file will be removed")
 
             # Verify file exists before removal
@@ -144,7 +148,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             )
 
             # Remove the file
-            await async_artifact.rm(removal_test_file)
+            await async_artifact.rm(removal_test_file, auto_commit=True)
 
             # Verify file no longer exists
             await self._async_validate_file_existence(
@@ -162,7 +166,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             copied_file = "async_workflow_test_copy.txt"
 
             # Step 1: Create file
-            async with async_artifact.open(original_file, "w") as f:
+            async with async_artifact.open(original_file, "w", auto_commit=True) as f:
                 await f.write(test_content)
 
             # Step 2: Verify file exists and content is correct
@@ -171,11 +175,11 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             self._validate_file_content(content, test_content)
 
             # Step 3: Copy file
-            await async_artifact.copy(original_file, copied_file)
+            await async_artifact.copy(original_file, copied_file, auto_commit=True)
             assert await async_artifact.exists(copied_file)
 
             # Step 4: Remove copied file
-            await async_artifact.rm(copied_file)
+            await async_artifact.rm(copied_file, auto_commit=True)
             await self._async_validate_file_existence(
                 async_artifact, copied_file, False
             )
@@ -190,7 +194,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
         async with async_artifact:
             # Create a test file
-            async with async_artifact.open(test_file_path, "w") as f:
+            async with async_artifact.open(test_file_path, "w", auto_commit=True) as f:
                 await f.write(test_content)
 
             # Read only the first 10 bytes of the file
@@ -214,7 +218,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             async_artifact.workspace,
             async_artifact.token,
         ) as ctx_artifact:
-            async with ctx_artifact.open(test_file_path, "w") as f:
+            async with ctx_artifact.open(test_file_path, "w", auto_commit=True) as f:
                 await f.write(test_content)
 
             # Verify the file was created

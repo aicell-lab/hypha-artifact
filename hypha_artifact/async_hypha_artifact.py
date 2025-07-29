@@ -154,7 +154,6 @@ class AsyncHyphaArtifact:
         request_url = f"{self.artifact_url}/{artifact_method}"
         client = self._get_client()
 
-        # TODO: ensure json/params are never empty
         response = await client.request(
             method,
             request_url,
@@ -196,7 +195,7 @@ class AsyncHyphaArtifact:
             params=params,
         )
 
-    async def _remote_edit(
+    async def edit(
         self: Self,
         manifest: dict[str, Any] | None = None,
         artifact_type: str | None = None,
@@ -232,7 +231,7 @@ class AsyncHyphaArtifact:
         }
         await self._remote_post("edit", params)
 
-    async def _remote_commit(
+    async def commit(
         self: Self,
         version: str | None = None,
         comment: str | None = None,
@@ -417,8 +416,8 @@ class AsyncHyphaArtifact:
         self: Self,  # pylint: disable=unused-argument
         urlpath: str,
         mode: FileMode = "rb",
-        auto_commit: bool = True,
-        **kwargs: Any,  # pylint: disable=unused-argument
+        auto_commit: bool = False,
+        **kwargs: Any,
     ) -> AsyncArtifactHttpFile:
         """Open a file for reading or writing
 
@@ -429,7 +428,7 @@ class AsyncHyphaArtifact:
         mode: FileMode
             File mode, one of 'r', 'rb', 'w', 'wb', 'a', 'ab'
         auto_commit: bool
-            If True, automatically commit changes when the file is closed
+            Defaults to False. If True, automatically commit changes when the file is closed
 
         Returns
         -------
@@ -446,7 +445,8 @@ class AsyncHyphaArtifact:
         elif "w" in mode or "a" in mode:
 
             async def get_url():
-                await self._remote_edit(stage=True)
+                if auto_commit:
+                    await self.edit(stage=True)
                 url = await self._remote_put_file_url(normalized_path)
                 return url
 
@@ -458,7 +458,7 @@ class AsyncHyphaArtifact:
             mode=mode,
             name=normalized_path,
             auto_commit=auto_commit,
-            commit_func=self._remote_commit if auto_commit else None,
+            commit_func=self.commit if auto_commit else None,
         )
 
     async def copy(
@@ -468,7 +468,8 @@ class AsyncHyphaArtifact:
         recursive: bool = False,
         maxdepth: int | None = None,
         on_error: OnError | None = "raise",
-        **kwargs: dict[str, Any],  # pylint: disable=unused-argument
+        auto_commit: bool = False,
+        **kwargs: dict[str, Any],
     ) -> None:
         """Copy file(s) from path1 to path2 within the artifact
 
@@ -484,9 +485,11 @@ class AsyncHyphaArtifact:
             Maximum recursion depth when recursive=True
         on_error: "raise" or "ignore"
             What to do if a file is not found
+        auto_commit: bool
+            Defaults to False. If True, automatically commit changes when the file is closed
         """
-        # TODO: Remove auto-edit & auto-commit
-        await self._remote_edit(stage=True)
+        if auto_commit:
+            await self.edit(stage=True)
         # Handle recursive case
         if recursive and await self.isdir(path1):
             files = await self.find(path1, maxdepth=maxdepth, withdirs=False)
@@ -501,13 +504,14 @@ class AsyncHyphaArtifact:
         else:
             await self._copy_single_file(path1, path2)
 
-        await self._remote_commit()
+        if auto_commit:
+            await self.commit()
 
     async def _copy_single_file(self, src: str, dst: str) -> None:
         """Helper method to copy a single file"""
         content = await self.cat(src)
         if content is not None:
-            async with self.open(dst, "w", auto_commit=False) as f:
+            async with self.open(dst, "w") as f:
                 await f.write(content)
 
     async def cp(
@@ -543,11 +547,32 @@ class AsyncHyphaArtifact:
     async def rm(
         self: Self,
         path: str,
-        recursive: bool = False,  # pylint: disable=unused-argument
-        maxdepth: int | None = None,  # pylint: disable=unused-argument
+        recursive: bool = False,
+        maxdepth: int | None = None,
+        auto_commit: bool = False,
     ) -> None:
-        """Remove file or directory"""
-        await self._remote_edit(stage=True)
+        """Remove file or directory
+
+        Parameters
+        ----------
+
+        path: str
+            Path to the file or directory to remove
+        recursive: bool
+            Defaults to False. If True and path is a directory, remove all its contents recursively
+        maxdepth: int or None
+            Maximum recursion depth when recursive=True
+        auto_commit: bool
+            Defaults to False. If True, automatically commit changes after removing the file
+            or directory
+
+        Returns
+        -------
+        datetime or None
+            Creation time of the file, if available
+        """
+        if auto_commit:
+            await self.edit(stage=True)
 
         if recursive and await self.isdir(path):
             files = await self.find(
@@ -558,7 +583,8 @@ class AsyncHyphaArtifact:
         else:
             await self._remote_remove_file(self._normalize_path(path))
 
-        await self._remote_commit()
+        if auto_commit:
+            await self.commit()
 
     async def created(self: Self, path: str) -> str | None:
         """Get the creation time of a file

@@ -381,7 +381,7 @@ class HyphaArtifact:
         self: Self,
         urlpath: str,
         mode: FileMode = "rb",
-        auto_commit: bool = True,
+        auto_commit: bool = False,
         **kwargs: Any,  # pylint: disable=unused-argument
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing
@@ -393,7 +393,7 @@ class HyphaArtifact:
         mode: FileMode
             File mode, one of 'r', 'rb', 'w', 'wb', 'a', 'ab'
         auto_commit: bool
-            If True, automatically commit changes when the file is closed
+           Defaults to False. If True, automatically commit changes when the file is closed
 
         Returns
         -------
@@ -427,6 +427,7 @@ class HyphaArtifact:
         recursive: bool = False,
         maxdepth: int | None = None,
         on_error: OnError | None = "raise",
+        auto_commit: bool = False,
         **kwargs: dict[str, Any],
     ) -> None:
         """Copy file(s) from path1 to path2 within the artifact
@@ -444,7 +445,8 @@ class HyphaArtifact:
         on_error: "raise" or "ignore"
             What to do if a file is not found
         """
-        self._remote_edit(stage=True)
+        if auto_commit:
+            self._remote_edit(stage=True)
         # Handle recursive case
         if recursive and self.isdir(path1):
             files = self.find(path1, maxdepth=maxdepth, withdirs=False)
@@ -460,7 +462,8 @@ class HyphaArtifact:
             # Copy a single file
             self._copy_single_file(path1, path2)
 
-        self._remote_commit()
+        if auto_commit:
+            self._remote_commit()
 
     def _copy_single_file(self, src: str, dst: str) -> None:
         """Helper method to copy a single file"""
@@ -504,23 +507,31 @@ class HyphaArtifact:
         path: str,
         recursive: bool = False,
         maxdepth: int | None = None,
+        auto_commit: bool = False,
     ) -> None:
-        """Remove a file from the artifact
+        """Remove file or directory
 
         Parameters
         ----------
+
         path: str
-            Path to the file to remove
-        recursive: bool, optional
-            Not used, included for fsspec compatibility
-        maxdepth: int or None, optional
-            Not used, included for fsspec compatibility
+            Path to the file or directory to remove
+        recursive: bool
+            Defaults to False. If True and path is a directory, remove all its contents recursively
+        maxdepth: int or None
+            Maximum recursion depth when recursive=True
+        auto_commit: bool
+            Defaults to False. If True, automatically commit changes after removing the file
+            or directory
 
         Returns
         -------
-        None
+        datetime or None
+            Creation time of the file, if available
         """
-        self._remote_edit(stage=True)
+
+        if auto_commit:
+            self._remote_edit(stage=True)
 
         if recursive and self.isdir(path):
             files = self.find(path, maxdepth=maxdepth, withdirs=False, detail=False)
@@ -529,7 +540,8 @@ class HyphaArtifact:
         else:
             self._remote_remove_file(self._normalize_path(path))
 
-        self._remote_commit()
+        if auto_commit:
+            self._remote_commit()
 
     def created(self: Self, path: str) -> str | None:
         """Get the creation time of a file
