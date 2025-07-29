@@ -48,8 +48,12 @@ class HyphaArtifact:
     ['data.csv', 'images/']
     >>> with artifact.open("data.csv", "r") as f:
     ...     print(f.read())
+    >>> # To write to an artifact, you first need to stage the changes
+    >>> artifact.edit(stage=True)
     >>> with artifact.open("data.csv", "w") as f:
     ...     f.write("new content")
+    >>> # After making changes, you need to commit them
+    >>> artifact.commit(comment="Updated data.csv")
     """
 
     def __init__(

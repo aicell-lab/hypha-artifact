@@ -50,13 +50,21 @@ class AsyncHyphaArtifact:
     ...     files = await artifact.ls("/")
     ...     async with artifact.open("data.csv", "r") as f:
     ...         content = await f.read()
+    ...     # To write to an artifact, you first need to stage the changes
+    ...     await artifact.edit(stage=True)
+    ...     async with artifact.open("data.csv", "w") as f:
+    ...         await f.write("new content")
+    ...     # After making changes, you need to commit them
+    ...     await artifact.commit(comment="Updated data.csv")
 
     Or with explicit cleanup:
     >>> artifact = AsyncHyphaArtifact("my-artifact", "workspace-id", "my-token", "https://hypha.aicell.io/public/services/artifact-manager")
     >>> try:
     ...     files = await artifact.ls("/")
+    ...     await artifact.edit(stage=True)
     ...     async with artifact.open("data.csv", "w") as f:
     ...         await f.write("new content")
+    ...     await artifact.commit(comment="Updated data.csv")
     ... finally:
     ...     await artifact.aclose()
     """
