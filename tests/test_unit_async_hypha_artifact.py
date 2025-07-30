@@ -83,6 +83,13 @@ class TestAsyncHyphaArtifactUnit:
         assert result == {"name": "test.txt", "type": "file"}
 
     @pytest.mark.asyncio
+    async def test_info_root(self, async_artifact: AsyncHyphaArtifact):
+        """Test the info method for the root directory."""
+        async_artifact.ls = AsyncMock(return_value=[])
+        result = await async_artifact.info("/")
+        assert result == {"name": "", "type": "directory"}
+
+    @pytest.mark.asyncio
     async def test_isdir(self, async_artifact: AsyncHyphaArtifact):
         """Test the isdir method."""
         async_artifact.info = AsyncMock(return_value={"type": "directory"})
