@@ -40,6 +40,8 @@ class HyphaArtifact:
         The authentication token for accessing the artifact service.
     service_url : str | None
         The base URL for the Hypha artifact manager service.
+    use_proxy : bool
+        Whether to use a proxy for HTTP requests.
 
     Examples
     --------
@@ -62,7 +64,7 @@ class HyphaArtifact:
         workspace: str | None = None,
         token: str | None = None,
         service_url: str | None = None,
-        use_proxy: bool = None,
+        use_proxy: bool = False,
     ):
         """Initialize a HyphaArtifact instance.
 
