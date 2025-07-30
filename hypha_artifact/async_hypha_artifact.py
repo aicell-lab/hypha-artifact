@@ -5,9 +5,9 @@ This module provides an async file-system like interface to interact with remote
 using the fsspec specification, allowing for operations like reading, writing, listing,
 and manipulating files stored in Hypha artifacts.
 """
-
 import json
-from typing import Literal, Self, overload, Any
+import os
+from typing import Literal, Self, overload, Any, Dict, Callable
 import httpx
 from .utils import (
     remove_none,
@@ -73,6 +73,7 @@ class AsyncHyphaArtifact:
     workspace: str | None
     artifact_alias: str
     artifact_url: str
+    use_proxy: bool = None
     _client: httpx.AsyncClient | None
 
     def __init__(
@@ -80,7 +81,8 @@ class AsyncHyphaArtifact:
         artifact_id: str,
         workspace: str | None = None,
         token: str | None = None,
-        service_url: str | None = None,
+        service_url: str | None = None, 
+        use_proxy: bool = None,
     ):
         """Initialize an AsyncHyphaArtifact instance.
 
@@ -107,6 +109,13 @@ class AsyncHyphaArtifact:
                 "https://hypha.aicell.io/public/services/artifact-manager"
             )
         self._client = None
+        env_proxy = os.getenv("HYPHA_USE_PROXY")
+        if use_proxy is not None:
+            self.use_proxy = use_proxy
+        elif env_proxy is not None:
+            self.use_proxy = env_proxy.lower() == "true"
+        else:
+            self.use_proxy = None
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
@@ -133,7 +142,7 @@ class AsyncHyphaArtifact:
         self: Self,
         params: dict[str, JsonType],
     ) -> dict[str, JsonType]:
-        params["artifact_id"] = self.artifact_alias
+        params["artifact_id"] = f"{self.workspace}/{self.artifact_alias}" if self.workspace else self.artifact_alias
         return params
 
     def _normalize_path(self: Self, path: str) -> str:
@@ -167,7 +176,7 @@ class AsyncHyphaArtifact:
             request_url,
             json=cleaned_params if json_data else None,
             params=cleaned_params if params else None,
-            headers={"Authorization": f"Bearer {self.token}"},
+            headers={"Authorization": f"Bearer {self.token}"} if self.token else {},
             timeout=20,
         )
 
@@ -279,9 +288,10 @@ class AsyncHyphaArtifact:
         params: dict[str, Any] = {
             "file_path": file_path,
             "download_weight": download_weight,
+            "use_proxy": self.use_proxy,
         }
         response_content = await self._remote_post("put_file", params)
-        return response_content.decode()
+        return json.loads(response_content)
 
     async def _remote_remove_file(
         self: Self,
@@ -324,9 +334,10 @@ class AsyncHyphaArtifact:
             "file_path": file_path,
             "silent": silent,
             "version": version,
+            "use_proxy": self.use_proxy,
         }
-        response = await self._remote_get("get_file", params)
-        return response.decode("utf-8")
+        response_content = await self._remote_get("get_file", params)
+        return json.loads(response_content)
 
     async def _remote_list_contents(
         self: Self,
@@ -500,12 +511,340 @@ class AsyncHyphaArtifact:
         else:
             await self._copy_single_file(path1, path2)
 
+    async def get(
+        self: Self,
+        rpath: str | list[str],
+        lpath: str | list[str],
+        recursive: bool = False,
+        maxdepth: int | None = None,
+        on_error: OnError = "raise",
+        progress_callback: None | Callable[[Dict[str, Any]], None] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Copy file(s) from remote (artifact) to local filesystem
+
+        Parameters
+        ----------
+        rpath: str or list of str
+            Remote path(s) to copy from
+        lpath: str or list of str
+            Local path(s) to copy to
+        recursive: bool
+            If True and rpath is a directory, copy all its contents recursively
+        maxdepth: int or None
+            Maximum recursion depth when recursive=True
+        on_error: "raise" or "ignore"
+            What to do if a file is not found
+        progress_callback: None | Callable[[Dict[str, Any]], None], optional
+            Callback function to report progress. Called with a dict containing:
+            - "type": "info", "success", "error", or "warning"
+            - "message": Progress message
+            - "file": Current file being processed (if applicable)
+            - "total_files": Total number of files (if applicable)
+            - "current_file": Current file index (if applicable)
+        """
+
+        # Handle list of paths
+        if isinstance(rpath, list):
+            if not isinstance(lpath, list) or len(rpath) != len(lpath):
+                raise ValueError("rpath and lpath must be lists of the same length")
+            
+            if progress_callback:
+                progress_callback({
+                    "type": "info",
+                    "message": f"Starting download of {len(rpath)} files",
+                    "total_files": len(rpath),
+                    "current_file": 0
+                })
+            
+            for i, (rp, lp) in enumerate(zip(rpath, lpath)):
+                if progress_callback:
+                    progress_callback({
+                        "type": "info",
+                        "message": f"Downloading file {i+1}/{len(rpath)}",
+                        "file": rp,
+                        "total_files": len(rpath),
+                        "current_file": i + 1
+                    })
+                await self.get(rp, lp, recursive, maxdepth, on_error, progress_callback=progress_callback, **kwargs)
+            return
+
+        # Handle recursive case
+        if recursive and await self.isdir(rpath):
+            # Create local directory if it doesn't exist
+            os.makedirs(lpath, exist_ok=True)
+            
+            if progress_callback:
+                progress_callback({
+                    "type": "info",
+                    "message": f"Starting recursive download from {rpath}",
+                    "file": rpath
+                })
+            
+            files = await self.find(rpath, maxdepth=maxdepth, withdirs=False)
+            
+            if progress_callback:
+                progress_callback({
+                    "type": "info",
+                    "message": f"Found {len(files)} files to download",
+                    "total_files": len(files),
+                    "current_file": 0
+                })
+            
+            for i, remote_file in enumerate(files):
+                # Calculate relative path from rpath
+                if rpath:
+                    rel_path = remote_file[len(rpath):].lstrip("/")
+                else:
+                    rel_path = remote_file
+                local_file = os.path.join(lpath, rel_path)
+                
+                # Create local directory structure if needed
+                local_dir = os.path.dirname(local_file)
+                if local_dir:
+                    os.makedirs(local_dir, exist_ok=True)
+                
+                if progress_callback:
+                    progress_callback({
+                        "type": "info",
+                        "message": f"Downloading file {i+1}/{len(files)}: {remote_file}",
+                        "file": remote_file,
+                        "total_files": len(files),
+                        "current_file": i + 1
+                    })
+                
+                try:
+                    await self._get_single_file(remote_file, local_file)
+                    if progress_callback:
+                        progress_callback({
+                            "type": "success",
+                            "message": f"Successfully downloaded: {remote_file}",
+                            "file": remote_file
+                        })
+                except (FileNotFoundError, IOError, httpx.RequestError) as e:
+                    if progress_callback:
+                        progress_callback({
+                            "type": "error",
+                            "message": f"Failed to download {remote_file}: {str(e)}",
+                            "file": remote_file
+                        })
+                    if on_error == "raise":
+                        raise e
+        else:
+            # Ensure local directory exists
+            local_dir = os.path.dirname(lpath)
+            if local_dir:
+                os.makedirs(local_dir, exist_ok=True)
+            
+            if progress_callback:
+                progress_callback({
+                    "type": "info",
+                    "message": f"Downloading single file: {rpath}",
+                    "file": rpath
+                })
+            
+            try:
+                await self._get_single_file(rpath, lpath)
+                if progress_callback:
+                    progress_callback({
+                        "type": "success",
+                        "message": f"Successfully downloaded: {rpath}",
+                        "file": rpath
+                    })
+            except (FileNotFoundError, IOError, httpx.RequestError) as e:
+                if progress_callback:
+                    progress_callback({
+                        "type": "error",
+                        "message": f"Failed to download {rpath}: {str(e)}",
+                        "file": rpath
+                    })
+                raise e
+
+    async def _get_single_file(self, remote_path: str, local_path: str) -> None:
+        """Helper method to copy a single file from remote to local"""
+        async with self.open(remote_path, "rb") as remote_file:
+            content = await remote_file.read()
+        
+        # Write to local file
+        with open(local_path, "wb") as local_file:
+            local_file.write(content)
+
+    async def put(
+        self: Self,
+        lpath: str | list[str],
+        rpath: str | list[str],
+        recursive: bool = False,
+        maxdepth: int | None = None,
+        on_error: OnError = "raise",
+        progress_callback: None | Callable[[Dict[str, Any]], None] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Copy file(s) from local filesystem to remote (artifact)
+
+        Parameters
+        ----------
+        lpath: str or list of str
+            Local path(s) to copy from
+        rpath: str or list of str
+            Remote path(s) to copy to
+        recursive: bool
+            If True and lpath is a directory, copy all its contents recursively
+        maxdepth: int or None
+            Maximum recursion depth when recursive=True
+        on_error: "raise" or "ignore"
+            What to do if a file is not found
+        progress_callback: None | Callable[[Dict[str, Any]], None], optional
+            Callback function to report progress. Called with a dict containing:
+            - "type": "info", "success", "error", or "warning"
+            - "message": Progress message
+            - "file": Current file being processed (if applicable)
+            - "total_files": Total number of files (if applicable)
+            - "current_file": Current file index (if applicable)
+        """
+        # Handle list of paths
+        if isinstance(lpath, list):
+            if not isinstance(rpath, list) or len(lpath) != len(rpath):
+                raise ValueError("lpath and rpath must be lists of the same length")
+            
+            if progress_callback:
+                progress_callback({
+                    "type": "info",
+                    "message": f"Starting upload of {len(lpath)} files",
+                    "total_files": len(lpath),
+                    "current_file": 0
+                })
+            
+            for i, (lp, rp) in enumerate(zip(lpath, rpath)):
+                if progress_callback:
+                    progress_callback({
+                        "type": "info",
+                        "message": f"Uploading file {i+1}/{len(lpath)}",
+                        "file": lp,
+                        "total_files": len(lpath),
+                        "current_file": i + 1
+                    })
+                await self.put(lp, rp, recursive, maxdepth, on_error, progress_callback=progress_callback, **kwargs)
+            return
+
+        # Handle recursive case
+        if recursive and os.path.isdir(lpath):
+            # Create remote directory if needed
+            await self.makedirs(rpath, exist_ok=True)
+            
+            if progress_callback:
+                progress_callback({
+                    "type": "info",
+                    "message": f"Starting recursive upload from {lpath}",
+                    "file": lpath
+                })
+            
+            # Collect all files first to get total count
+            all_files = []
+            for root, dirs, files in os.walk(lpath):
+                for file_name in files:
+                    local_file = os.path.join(root, file_name)
+                    all_files.append(local_file)
+            
+            if progress_callback:
+                progress_callback({
+                    "type": "info",
+                    "message": f"Found {len(all_files)} files to upload",
+                    "total_files": len(all_files),
+                    "current_file": 0
+                })
+            
+            # Walk through local directory
+            for root, dirs, files in os.walk(lpath):
+                # Calculate relative path from lpath
+                rel_root = os.path.relpath(root, lpath)
+                if rel_root == ".":
+                    remote_dir = rpath
+                else:
+                    remote_dir = f"{rpath}/{rel_root}"
+                
+                # Create remote subdirectories
+                for dir_name in dirs:
+                    remote_subdir = f"{remote_dir}/{dir_name}"
+                    await self.makedirs(remote_subdir, exist_ok=True)
+                
+                # Copy files
+                for file_name in files:
+                    local_file = os.path.join(root, file_name)
+                    remote_file = f"{remote_dir}/{file_name}"
+                    
+                    # Find current file index
+                    current_index = all_files.index(local_file) + 1
+                    
+                    if progress_callback:
+                        progress_callback({
+                            "type": "info",
+                            "message": f"Uploading file {current_index}/{len(all_files)}: {local_file}",
+                            "file": local_file,
+                            "total_files": len(all_files),
+                            "current_file": current_index
+                        })
+                    
+                    try:
+                        await self._put_single_file(local_file, remote_file)
+                        if progress_callback:
+                            progress_callback({
+                                "type": "success",
+                                "message": f"Successfully uploaded: {local_file}",
+                                "file": local_file
+                            })
+                    except (FileNotFoundError, IOError, httpx.RequestError) as e:
+                        if progress_callback:
+                            progress_callback({
+                                "type": "error",
+                                "message": f"Failed to upload {local_file}: {str(e)}",
+                                "file": local_file
+                            })
+                        if on_error == "raise":
+                            raise e
+        else:
+            if progress_callback:
+                progress_callback({
+                    "type": "info",
+                    "message": f"Uploading single file: {lpath}",
+                    "file": lpath
+                })
+            
+            try:
+                await self._put_single_file(lpath, rpath)
+                if progress_callback:
+                    progress_callback({
+                        "type": "success",
+                        "message": f"Successfully uploaded: {lpath}",
+                        "file": lpath
+                    })
+            except (FileNotFoundError, IOError, httpx.RequestError) as e:
+                if progress_callback:
+                    progress_callback({
+                        "type": "error",
+                        "message": f"Failed to upload {lpath}: {str(e)}",
+                        "file": lpath
+                    })
+                raise e
+
+    async def _put_single_file(self, local_path: str, remote_path: str) -> None:
+        """Helper method to copy a single file from local to remote"""
+        # Read local file
+        with open(local_path, "rb") as local_file:
+            content = local_file.read()
+        
+        # Write to remote file
+        async with self.open(remote_path, "wb") as remote_file:
+            await remote_file.write(content)
+
     async def _copy_single_file(self, src: str, dst: str) -> None:
         """Helper method to copy a single file"""
-        content = await self.cat(src)
-        if content is not None:
-            async with self.open(dst, "w") as f:
-                await f.write(content)
+        # Read the source file in binary mode to preserve binary data
+        async with self.open(src, "rb") as src_file:
+            content = await src_file.read()
+        
+        # Write the destination file in binary mode
+        async with self.open(dst, "wb") as dst_file:
+            await dst_file.write(content)
 
     async def cp(
         self: Self,
@@ -819,7 +1158,9 @@ class AsyncHyphaArtifact:
                 if (
                     item_type == "file" or (withdirs and item_type == "directory")
                 ) and isinstance(item_name, str):
-                    results[item_name] = item
+                    # Construct full path for the item
+                    full_path = f"{current_path}/{item_name}" if current_path else item_name
+                    results[full_path] = item
 
                 # Recurse into subdirectories if depth allows
                 if (
@@ -827,7 +1168,9 @@ class AsyncHyphaArtifact:
                     and (maxdepth is None or current_depth < maxdepth)
                     and isinstance(item_name, str)
                 ):
-                    subdirectory_results = await _walk_dir(item_name, current_depth + 1)
+                    # Construct full path for subdirectory
+                    subdir_path = f"{current_path}/{item_name}" if current_path else item_name
+                    subdirectory_results = await _walk_dir(subdir_path, current_depth + 1)
                     results.update(subdirectory_results)
 
             return results

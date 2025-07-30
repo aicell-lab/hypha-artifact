@@ -46,12 +46,10 @@ class TestAsyncHyphaArtifactUnit:
     @pytest.mark.asyncio
     async def test_copy(self, async_artifact: AsyncHyphaArtifact):
         """Test the copy method."""
-        async_artifact.cat = AsyncMock()
-        async_artifact.open = MagicMock()
-        async_artifact.open.return_value.__aenter__.return_value.write = AsyncMock()
+        # Mock the methods that copy actually calls
+        async_artifact._copy_single_file = AsyncMock()
         await async_artifact.copy("a.txt", "b.txt")
-        async_artifact.cat.assert_called_once_with("a.txt")
-        async_artifact.open.assert_called_once_with("b.txt", "w")
+        async_artifact._copy_single_file.assert_called_once_with("a.txt", "b.txt")
 
     @pytest.mark.asyncio
     async def test_rm(self, async_artifact: AsyncHyphaArtifact):
@@ -78,9 +76,11 @@ class TestAsyncHyphaArtifactUnit:
     @pytest.mark.asyncio
     async def test_info(self, async_artifact: AsyncHyphaArtifact):
         """Test the info method."""
-        async_artifact.ls = AsyncMock(return_value=[{"name": "test.txt"}])
-        await async_artifact.info("test.txt")
+        # Mock the ls method that info actually calls
+        async_artifact.ls = AsyncMock(return_value=[{"name": "test.txt", "type": "file"}])
+        result = await async_artifact.info("test.txt")
         async_artifact.ls.assert_called_once_with("")
+        assert result == {"name": "test.txt", "type": "file"}
 
     @pytest.mark.asyncio
     async def test_isdir(self, async_artifact: AsyncHyphaArtifact):

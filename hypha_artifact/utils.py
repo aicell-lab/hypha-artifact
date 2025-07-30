@@ -12,13 +12,6 @@ def remove_none(d: dict[Any, Any]) -> dict[Any, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
-def clean_url(url: str | bytes) -> str:
-    """Clean the URL by removing surrounding quotes and converting to string if needed."""
-    if isinstance(url, bytes):
-        url = url.decode("utf-8")
-    return str(url).strip("\"'")
-
-
 def parent_and_filename(path: str) -> tuple[str | None, str]:
     """Get the parent directory of a path"""
     parts = path.rstrip("/").split("/")
