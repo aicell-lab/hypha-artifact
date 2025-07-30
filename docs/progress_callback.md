@@ -144,22 +144,3 @@ def error_aware_callback(info: Dict[str, Any]):
         # Normal progress display
         print(f"{info.get('message')}")
 ```
-
-## Best Practices
-
-1. **Keep callbacks lightweight**: Avoid heavy operations in the callback function
-2. **Handle errors gracefully**: Always check the `type` field before processing
-3. **Use appropriate message types**: Use "info" for status, "success" for completions, "error" for failures, "warning" for issues that don't stop the operation
-4. **Consider threading**: If updating UI elements, ensure thread safety
-
-## Migration from Existing Code
-
-Existing code will continue to work without modification. The `progress_callback` parameter is optional and defaults to `None`.
-
-```python
-# Old code (still works)
-await artifact.get(rpath="/remote", lpath="/local")
-
-# New code with progress tracking
-await artifact.get(rpath="/remote", lpath="/local", progress_callback=progress_callback)
-``` 
