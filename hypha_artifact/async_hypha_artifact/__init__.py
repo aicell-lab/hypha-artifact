@@ -6,6 +6,7 @@ using the fsspec specification, allowing for operations like reading, writing, l
 and manipulating files stored in Hypha artifacts.
 """
 
+# TODO: replicate fsspec code implementation as much as possible
 import os
 from typing import Self, Any
 
@@ -68,7 +69,7 @@ class AsyncHyphaArtifact:
     workspace: str | None
     artifact_alias: str
     artifact_url: str
-    use_proxy: bool = False
+    use_proxy: bool | None = None
     _client: httpx.AsyncClient | None
 
     def __init__(
@@ -77,7 +78,7 @@ class AsyncHyphaArtifact:
         workspace: str | None = None,
         token: str | None = None,
         service_url: str | None = None,
-        use_proxy: bool = False,
+        use_proxy: bool | None = None,
     ):
         """Initialize an AsyncHyphaArtifact instance."""
         if "/" in artifact_id:
@@ -100,12 +101,12 @@ class AsyncHyphaArtifact:
         self._client = None
 
         env_proxy = os.getenv("HYPHA_USE_PROXY")
-        if use_proxy:
-            self.use_proxy = True
+        if use_proxy is not None:
+            self.use_proxy = use_proxy
         elif env_proxy is not None:
             self.use_proxy = env_proxy.lower() == "true"
         else:
-            self.use_proxy = False
+            self.use_proxy = None
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""

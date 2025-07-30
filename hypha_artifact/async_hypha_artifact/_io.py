@@ -495,6 +495,8 @@ async def put(
             lpath, rpath, recursive, maxdepth, on_error, progress_callback, **kwargs
         )
 
+        return
+
     assert isinstance(lpath, str) and isinstance(
         rpath, str
     ), "lpath and rpath must be either both strings or both lists of strings"
