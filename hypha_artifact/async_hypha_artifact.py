@@ -136,7 +136,7 @@ class AsyncHyphaArtifact:
         self: Self,
         params: dict[str, JsonType],
     ) -> dict[str, JsonType]:
-        params["artifact_id"] = self.artifact_alias
+        params["artifact_id"] = f"{self.workspace}/{self.artifact_alias}" if self.workspace else self.artifact_alias
         return params
 
     def _normalize_path(self: Self, path: str) -> str:
