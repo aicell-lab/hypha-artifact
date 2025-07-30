@@ -136,7 +136,7 @@ class AsyncHyphaArtifact:
         self: Self,
         params: dict[str, JsonType],
     ) -> dict[str, JsonType]:
-        params["artifact_id"] = f"{self.workspace}/{self.artifact_alias}" if self.workspace else self.artifact_alias
+        params["artifact_id"] = self.artifact_alias
         return params
 
     def _normalize_path(self: Self, path: str) -> str:
@@ -1018,11 +1018,6 @@ class AsyncHyphaArtifact:
 
         if parent_path is None:
             parent_path = ""
-        if parent_path in ["", "/"]:
-            return {
-                "type": "directory",
-                "name": parent_path,
-            }
 
         listing = await self.ls(parent_path)
         for item in listing:
