@@ -62,7 +62,7 @@ class HyphaArtifact:
         workspace: str | None = None,
         token: str | None = None,
         service_url: str | None = None,
-        use_proxy: bool = False,
+        use_proxy: bool = None,
     ):
         """Initialize a HyphaArtifact instance.
 
