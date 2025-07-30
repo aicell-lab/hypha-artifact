@@ -1,5 +1,6 @@
 -r requirements.txt
 pytest>=7.4.0
+pytest-mock==3.14.1
 hypha_rpc>=0.20.55
 python-dotenv>=1.0.0
 pytest_asyncio>=0.21.0

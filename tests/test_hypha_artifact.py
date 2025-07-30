@@ -25,19 +25,15 @@ def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -
 class TestHyphaArtifactIntegration(ArtifactTestMixin):
     """Integration test suite for the HyphaArtifact class."""
 
-    def test_artifact_initialization(
-        self, artifact: HyphaArtifact, artifact_name: str
-    ) -> None:
-        """Test that the artifact is initialized correctly with real credentials."""
-        self._check_artifact_initialization(artifact, artifact_name)
-
     def test_create_file(self, artifact: HyphaArtifact, test_content: str) -> None:
         """Test creating a file in the artifact using real operations."""
         test_file_path = "test_file.txt"
 
         # Create a test file
+        artifact.edit(stage=True)
         with artifact.open(test_file_path, "w") as f:
             f.write(test_content)
+        artifact.commit()
 
         # Verify the file was created
         files = artifact.ls("/")
@@ -64,8 +60,10 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
 
         # Ensure the test file exists (create if needed)
         if not artifact.exists(test_file_path):
+            artifact.edit(stage=True)
             with artifact.open(test_file_path, "w") as f:
                 f.write(test_content)
+            artifact.commit()
 
         # Read the file content
         content = artifact.cat(test_file_path)
@@ -78,23 +76,29 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
 
         # Create a source file if it doesn't exist
         if not artifact.exists(source_path):
+            artifact.edit(stage=True)
             with artifact.open(source_path, "w") as f:
                 f.write(test_content)
+            artifact.commit()
 
         assert artifact.exists(
             source_path
         ), f"Source file {source_path} should exist before copying"
 
         # Copy the file
+        artifact.edit(stage=True)
         artifact.copy(source_path, copy_path)
+        artifact.commit()
         self._validate_copy_operation(artifact, source_path, copy_path, test_content)
 
     def test_file_existence(self, artifact: HyphaArtifact) -> None:
         """Test checking if files exist in the artifact using real operations."""
         # Create a test file to check existence
         test_file_path = "existence_test.txt"
+        artifact.edit(stage=True)
         with artifact.open(test_file_path, "w") as f:
             f.write("Testing file existence")
+        artifact.commit()
 
         # Test for existing file
         self._validate_file_existence(artifact, test_file_path, True)
@@ -109,14 +113,18 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         removal_test_file = "file_to_remove.txt"
 
         # Ensure the file exists first
+        artifact.edit(stage=True)
         with artifact.open(removal_test_file, "w") as f:
             f.write("This file will be removed")
+        artifact.commit()
 
         # Verify file exists before removal
         self._validate_file_existence(artifact, removal_test_file, True)
 
         # Remove the file
+        artifact.edit(stage=True)
         artifact.rm(removal_test_file)
+        artifact.commit()
 
         # Verify file no longer exists
         self._validate_file_existence(artifact, removal_test_file, False)
@@ -128,8 +136,10 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         copied_file = "workflow_test_copy.txt"
 
         # Step 1: Create file
+        artifact.edit(stage=True)
         with artifact.open(original_file, "w") as f:
             f.write(test_content)
+        artifact.commit()
 
         # Step 2: Verify file exists and content is correct
         assert artifact.exists(original_file)
@@ -137,12 +147,16 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         self._validate_file_content(content, test_content)
 
         # Step 3: Copy file
+        artifact.edit(stage=True)
         artifact.copy(original_file, copied_file)
+        artifact.commit()
         assert artifact.exists(copied_file)
         print(artifact.ls("/"))
 
         # Step 4: Remove copied file
+        artifact.edit(stage=True)
         artifact.rm(copied_file)
+        artifact.commit()
         self._validate_file_existence(artifact, copied_file, False)
         assert artifact.exists(original_file)
 
@@ -153,8 +167,10 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         test_file_path = "partial_read_test.txt"
 
         # Create a test file
+        artifact.edit(stage=True)
         with artifact.open(test_file_path, "w") as f:
             f.write(test_content)
+        artifact.commit()
 
         # Read only the first 10 bytes of the file
         with artifact.open(test_file_path, "r") as f:

@@ -3,11 +3,10 @@
 import io
 import locale
 import os
-from collections.abc import Callable
-from typing import Self, Any
+from typing import Self
 from types import TracebackType
 import requests
-from hypha_artifact.utils import clean_url, FileMode
+from .utils import clean_url, FileMode
 
 
 class ArtifactHttpFile(io.IOBase):
@@ -19,8 +18,6 @@ class ArtifactHttpFile(io.IOBase):
 
     name: str | None
     mode: str
-    auto_commit: bool
-    commit_func: Callable[[], Any] | None
 
     def __init__(
         self: Self,
@@ -29,8 +26,6 @@ class ArtifactHttpFile(io.IOBase):
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
-        auto_commit: bool = True,
-        commit_func: Callable[[], Any] | None = None,
     ) -> None:
         self._url = url
         self._pos = 0
@@ -40,8 +35,6 @@ class ArtifactHttpFile(io.IOBase):
         self.name = name
         self._closed = False
         self._buffer = io.BytesIO()
-        self._auto_commit = auto_commit
-        self._commit_func = commit_func
 
         if "r" in mode:
             # For read mode, download the content immediately
@@ -189,8 +182,6 @@ class ArtifactHttpFile(io.IOBase):
         try:
             if ("w" in self._mode or "a" in self._mode) and self._buffer.tell() > 0:
                 self._upload_content()
-                if self._auto_commit and self._commit_func:
-                    self._commit_func()
         finally:
             self._closed = True
             self._buffer.close()

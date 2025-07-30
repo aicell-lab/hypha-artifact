@@ -97,9 +97,15 @@ artifact = HyphaArtifact(
     token="your-workspace-token"
 )
 
+# Stage changes to the artifact
+artifact.edit(stage=True)
+
 # Create and write to a file
 with artifact.open("hello.txt", "w") as f:
     f.write("Hello, Hypha!")
+
+# Commit the changes with a comment
+artifact.commit(comment="Added hello.txt")
 
 # Read file content
 content = artifact.cat("hello.txt")
@@ -113,11 +119,15 @@ print([f["name"] for f in files])
 if artifact.exists("hello.txt"):
     print("File exists!")
 
-# Copy a file
+# Stage changes for copying a file
+artifact.edit(stage=True)
 artifact.copy("hello.txt", "hello_copy.txt")
+artifact.commit(comment="Copied hello.txt")
 
-# Remove a file
+# Stage changes for removing a file
+artifact.edit(stage=True)
 artifact.rm("hello_copy.txt")
+artifact.commit(comment="Removed hello_copy.txt")
 ```
 
 ### Asynchronous Version (Recommended)
@@ -134,9 +144,15 @@ async def main():
         token="your-workspace-token"
     ) as artifact:
         
+        # Stage changes to the artifact
+        await artifact.edit(stage=True)
+        
         # Create and write to a file
         async with artifact.open("hello.txt", "w") as f:
             await f.write("Hello, Hypha!")
+            
+        # Commit the changes with a comment
+        await artifact.commit(comment="Added hello.txt")
         
         # Read file content
         content = await artifact.cat("hello.txt")
@@ -150,11 +166,15 @@ async def main():
         if await artifact.exists("hello.txt"):
             print("File exists!")
         
-        # Copy a file
+        # Stage, copy, and commit
+        await artifact.edit(stage=True)
         await artifact.copy("hello.txt", "hello_copy.txt")
+        await artifact.commit(comment="Copied hello.txt")
         
-        # Remove a file
+        # Stage, remove, and commit
+        await artifact.edit(stage=True)
         await artifact.rm("hello_copy.txt")
+        await artifact.commit(comment="Removed hello_copy.txt")
 
 # Run the async function
 asyncio.run(main())
@@ -193,9 +213,15 @@ from hypha_artifact import HyphaArtifact
 # Initialize artifact
 artifact = HyphaArtifact("my-data", "workspace-123", "token-456")
 
+# Stage changes before writing
+artifact.edit(stage=True)
+
 # Create a new file
 with artifact.open("data.txt", "w") as f:
     f.write("Important data\nLine 2\nLine 3")
+
+# Commit the changes
+artifact.commit(comment="Added data.txt")
 
 # Read partial content
 with artifact.open("data.txt", "r") as f:
@@ -215,17 +241,23 @@ print("Files:", file_names)
 source_file = "source.txt"
 backup_file = "backup.txt"
 
-# Create source file
+# Stage, create, and commit the source file
+artifact.edit(stage=True)
 with artifact.open(source_file, "w") as f:
     f.write("This is my source content")
+artifact.commit(comment="Created source file")
 
 # Verify and backup
 if artifact.exists(source_file):
+    artifact.edit(stage=True)
     artifact.copy(source_file, backup_file)
+    artifact.commit(comment="Created backup")
     print("Backup created successfully")
 
 # Clean up
+artifact.edit(stage=True)
 artifact.rm(backup_file)
+artifact.commit(comment="Removed backup")
 
 # Upload Operations Examples
 
@@ -284,17 +316,21 @@ async def main():
     # Method 1: Manual connection management
     artifact = AsyncHyphaArtifact("my-workspace/my-artifact", token="token")
     
+    await artifact.edit(stage=True)
     async with artifact.open("async_file.txt", "w") as f:
         await f.write("Async content")
+    await artifact.commit(comment="Added async_file.txt")
     
     content = await artifact.cat("async_file.txt")
     print(content)
     
     # Method 2: Context manager for the entire artifact
     async with AsyncHyphaArtifact("my-artifact", "workspace", "token") as artifact:
-        # Create file
+        # Stage, create, and commit
+        await artifact.edit(stage=True)
         async with artifact.open("test.txt", "w") as f:
             await f.write("Test content")
+        await artifact.commit(comment="Added test.txt")
         
         # List files
         files = await artifact.ls("/")
@@ -304,9 +340,15 @@ async def main():
         exists = await artifact.exists("test.txt")
         print(f"File exists: {exists}")
         
-        # Copy and remove
+        # Stage, copy, and commit
+        await artifact.edit(stage=True)
         await artifact.copy("test.txt", "test_copy.txt") 
+        await artifact.commit(comment="Copied test.txt")
+
+        # Stage, remove, and commit
+        await artifact.edit(stage=True)
         await artifact.rm("test_copy.txt")
+        await artifact.commit(comment="Removed test_copy.txt")
         
         # Upload large files with parallel multipart support
         await artifact.upload(
@@ -338,6 +380,9 @@ from hypha_artifact import AsyncHyphaArtifact
 async def process_files():
     async with AsyncHyphaArtifact("data-processing", "workspace", "token") as artifact:
         
+        # Stage changes before creating files
+        await artifact.edit(stage=True)
+
         # Create multiple files concurrently
         tasks = []
         for i in range(5):
@@ -348,6 +393,9 @@ async def process_files():
             tasks.append(create_file(i))
         
         await asyncio.gather(*tasks)
+
+        # Commit all changes at once
+        await artifact.commit(comment="Added 5 files concurrently")
         
         # List all created files
         files = await artifact.ls("/", detail=False)

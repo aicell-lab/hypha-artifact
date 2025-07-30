@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from hypha_rpc import connect_to_server  # type: ignore
 from dotenv import load_dotenv
+from hypha_artifact import AsyncHyphaArtifact
 
 # Load environment variables from .env file
 load_dotenv()
@@ -146,7 +147,9 @@ def get_artifact_setup_teardown(artifact_name: str, credentials: tuple[str, str]
 class ArtifactTestMixin:
     """Mixin class containing common test methods for both sync and async artifacts."""
 
-    def _check_artifact_initialization(self, artifact: Any, artifact_name: str) -> None:
+    def _check_artifact_initialization(
+        self, artifact: AsyncHyphaArtifact, artifact_name: str
+    ) -> None:
         """Test that the artifact is initialized correctly with real credentials."""
         assert artifact.artifact_alias == artifact_name
         assert artifact.token is not None
