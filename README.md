@@ -267,8 +267,10 @@ All methods are async versions of the synchronous API:
 - **`await cat(path: str) -> str`** - Read entire file content
 - **`await ls(path: str, detail: bool = True) -> list`** - List files and directories  
 - **`await exists(path: str) -> bool`** - Check if file exists
-- **`await copy(source: str, destination: str)`** - Copy a file
+- **`await copy(source: str, destination: str)`** - Copy a file within the artifact
 - **`await rm(path: str)`** - Remove a file
+- **`await get(remote_path: str, local_path: str, recursive: bool = False)`** - Copy from remote to local filesystem
+- **`await put(local_path: str, remote_path: str, recursive: bool = False)`** - Copy from local to remote filesystem
 
 #### Context Manager Support
 
@@ -305,14 +307,31 @@ async def main():
         print(f"File exists: {exists}")
         
         # Stage, copy, and commit
-        await artifact.edit(stage=True)
-        await artifact.copy("test.txt", "test_copy.txt") 
-        await artifact.commit(comment="Copied test.txt")
+await artifact.edit(stage=True)
+await artifact.copy("test.txt", "test_copy.txt") 
+await artifact.commit(comment="Copied test.txt")
 
-        # Stage, remove, and commit
-        await artifact.edit(stage=True)
-        await artifact.rm("test_copy.txt")
-        await artifact.commit(comment="Removed test_copy.txt")
+# Stage, remove, and commit
+await artifact.edit(stage=True)
+await artifact.rm("test_copy.txt")
+await artifact.commit(comment="Removed test_copy.txt")
+
+# Copy files between local and remote filesystems
+# Get a file from remote to local
+await artifact.get("remote_file.txt", "local_file.txt")
+
+# Put a file from local to remote
+await artifact.edit(stage=True)
+await artifact.put("local_file.txt", "remote_file.txt")
+await artifact.commit(comment="Uploaded local file")
+
+# Copy directories recursively
+await artifact.get("remote_dir", "local_dir", recursive=True)
+
+# Put directory recursively
+await artifact.edit(stage=True)
+await artifact.put("local_dir", "remote_dir", recursive=True)
+await artifact.commit(comment="Uploaded directory")
 
 # Run the async function
 asyncio.run(main())
@@ -356,6 +375,103 @@ async def process_files():
 
 asyncio.run(process_files())
 ```
+
+## File Transfer Operations
+
+The library provides powerful methods for transferring files between local filesystems and Hypha artifacts:
+
+### Synchronous File Transfer
+
+```python
+from hypha_artifact import HyphaArtifact
+
+artifact = HyphaArtifact("my-artifact", "workspace", "token")
+
+# Copy a single file from remote to local
+artifact.get("remote_file.txt", "local_file.txt")
+
+# Copy a single file from local to remote
+artifact.edit(stage=True)
+artifact.put("local_file.txt", "remote_file.txt")
+artifact.commit(comment="Uploaded local file")
+
+# Copy directories recursively
+artifact.get("remote_dir", "local_dir", recursive=True)
+
+# Put directory recursively
+artifact.edit(stage=True)
+artifact.put("local_dir", "remote_dir", recursive=True)
+artifact.commit(comment="Uploaded directory")
+
+# Copy multiple files using lists
+remote_files = ["file1.txt", "file2.txt", "file3.txt"]
+local_files = ["local1.txt", "local2.txt", "local3.txt"]
+artifact.get(remote_files, local_files)
+
+# Put multiple files
+local_files = ["local1.txt", "local2.txt", "local3.txt"]
+remote_files = ["remote1.txt", "remote2.txt", "remote3.txt"]
+artifact.edit(stage=True)
+artifact.put(local_files, remote_files)
+artifact.commit(comment="Uploaded multiple files")
+```
+
+### Asynchronous File Transfer
+
+```python
+import asyncio
+from hypha_artifact import AsyncHyphaArtifact
+
+async def transfer_files():
+    async with AsyncHyphaArtifact("my-artifact", "workspace", "token") as artifact:
+        
+        # Copy files from remote to local
+        await artifact.get("remote_file.txt", "local_file.txt")
+        await artifact.get("remote_dir", "local_dir", recursive=True)
+        
+        # Copy files from local to remote
+        await artifact.edit(stage=True)
+        await artifact.put("local_file.txt", "remote_file.txt")
+        await artifact.put("local_dir", "remote_dir", recursive=True)
+        await artifact.commit(comment="Uploaded files")
+        
+        # Copy multiple files
+        remote_files = ["file1.txt", "file2.txt"]
+        local_files = ["local1.txt", "local2.txt"]
+        await artifact.get(remote_files, local_files)
+
+asyncio.run(transfer_files())
+```
+
+### Advanced Transfer Options
+
+Both `get()` and `put()` methods support additional parameters:
+
+```python
+# Error handling
+artifact.get("missing_file.txt", "local.txt", on_error="ignore")  # Ignore missing files
+artifact.get("missing_file.txt", "local.txt", on_error="raise")   # Raise errors (default)
+
+# Maximum depth for recursive operations
+artifact.get("remote_dir", "local_dir", recursive=True, maxdepth=2)  # Only 2 levels deep
+
+# Multiple files with error handling
+artifact.get(
+    ["file1.txt", "file2.txt"], 
+    ["local1.txt", "local2.txt"], 
+    on_error="ignore"
+)
+```
+
+### Key Features
+
+- **Binary-safe**: Preserves file content exactly, including binary files
+- **Recursive directory copying**: Automatically handles nested directory structures
+- **Automatic directory creation**: Creates local directories as needed
+- **Multiple file support**: Transfer multiple files with a single call
+- **Error handling**: Choose to ignore or raise errors for missing files
+- **Depth control**: Limit recursion depth for large directory trees
+- **Progress tracking**: Built-in support for monitoring transfer progress
 
 ## Advanced Usage
 

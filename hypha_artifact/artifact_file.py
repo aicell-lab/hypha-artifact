@@ -79,7 +79,8 @@ class ArtifactHttpFile(io.IOBase):
             cleaned_url = clean_url(self._url)
 
             headers = {
-                "Content-Type": "application/octet-stream",
+                "Content-Type": "", # Important for s3 compatibility
+                # "Content-Type": "application/octet-stream",
                 "Content-Length": str(len(content)),
             }
 

@@ -176,3 +176,163 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         # Verify the partial content matches the expected first 10 bytes
         expected_content = test_content[:10]
         self._validate_file_content(partial_content, expected_content)
+
+    def test_get_file(self, artifact: HyphaArtifact, test_content: str, tmp_path) -> None:
+        """Test copying a file from remote (artifact) to local filesystem."""
+        import os
+        
+        remote_file = "sync_get_test_file.txt"
+        local_file = tmp_path / "local_get_test_file.txt"
+
+        # Create a test file in the artifact
+        artifact.edit(stage=True)
+        with artifact.open(remote_file, "w") as f:
+            f.write(test_content)
+        artifact.commit()
+
+        # Copy from remote to local
+        artifact.get(remote_file, str(local_file))
+
+        # Verify local file exists and has correct content
+        assert local_file.exists(), f"Local file {local_file} should exist"
+        with open(local_file, "r") as f:
+            local_content = f.read()
+        self._validate_file_content(local_content, test_content)
+
+    def test_put_file(self, artifact: HyphaArtifact, test_content: str, tmp_path) -> None:
+        """Test copying a file from local filesystem to remote (artifact)."""
+        import os
+        
+        local_file = tmp_path / "local_put_test_file.txt"
+        remote_file = "sync_put_test_file.txt"
+
+        # Create a test file locally
+        with open(local_file, "w") as f:
+            f.write(test_content)
+
+        # Copy from local to remote
+        artifact.edit(stage=True)
+        artifact.put(str(local_file), remote_file)
+        artifact.commit()
+
+        # Verify remote file exists and has correct content
+        assert artifact.exists(remote_file), f"Remote file {remote_file} should exist"
+        remote_content = artifact.cat(remote_file)
+        self._validate_file_content(remote_content, test_content)
+
+    def test_get_directory_recursive(self, artifact: HyphaArtifact, test_content: str, tmp_path) -> None:
+        """Test copying a directory recursively from remote to local."""
+        import os
+        
+        remote_dir = "sync_get_dir"
+        remote_file1 = f"{remote_dir}/file1.txt"
+        remote_file2 = f"{remote_dir}/subdir/file2.txt"
+        local_dir = tmp_path / "local_get_dir"
+
+        # Create test files in the artifact
+        artifact.edit(stage=True)
+        with artifact.open(remote_file1, "w") as f:
+            f.write(test_content + "_1")
+        with artifact.open(remote_file2, "w") as f:
+            f.write(test_content + "_2")
+        artifact.commit()
+
+        # Copy directory recursively from remote to local
+        artifact.get(remote_dir, str(local_dir), recursive=True)
+
+        # Verify local files exist and have correct content
+        local_file1 = local_dir / "file1.txt"
+        local_file2 = local_dir / "subdir" / "file2.txt"
+        
+        assert local_file1.exists(), f"Local file {local_file1} should exist"
+        assert local_file2.exists(), f"Local file {local_file2} should exist"
+        
+        with open(local_file1, "r") as f:
+            content1 = f.read()
+        with open(local_file2, "r") as f:
+            content2 = f.read()
+        
+        self._validate_file_content(content1, test_content + "_1")
+        self._validate_file_content(content2, test_content + "_2")
+
+    def test_put_directory_recursive(self, artifact: HyphaArtifact, test_content: str, tmp_path) -> None:
+        """Test copying a directory recursively from local to remote."""
+        import os
+        
+        local_dir = tmp_path / "local_put_dir"
+        local_subdir = local_dir / "subdir"
+        local_file1 = local_dir / "file1.txt"
+        local_file2 = local_subdir / "file2.txt"
+        remote_dir = "sync_put_dir"
+
+        # Create test directory structure locally
+        local_subdir.mkdir(parents=True, exist_ok=True)
+        with open(local_file1, "w") as f:
+            f.write(test_content + "_1")
+        with open(local_file2, "w") as f:
+            f.write(test_content + "_2")
+
+        # Copy directory recursively from local to remote
+        artifact.edit(stage=True)
+        artifact.put(str(local_dir), remote_dir, recursive=True)
+        artifact.commit()
+
+        # Verify remote files exist and have correct content
+        remote_file1 = f"{remote_dir}/file1.txt"
+        remote_file2 = f"{remote_dir}/subdir/file2.txt"
+        
+        assert artifact.exists(remote_file1), f"Remote file {remote_file1} should exist"
+        assert artifact.exists(remote_file2), f"Remote file {remote_file2} should exist"
+        
+        content1 = artifact.cat(remote_file1)
+        content2 = artifact.cat(remote_file2)
+        
+        self._validate_file_content(content1, test_content + "_1")
+        self._validate_file_content(content2, test_content + "_2")
+
+    def test_get_multiple_files(self, artifact: HyphaArtifact, test_content: str, tmp_path) -> None:
+        """Test copying multiple files from remote to local using lists."""
+        import os
+        
+        remote_files = ["sync_get_multi1.txt", "sync_get_multi2.txt"]
+        local_files = [str(tmp_path / "local_get_multi1.txt"), str(tmp_path / "local_get_multi2.txt")]
+
+        # Create test files in the artifact
+        artifact.edit(stage=True)
+        for i, remote_file in enumerate(remote_files):
+            with artifact.open(remote_file, "w") as f:
+                f.write(test_content + f"_{i+1}")
+        artifact.commit()
+
+        # Copy multiple files from remote to local
+        artifact.get(remote_files, local_files)
+
+        # Verify local files exist and have correct content
+        for i, local_file in enumerate(local_files):
+            assert os.path.exists(local_file), f"Local file {local_file} should exist"
+            with open(local_file, "r") as f:
+                content = f.read()
+            self._validate_file_content(content, test_content + f"_{i+1}")
+
+    def test_put_multiple_files(self, artifact: HyphaArtifact, test_content: str, tmp_path) -> None:
+        """Test copying multiple files from local to remote using lists."""
+        import os
+        
+        local_files = [str(tmp_path / "local_put_multi1.txt"), str(tmp_path / "local_put_multi2.txt")]
+        remote_files = ["sync_put_multi1.txt", "sync_put_multi2.txt"]
+
+        # Create test files locally
+        for i, local_file in enumerate(local_files):
+            with open(local_file, "w") as f:
+                f.write(test_content + f"_{i+1}")
+
+        # Copy multiple files from local to remote
+        artifact.edit(stage=True)
+        artifact.put(local_files, remote_files)
+        artifact.commit()
+
+        # Verify remote files exist and have correct content
+        for i, remote_file in enumerate(remote_files):
+            assert artifact.exists(remote_file), f"Remote file {remote_file} should exist"
+            content = artifact.cat(remote_file)
+            self._validate_file_content(content, test_content + f"_{i+1}")

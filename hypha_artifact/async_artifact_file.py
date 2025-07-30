@@ -111,7 +111,8 @@ class AsyncArtifactHttpFile:
             cleaned_url = clean_url(url)
 
             headers = {
-                "Content-Type": "application/octet-stream",
+                "Content-Type": "", # Important for s3 compatibility
+                # "Content-Type": "application/octet-stream",
                 "Content-Length": str(len(content)),
             }
 

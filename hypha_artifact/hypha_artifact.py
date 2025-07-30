@@ -62,6 +62,7 @@ class HyphaArtifact:
         workspace: str | None = None,
         token: str | None = None,
         service_url: str | None = None,
+        use_proxy: bool = False,
     ):
         """Initialize a HyphaArtifact instance.
 
@@ -71,7 +72,7 @@ class HyphaArtifact:
             The identifier of the Hypha artifact to interact with
         """
         self._async_artifact = AsyncHyphaArtifact(
-            artifact_id, workspace, token, service_url
+            artifact_id, workspace, token, service_url, use_proxy=use_proxy
         )
 
     def edit(
@@ -151,6 +152,66 @@ class HyphaArtifact:
         return run_sync(
             self._async_artifact.copy(
                 path1, path2, recursive, maxdepth, on_error, **kwargs
+            )
+        )
+
+    def get(
+        self: Self,
+        rpath: str | list[str],
+        lpath: str | list[str],
+        recursive: bool = False,
+        maxdepth: int | None = None,
+        on_error: OnError = "raise",
+        **kwargs: Any,
+    ) -> None:
+        """Copy file(s) from remote (artifact) to local filesystem
+
+        Parameters
+        ----------
+        rpath: str or list of str
+            Remote path(s) to copy from
+        lpath: str or list of str
+            Local path(s) to copy to
+        recursive: bool
+            If True and rpath is a directory, copy all its contents recursively
+        maxdepth: int or None
+            Maximum recursion depth when recursive=True
+        on_error: "raise" or "ignore"
+            What to do if a file is not found
+        """
+        return run_sync(
+            self._async_artifact.get(
+                rpath, lpath, recursive, maxdepth, on_error, **kwargs
+            )
+        )
+
+    def put(
+        self: Self,
+        lpath: str | list[str],
+        rpath: str | list[str],
+        recursive: bool = False,
+        maxdepth: int | None = None,
+        on_error: OnError = "raise",
+        **kwargs: Any,
+    ) -> None:
+        """Copy file(s) from local filesystem to remote (artifact)
+
+        Parameters
+        ----------
+        lpath: str or list of str
+            Local path(s) to copy from
+        rpath: str or list of str
+            Remote path(s) to copy to
+        recursive: bool
+            If True and lpath is a directory, copy all its contents recursively
+        maxdepth: int or None
+            Maximum recursion depth when recursive=True
+        on_error: "raise" or "ignore"
+            What to do if a file is not found
+        """
+        return run_sync(
+            self._async_artifact.put(
+                lpath, rpath, recursive, maxdepth, on_error, **kwargs
             )
         )
 
