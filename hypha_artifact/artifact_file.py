@@ -6,7 +6,7 @@ import os
 from typing import Self
 from types import TracebackType
 import requests
-from .utils import clean_url, FileMode
+from .utils import FileMode
 
 
 class ArtifactHttpFile(io.IOBase):
@@ -48,7 +48,7 @@ class ArtifactHttpFile(io.IOBase):
         """Download content from URL into buffer, optionally using a range header."""
         try:
             # Clean the URL by removing any surrounding quotes and converting to string if needed
-            cleaned_url = clean_url(self._url)
+            cleaned_url = self._url
 
             headers: dict[str, str | None] = {}
             if range_header:
@@ -76,8 +76,6 @@ class ArtifactHttpFile(io.IOBase):
         try:
             content = self._buffer.getvalue()
 
-            cleaned_url = clean_url(self._url)
-
             headers = {
                 "Content-Type": "", # Important for s3 compatibility
                 # "Content-Type": "application/octet-stream",
@@ -85,7 +83,7 @@ class ArtifactHttpFile(io.IOBase):
             }
 
             response = requests.put(
-                cleaned_url, data=content, headers=headers, timeout=60
+                self._url, data=content, headers=headers, timeout=60
             )
 
             response.raise_for_status()

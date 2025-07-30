@@ -291,7 +291,7 @@ class AsyncHyphaArtifact:
             "use_proxy": self.use_proxy,
         }
         response_content = await self._remote_post("put_file", params)
-        return response_content.decode()
+        return json.loads(response_content)
 
     async def _remote_remove_file(
         self: Self,
@@ -336,8 +336,8 @@ class AsyncHyphaArtifact:
             "version": version,
             "use_proxy": self.use_proxy,
         }
-        response = await self._remote_get("get_file", params)
-        return response.decode("utf-8")
+        response_content = await self._remote_get("get_file", params)
+        return json.loads(response_content)
 
     async def _remote_list_contents(
         self: Self,
