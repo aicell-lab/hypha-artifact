@@ -1025,7 +1025,7 @@ class AsyncHyphaArtifact:
         if parent_path is None:
             parent_path = ""
 
-        if parent_path == "":
+        if normalized_path == "":
             return {"name": "", "type": "directory"}
 
         listing = await self.ls(parent_path)
