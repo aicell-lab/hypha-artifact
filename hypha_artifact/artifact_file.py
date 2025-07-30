@@ -47,14 +47,13 @@ class ArtifactHttpFile(io.IOBase):
     def _download_content(self: Self, range_header: str | None = None) -> None:
         """Download content from URL into buffer, optionally using a range header."""
         try:
-            # Clean the URL by removing any surrounding quotes and converting to string if needed
-            cleaned_url = self._url
-
-            headers: dict[str, str | None] = {}
+            headers: dict[str, str | None] = {
+                "Accept-Encoding": "identity"  # Prevent gzip compression
+            }
             if range_header:
                 headers["Range"] = range_header
 
-            response = requests.get(cleaned_url, headers=headers, timeout=60)
+            response = requests.get(self._url, headers=headers, timeout=60)
             response.raise_for_status()
             self._buffer = io.BytesIO(response.content)
         except requests.exceptions.RequestException as e:
