@@ -110,14 +110,13 @@ class AsyncArtifactHttpFile:
             url = await self.get_url()
 
             headers = {
-                "Content-Type": "", # Important for s3 compatibility
-                # "Content-Type": "application/octet-stream",
+                "Content-Type": "",
                 "Content-Length": str(len(content)),
             }
 
             client = self._get_client()
             response = await client.put(
-                url, content=content, headers=headers, timeout=60
+                url, content=content, headers=headers, timeout=10
             )
 
             response.raise_for_status()

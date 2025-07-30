@@ -20,7 +20,20 @@ async def edit(
     comment: str | None = None,
     stage: bool = False,
 ) -> None:
-    """Edits the artifact's metadata and saves it."""
+    """Edits the artifact's metadata and saves it.
+
+    This includes the manifest, type, configuration, secrets, and versioning information.
+
+    Args:
+        manifest (dict[str, Any] | None): The manifest data to set for the artifact.
+        artifact_type (str | None): The type of the artifact (e.g., "generic", "collection").
+        config (dict[str, Any] | None): Configuration dictionary for the artifact.
+        secrets (dict[str, str] | None): Secrets to store with the artifact.
+        version (str | None): The version to edit or create.
+            Can be "new" for a new version, "stage", or a specific version string.
+        comment (str | None): A comment for this version or edit.
+        stage (bool): If True, edits are made to a staging version.
+    """
     params: dict[str, Any] = {
         "manifest": manifest,
         "type": artifact_type,
@@ -38,7 +51,16 @@ async def commit(
     version: str | None = None,
     comment: str | None = None,
 ) -> None:
-    """Commits the staged changes to the artifact."""
+    """Commits the staged changes to the artifact.
+
+    This finalizes the staged manifest and files, creating a new version or
+    updating an existing one.
+
+    Args:
+        version (str | None): The version string for the commit.
+            If None, a new version is typically created. Cannot be "stage".
+        comment (str | None): A comment describing the commit.
+    """
     params: dict[str, str | None] = {
         "version": version,
         "comment": comment,

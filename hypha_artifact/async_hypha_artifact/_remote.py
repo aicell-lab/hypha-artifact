@@ -26,6 +26,11 @@ def extend_params(
     return params
 
 
+def normalize_path(self: "AsyncHyphaArtifact", path: str) -> str:
+    """Normalize the path by removing all leading slashes."""
+    return path.lstrip("/")
+
+
 async def remote_request(
     self: "AsyncHyphaArtifact",
     artifact_method: str,
@@ -33,7 +38,15 @@ async def remote_request(
     params: dict[str, JsonType] | None = None,
     json_data: dict[str, JsonType] | None = None,
 ) -> bytes:
-    """Make a remote request to the artifact service."""
+    """Make a remote request to the artifact service.
+    Args:
+        method_name (str): The name of the method to call on the artifact service.
+        method (Literal["GET", "POST"]): The HTTP method to use for the request.
+        params (dict[str, JsonType] | None): Optional. Parameters to include in the request.
+        json (dict[str, JsonType] | None): Optional. JSON body to include in the request.
+    Returns:
+        str: The response content from the artifact service.
+    """
     extended_params = self._extend_params(params or json_data or {})
     cleaned_params = remove_none(extended_params)
 
@@ -56,7 +69,12 @@ async def remote_request(
 async def remote_post(
     self: "AsyncHyphaArtifact", method_name: str, params: dict[str, Any]
 ) -> bytes:
-    """Make a POST request to the artifact service."""
+    """Make a POST request to the artifact service with extended parameters.
+
+    Returns:
+        For put_file requests, returns the pre-signed URL as a string.
+        For other requests, returns the response content.
+    """
     return await self._remote_request(
         method_name,
         method="POST",
@@ -67,7 +85,11 @@ async def remote_post(
 async def remote_get(
     self: "AsyncHyphaArtifact", method_name: str, params: dict[str, Any]
 ) -> bytes:
-    """Make a GET request to the artifact service."""
+    """Make a GET request to the artifact service with extended parameters.
+
+    Returns:
+        The response content.
+    """
     return await self._remote_request(
         method_name,
         method="GET",
@@ -80,7 +102,17 @@ async def remote_put_file_url(
     file_path: str,
     download_weight: float = 1.0,
 ) -> str:
-    """Requests a pre-signed URL to upload a file."""
+    """Requests a pre-signed URL to upload a file to the artifact.
+
+    The artifact must be in staging mode to upload files.
+
+    Args:
+        file_path (str): The path within the artifact where the file will be stored.
+        download_weight (float): The download weight for the file (default is 1.0).
+
+    Returns:
+        str: A pre-signed URL for uploading the file.
+    """
     params: dict[str, Any] = {
         "file_path": file_path,
         "download_weight": download_weight,
@@ -94,7 +126,14 @@ async def remote_remove_file(
     self: "AsyncHyphaArtifact",
     file_path: str,
 ) -> None:
-    """Removes a file from the artifact's staged version."""
+    """Removes a file from the artifact's staged version.
+
+    The artifact must be in staging mode. This operation updates the
+    staged manifest.
+
+    Args:
+        file_path (str): The path of the file to remove within the artifact.
+    """
     params: dict[str, Any] = {
         "file_path": file_path,
     }
@@ -107,7 +146,20 @@ async def remote_get_file_url(
     silent: bool = False,
     version: str | None = None,
 ) -> str:
-    """Generates a pre-signed URL to download a file."""
+    """Generates a pre-signed URL to download a file from the artifact stored in S3.
+
+    Args:
+        self (Self): The instance of the AsyncHyphaArtifact class.
+        file_path (str): The relative path of the file to be downloaded (e.g., "data.csv").
+        silent (bool, optional): A boolean to suppress the download count increment.
+            Default is False.
+        version (str | None, optional): The version of the artifact to download from.
+        limit (int, optional): The maximum number of items to return.
+            Default is 1000.
+
+    Returns:
+        str: A pre-signed URL for downloading the file.
+    """
     params: dict[str, str | bool | float | None] = {
         "file_path": file_path,
         "silent": silent,
@@ -124,7 +176,19 @@ async def remote_list_contents(
     limit: int = 1000,
     version: str | None = None,
 ) -> list[JsonType]:
-    """Lists files and directories within a specified path."""
+    """Lists files and directories within a specified path in the artifact.
+
+    Args:
+        dir_path (str | None): The directory path within the artifact to list.
+            If None, lists contents from the root of the artifact.
+        limit (int): The maximum number of items to return (default is 1000).
+        version (str | None): The version of the artifact to list files from.
+            If None, uses the latest committed version. Can be "stage".
+
+    Returns:
+        list[JsonType]: A list of items (files and directories) found at the path.
+            Each item is a dictionary with details like 'name', 'type', 'size'.
+    """
     params: dict[str, str | int | None] = {
         "dir_path": dir_path,
         "limit": limit,

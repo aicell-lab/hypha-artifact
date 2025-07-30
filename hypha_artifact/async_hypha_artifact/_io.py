@@ -45,7 +45,23 @@ async def cat(
     recursive: bool = False,
     on_error: OnError = "raise",
 ) -> dict[str, str | None] | str | None:
-    """Get file(s) content as string(s)"""
+    """Get file(s) content as string(s)
+
+    Parameters
+    ----------
+    path: str or list of str
+        File path(s) to get content from
+    recursive: bool
+        If True and path is a directory, get all files content
+    on_error: "raise" or "ignore"
+        What to do if a file is not found
+
+    Returns
+    -------
+    str or dict or None
+        File contents as string if path is a string, dict of {path: content} if path is a list,
+        or None if the file is not found and on_error is "ignore"
+    """
     if isinstance(path, list):
         results: dict[str, str | None] = {}
         for p in path:
@@ -74,12 +90,25 @@ async def cat(
 
 
 def fsspec_open(
-    self: "AsyncHyphaArtifact",  # pylint: disable=unused-argument
+    self: "AsyncHyphaArtifact",
     urlpath: str,
     mode: FileMode = "rb",
     **kwargs: Any,
 ) -> AsyncArtifactHttpFile:
-    """Open a file for reading or writing"""
+    """Open a file for reading or writing
+
+    Parameters
+    ----------
+    urlpath: str
+        Path to the file within the artifact
+    mode: FileMode
+        File mode, one of 'r', 'rb', 'w', 'wb', 'a', 'ab'
+
+    Returns
+    -------
+    AsyncArtifactHttpFile
+        A file-like object
+    """
     normalized_path = normalize_path(urlpath)
 
     if "r" in mode:
@@ -97,14 +126,14 @@ def fsspec_open(
         raise ValueError(f"Unsupported mode: {mode}")
 
     return AsyncArtifactHttpFile(
-        get_url,
+        url_func=get_url,
         mode=mode,
         name=normalized_path,
     )
 
 
 async def copy(
-    self: "AsyncHyphaArtifact",  # pylint: disable=unused-argument
+    self: "AsyncHyphaArtifact",
     path1: str,
     path2: str,
     recursive: bool = False,
@@ -112,7 +141,21 @@ async def copy(
     on_error: OnError | None = "raise",
     **kwargs: dict[str, Any],
 ) -> None:
-    """Copy file(s) from path1 to path2 within the artifact"""
+    """Copy file(s) from path1 to path2 within the artifact
+
+    Parameters
+    ----------
+    path1: str
+        Source path
+    path2: str
+        Destination path
+    recursive: bool
+        If True and path1 is a directory, copy all its contents recursively
+    maxdepth: int or None
+        Maximum recursion depth when recursive=True
+    on_error: "raise" or "ignore"
+        What to do if a file is not found
+    """
     if recursive and await self.isdir(path1):
         files = await self.find(path1, maxdepth=maxdepth, withdirs=False)
         for src_path in files:
@@ -284,7 +327,28 @@ async def get(
     progress_callback: None | Callable[[dict[str, Any]], None] = None,
     **kwargs: Any,
 ) -> None:
-    """Copy file(s) from remote (artifact) to local filesystem"""
+    """Copy file(s) from remote (artifact) to local filesystem
+
+    Parameters
+    ----------
+    rpath: str or list of str
+        Remote path(s) to copy from
+    lpath: str or list of str
+        Local path(s) to copy to
+    recursive: bool
+        If True and rpath is a directory, copy all its contents recursively
+    maxdepth: int or None
+        Maximum recursion depth when recursive=True
+    on_error: "raise" or "ignore"
+        What to do if a file is not found
+    progress_callback: None | Callable[[dict[str, Any]], None], optional
+        Callback function to report progress. Called with a dict containing:
+        - "type": "info", "success", "error", or "warning"
+        - "message": Progress message
+        - "file": Current file being processed (if applicable)
+        - "total_files": Total number of files (if applicable)
+        - "current_file": Current file index (if applicable)
+    """
     if isinstance(rpath, list) and isinstance(lpath, list):
         await self._get_list(
             rpath,
@@ -404,7 +468,28 @@ async def put(
     progress_callback: None | Callable[[dict[str, Any]], None] = None,
     **kwargs: Any,
 ) -> None:
-    """Copy file(s) from local filesystem to remote (artifact)"""
+    """Copy file(s) from local filesystem to remote (artifact)
+
+    Parameters
+    ----------
+    lpath: str or list of str
+        Local path(s) to copy from
+    rpath: str or list of str
+        Remote path(s) to copy to
+    recursive: bool
+        If True and lpath is a directory, copy all its contents recursively
+    maxdepth: int or None
+        Maximum recursion depth when recursive=True
+    on_error: "raise" or "ignore"
+        What to do if a file is not found
+    progress_callback: None | Callable[[dict[str, Any]], None], optional
+        Callback function to report progress. Called with a dict containing:
+        - "type": "info", "success", "error", or "warning"
+        - "message": Progress message
+        - "file": Current file being processed (if applicable)
+        - "total_files": Total number of files (if applicable)
+        - "current_file": Current file index (if applicable)
+    """
     if isinstance(lpath, list) and isinstance(rpath, list):
         await self._put_list(
             lpath, rpath, recursive, maxdepth, on_error, progress_callback, **kwargs
@@ -550,7 +635,23 @@ async def cp(
     on_error: OnError | None = None,
     **kwargs: Any,
 ) -> None:
-    """Alias for copy method"""
+    """Alias for copy method
+
+    Parameters
+    ----------
+    path1: str
+        Source path
+    path2: str
+        Destination path
+    on_error: "raise" or "ignore", optional
+        What to do if a file is not found
+    **kwargs:
+        Additional arguments passed to copy method
+
+    Returns
+    -------
+    None
+    """
     recursive = kwargs.pop("recursive", False)
     maxdepth = kwargs.pop("maxdepth", None)
     return await self.copy(
@@ -559,7 +660,20 @@ async def cp(
 
 
 async def head(self: "AsyncHyphaArtifact", path: str, size: int = 1024) -> bytes:
-    """Get the first bytes of a file"""
+    """Get the first bytes of a file
+
+    Parameters
+    ----------
+    path: str
+        Path to the file
+    size: int
+        Number of bytes to read
+
+    Returns
+    -------
+    bytes
+        First bytes of the file
+    """
     async with self.open(path, "rb") as f:
         result = await f.read(size)
         if isinstance(result, bytes):
