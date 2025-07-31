@@ -453,7 +453,6 @@ async def makedirs(
     self: "AsyncHyphaArtifact",
     path: str,
     exist_ok: bool = True,
-    **kwargs: Any,
 ) -> None:
     """Create a directory tree
 

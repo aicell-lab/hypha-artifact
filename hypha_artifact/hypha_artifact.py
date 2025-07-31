@@ -7,7 +7,7 @@ and manipulating files stored in Hypha artifacts.
 """
 
 from datetime import datetime
-from typing import Literal, Self, overload, Any, TYPE_CHECKING
+from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
 
 from hypha_artifact.dataclasses import ArtifactItem
 from .utils import FileMode, OnError
@@ -165,6 +165,7 @@ class HyphaArtifact:
         rpath: str | list[str],
         lpath: str | list[str],
         recursive: bool = False,
+        callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         **kwargs: Any,
@@ -186,7 +187,7 @@ class HyphaArtifact:
         """
         return run_sync(
             self._async_artifact.get(
-                rpath, lpath, recursive, maxdepth, on_error, **kwargs
+                rpath, lpath, recursive, callback, maxdepth, on_error, **kwargs
             )
         )
 
@@ -195,6 +196,7 @@ class HyphaArtifact:
         lpath: str | list[str],
         rpath: str | list[str],
         recursive: bool = False,
+        callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         **kwargs: Any,
@@ -216,7 +218,7 @@ class HyphaArtifact:
         """
         return run_sync(
             self._async_artifact.put(
-                lpath, rpath, recursive, maxdepth, on_error, **kwargs
+                lpath, rpath, recursive, callback, maxdepth, on_error, **kwargs
             )
         )
 

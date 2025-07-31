@@ -189,17 +189,17 @@ async def get_list(
     rpath: list[str],
     lpath: list[str],
     recursive: bool = False,
+    callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
-    progress_callback: None | Callable[[dict[str, Any]], None] = None,
     **kwargs: dict[str, Any],
 ) -> None:
     """Copy file(s) from remote (artifact) to local filesystem"""
     if len(rpath) != len(lpath):
         raise ValueError("rpath and lpath must be lists of the same length")
 
-    if progress_callback:
-        progress_callback(
+    if callback:
+        callback(
             {
                 "type": "info",
                 "message": f"Starting download of {len(rpath)} files",
@@ -209,13 +209,13 @@ async def get_list(
         )
 
     for i, (rp, lp) in enumerate(zip(rpath, lpath)):
-        if progress_callback:
+        if callback:
             callback_msg = _callback_msg(
                 rp,
                 len(rpath),
                 i,
             )
-            progress_callback(callback_msg)
+            callback(callback_msg)
 
         await self.get(
             rp,
@@ -223,7 +223,7 @@ async def get_list(
             recursive=recursive,
             maxdepth=maxdepth,
             on_error=on_error,
-            progress_callback=progress_callback,
+            callback=callback,
             **kwargs,
         )
 
@@ -232,16 +232,16 @@ async def get_recursive(
     self: "AsyncHyphaArtifact",  # pylint: disable=unused-argument
     rpath: str,
     lpath: str,
+    callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
-    progress_callback: None | Callable[[dict[str, Any]], None] = None,
     **kwargs: Any,
 ) -> None:
     """Helper method to recursively copy files from remote to local"""
     os.makedirs(lpath, exist_ok=True)
 
-    if progress_callback:
-        progress_callback(
+    if callback:
+        callback(
             {
                 "type": "info",
                 "message": f"Starting recursive download from {rpath}",
@@ -251,8 +251,8 @@ async def get_recursive(
 
     files = await self.find(rpath, maxdepth=maxdepth, withdirs=False)
 
-    if progress_callback:
-        progress_callback(
+    if callback:
+        callback(
             {
                 "type": "info",
                 "message": f"Found {len(files)} files to download",
@@ -272,18 +272,18 @@ async def get_recursive(
         if local_dir:
             local_dir.mkdir(parents=True, exist_ok=True)
 
-        if progress_callback:
+        if callback:
             callback_msg = _callback_msg(
                 remote_file,
                 len(files),
                 i,
             )
-            progress_callback(callback_msg)
+            callback(callback_msg)
 
         try:
             await get_single_file(self, remote_file, str(local_file))
-            if progress_callback:
-                progress_callback(
+            if callback:
+                callback(
                     {
                         "type": "success",
                         "message": f"Successfully downloaded: {remote_file}",
@@ -291,8 +291,8 @@ async def get_recursive(
                     }
                 )
         except (FileNotFoundError, IOError, httpx.RequestError) as e:
-            if progress_callback:
-                progress_callback(
+            if callback:
+                callback(
                     {
                         "type": "error",
                         "message": f"Failed to download {remote_file}: {str(e)}",
@@ -321,9 +321,9 @@ async def get(
     rpath: str | list[str],
     lpath: str | list[str],
     recursive: bool = False,
+    callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
-    progress_callback: None | Callable[[dict[str, Any]], None] = None,
     **kwargs: Any,
 ) -> None:
     """Copy file(s) from remote (artifact) to local filesystem
@@ -336,17 +336,17 @@ async def get(
         Local path(s) to copy to
     recursive: bool
         If True and rpath is a directory, copy all its contents recursively
-    maxdepth: int or None
-        Maximum recursion depth when recursive=True
-    on_error: "raise" or "ignore"
-        What to do if a file is not found
-    progress_callback: None | Callable[[dict[str, Any]], None], optional
+    callback: None | Callable[[dict[str, Any]], None], optional
         Callback function to report progress. Called with a dict containing:
         - "type": "info", "success", "error", or "warning"
         - "message": Progress message
         - "file": Current file being processed (if applicable)
         - "total_files": Total number of files (if applicable)
         - "current_file": Current file index (if applicable)
+    maxdepth: int or None
+        Maximum recursion depth when recursive=True
+    on_error: "raise" or "ignore"
+        What to do if a file is not found
     """
     if isinstance(rpath, list) and isinstance(lpath, list):
         await get_list(
@@ -356,7 +356,7 @@ async def get(
             recursive=recursive,
             maxdepth=maxdepth,
             on_error=on_error,
-            progress_callback=progress_callback,
+            callback=callback,
             **kwargs,
         )
         return
@@ -372,7 +372,7 @@ async def get(
             lpath,
             maxdepth=maxdepth,
             on_error=on_error,
-            progress_callback=progress_callback,
+            callback=callback,
             **kwargs,
         )
         return
@@ -380,8 +380,8 @@ async def get(
     local_dir = os.path.dirname(lpath)
     os.makedirs(local_dir, exist_ok=True)
 
-    if progress_callback:
-        progress_callback(
+    if callback:
+        callback(
             {
                 "type": "info",
                 "message": f"Downloading single file: {rpath}",
@@ -391,8 +391,8 @@ async def get(
 
     try:
         await get_single_file(self, rpath, lpath)
-        if progress_callback:
-            progress_callback(
+        if callback:
+            callback(
                 {
                     "type": "success",
                     "message": f"Successfully downloaded: {rpath}",
@@ -400,8 +400,8 @@ async def get(
                 }
             )
     except (FileNotFoundError, IOError, httpx.RequestError) as e:
-        if progress_callback:
-            progress_callback(
+        if callback:
+            callback(
                 {
                     "type": "error",
                     "message": f"Failed to download {rpath}: {str(e)}",
@@ -416,17 +416,17 @@ async def put_list(
     lpaths: list[str],
     rpaths: list[str],
     recursive: bool = False,
+    callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
-    progress_callback: None | Callable[[dict[str, Any]], None] = None,
     **kwargs: dict[str, Any],
 ) -> None:
     """Helper method to copy a list of files from local to remote"""
     if len(lpaths) != len(rpaths):
         raise ValueError("lpath and rpath must be lists of the same length")
 
-    if progress_callback:
-        progress_callback(
+    if callback:
+        callback(
             {
                 "type": "info",
                 "message": f"Starting upload of {len(lpaths)} files",
@@ -436,8 +436,8 @@ async def put_list(
         )
 
     for i, (lpath, rpath) in enumerate(zip(lpaths, rpaths)):
-        if progress_callback:
-            progress_callback(
+        if callback:
+            callback(
                 {
                     "type": "info",
                     "message": f"Uploading file {i+1}/{len(lpaths)}",
@@ -451,9 +451,9 @@ async def put_list(
             lpath,
             rpath,
             recursive,
+            callback,
             maxdepth,
             on_error,
-            progress_callback=progress_callback,
             **kwargs,
         )
     return
@@ -464,9 +464,9 @@ async def put(
     lpath: str | list[str],
     rpath: str | list[str],
     recursive: bool = False,
+    callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
-    progress_callback: None | Callable[[dict[str, Any]], None] = None,
     **kwargs: Any,
 ) -> None:
     """Copy file(s) from local filesystem to remote (artifact)
@@ -479,17 +479,17 @@ async def put(
         Remote path(s) to copy to
     recursive: bool
         If True and lpath is a directory, copy all its contents recursively
-    maxdepth: int or None
-        Maximum recursion depth when recursive=True
-    on_error: "raise" or "ignore"
-        What to do if a file is not found
-    progress_callback: None | Callable[[dict[str, Any]], None], optional
+    callback: None | Callable[[dict[str, Any]], None], optional
         Callback function to report progress. Called with a dict containing:
         - "type": "info", "success", "error", or "warning"
         - "message": Progress message
         - "file": Current file being processed (if applicable)
         - "total_files": Total number of files (if applicable)
         - "current_file": Current file index (if applicable)
+    maxdepth: int or None
+        Maximum recursion depth when recursive=True
+    on_error: "raise" or "ignore"
+        What to do if a file is not found
     """
     if isinstance(lpath, list) and isinstance(rpath, list):
         await put_list(
@@ -497,9 +497,9 @@ async def put(
             lpath,
             rpath,
             recursive,
+            callback,
             maxdepth,
             on_error,
-            progress_callback,
             **kwargs,
         )
 
@@ -512,8 +512,8 @@ async def put(
     if recursive and os.path.isdir(lpath):
         await self.makedirs(rpath, exist_ok=True)
 
-        if progress_callback:
-            progress_callback(
+        if callback:
+            callback(
                 {
                     "type": "info",
                     "message": f"Starting recursive upload from {lpath}",
@@ -527,8 +527,8 @@ async def put(
                 local_file = Path(root) / file_name
                 all_files.append(str(local_file))
 
-        if progress_callback:
-            progress_callback(
+        if callback:
+            callback(
                 {
                     "type": "info",
                     "message": f"Found {len(all_files)} files to upload",
@@ -554,8 +554,8 @@ async def put(
 
                 current_index = all_files.index(str(local_file)) + 1
 
-                if progress_callback:
-                    progress_callback(
+                if callback:
+                    callback(
                         {
                             "type": "info",
                             "message": f"Uploading file {current_index}/{len(all_files)}: {local_file}",
@@ -567,8 +567,8 @@ async def put(
 
                 try:
                     await put_single_file(self, str(local_file), str(remote_file))
-                    if progress_callback:
-                        progress_callback(
+                    if callback:
+                        callback(
                             {
                                 "type": "success",
                                 "message": f"Successfully uploaded: {local_file}",
@@ -576,8 +576,8 @@ async def put(
                             }
                         )
                 except (FileNotFoundError, IOError, httpx.RequestError) as e:
-                    if progress_callback:
-                        progress_callback(
+                    if callback:
+                        callback(
                             {
                                 "type": "error",
                                 "message": f"Failed to upload {local_file}: {str(e)}",
@@ -587,8 +587,8 @@ async def put(
                     if on_error == "raise":
                         raise e
     else:
-        if progress_callback:
-            progress_callback(
+        if callback:
+            callback(
                 {
                     "type": "info",
                     "message": f"Uploading single file: {lpath}",
@@ -598,8 +598,8 @@ async def put(
 
         try:
             await put_single_file(self, lpath, rpath)
-            if progress_callback:
-                progress_callback(
+            if callback:
+                callback(
                     {
                         "type": "success",
                         "message": f"Successfully uploaded: {lpath}",
@@ -607,8 +607,8 @@ async def put(
                     }
                 )
         except (FileNotFoundError, IOError, httpx.RequestError) as e:
-            if progress_callback:
-                progress_callback(
+            if callback:
+                callback(
                     {
                         "type": "error",
                         "message": f"Failed to upload {lpath}: {str(e)}",
