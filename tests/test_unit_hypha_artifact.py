@@ -15,7 +15,7 @@ def get_artifact(mocker: MockerFixture) -> HyphaArtifact:
     mock_async_artifact = mocker.patch(
         "hypha_artifact.hypha_artifact.AsyncHyphaArtifact"
     )
-    artifact = HyphaArtifact("test-artifact", "test-workspace")
+    artifact = HyphaArtifact("test-artifact", "test-workspace", server_url="https://hypha.aicell.io")
     artifact._async_artifact = mock_async_artifact.return_value
     return artifact
 

@@ -13,7 +13,7 @@ from hypha_artifact import AsyncHyphaArtifact
 def get_async_artifact(mocker: MockerFixture) -> AsyncHyphaArtifact:
     """Create a test artifact with a mocked async client."""
     mocker.patch("hypha_artifact.async_hypha_artifact.httpx.AsyncClient")
-    return AsyncHyphaArtifact("test-artifact", "test-workspace")
+    return AsyncHyphaArtifact("test-artifact", "test-workspace", server_url="https://hypha.aicell.io")
 
 
 class TestAsyncHyphaArtifactUnit:
