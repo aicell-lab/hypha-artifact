@@ -420,14 +420,7 @@ async def touch(
         async with self.open(path, "wb", **kwargs):
             pass
 
-    # try:
-    #     async with self.open(path, "a") as f:
-    #         await f.write("")
-    # except FileNotFoundError:
-    #     async with self.open(path, "w") as f:
-    #         await f.write("")
-
-    # TODO: handle truncate option
+    # TODO: handle not truncate option
 
 
 async def mkdir(
