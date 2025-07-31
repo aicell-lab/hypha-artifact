@@ -20,6 +20,7 @@ from ._remote import (
     remote_list_contents,
     remote_remove_file,
 )
+from ._utils import walk_dir
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -216,36 +217,7 @@ async def find(
         List of paths or dict of {path: info_dict}
     """
 
-    async def _walk_dir(
-        current_path: str, current_depth: int
-    ) -> dict[str, ArtifactItem]:
-        results: dict[str, ArtifactItem] = {}
-
-        try:
-            items = await self.ls(current_path)
-        except (FileNotFoundError, IOError, httpx.RequestError):
-            return {}
-
-        for item in items:
-            item_type = item["type"]
-            item_name = item["name"]
-
-            if item_type == "file" or (withdirs and item_type == "directory"):
-                full_path = Path(current_path) / str(item_name)
-                results[str(full_path)] = item
-
-            if item_type == "directory" and (
-                maxdepth is None or current_depth < maxdepth
-            ):
-                subdir_path = Path(current_path) / str(item_name)
-                subdirectory_results = await _walk_dir(
-                    str(subdir_path), current_depth + 1
-                )
-                results.update(subdirectory_results)
-
-        return results
-
-    all_files = await _walk_dir(path, 1)
+    all_files = await walk_dir(self, path, maxdepth, withdirs, 1)
 
     if detail:
         return all_files
