@@ -6,7 +6,6 @@ import io
 from typing import TYPE_CHECKING, Self
 from types import TracebackType
 import httpx
-from .utils import FileMode
 from .sync_utils import run_sync
 from .async_artifact_file import AsyncArtifactHttpFile
 
@@ -32,7 +31,7 @@ class ArtifactHttpFile(io.IOBase):
     def __init__(
         self: Self,
         url: str,
-        mode: FileMode = "r",
+        mode: str = "r",
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,

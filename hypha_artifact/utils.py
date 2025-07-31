@@ -2,7 +2,6 @@
 
 from typing import Any, Literal
 
-FileMode = Literal["r", "rb", "w", "wb", "a", "ab"]
 OnError = Literal["raise", "ignore"]
 JsonType = str | int | float | bool | None | dict[str, Any] | list[Any]
 

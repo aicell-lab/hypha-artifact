@@ -9,7 +9,7 @@ and manipulating files stored in Hypha artifacts.
 from datetime import datetime
 from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
 
-from .utils import FileMode, OnError
+from .utils import OnError
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
 from .sync_utils import run_sync
@@ -130,7 +130,7 @@ class HyphaArtifact:
     def open(
         self: Self,
         urlpath: str,
-        mode: FileMode = "rb",
+        mode: str = "rb",
         **kwargs: Any,  # pylint: disable=unused-argument
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing"""
