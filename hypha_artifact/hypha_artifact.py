@@ -13,6 +13,7 @@ from .utils import FileMode, OnError
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
 from .sync_utils import run_sync
+from .classes import ArtifactItem
 
 if not TYPE_CHECKING:
     try:
@@ -270,27 +271,27 @@ class HyphaArtifact:
         path: str,
         detail: Literal[True],
         **kwargs: Any,
-    ) -> list[dict[str, float | int | str]]: ...
+    ) -> list[ArtifactItem]: ...
 
     @overload
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
         **kwargs: Any,
-    ) -> list[dict[str, float | int | str]]: ...
+    ) -> list[ArtifactItem]: ...
 
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
         detail: Literal[True] | Literal[False] = True,
         **kwargs: Any,
-    ) -> list[str] | list[dict[str, float | int | str]]:
+    ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory"""
         return run_sync(self._async_artifact.ls(path, detail, **kwargs))
 
     def info(
         self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
-    ) -> dict[str, float | int | str]:
+    ) -> ArtifactItem:
         """Get information about a file or directory"""
         return run_sync(self._async_artifact.info(path, **kwargs))
 
@@ -317,7 +318,7 @@ class HyphaArtifact:
         *,
         detail: Literal[True],
         **kwargs: dict[str, Any],
-    ) -> dict[str, dict[str, float | int | str]]: ...
+    ) -> dict[str, ArtifactItem]: ...
 
     @overload
     def find(
@@ -336,7 +337,7 @@ class HyphaArtifact:
         withdirs: bool = False,
         detail: bool = False,
         **kwargs: dict[str, Any],
-    ) -> list[str] | dict[str, dict[str, float | int | str]]:
+    ) -> list[str] | dict[str, ArtifactItem]:
         """Find all files (and optional directories) under a path"""
         return run_sync(
             self._async_artifact.find(
