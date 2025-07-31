@@ -67,7 +67,7 @@ class TestAsyncHyphaArtifactUnit:
     ):
         """Test the copy method."""
         mock_copy_single_file = mocker.patch(
-            "hypha_artifact.async_hypha_artifact._io._copy_single_file",
+            "hypha_artifact.async_hypha_artifact._io.copy_single_file",
             new=AsyncMock(),
         )
         await async_artifact.copy("a.txt", "b.txt")
