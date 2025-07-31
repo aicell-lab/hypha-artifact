@@ -5,7 +5,7 @@ import locale
 import os
 from typing import Self
 from types import TracebackType
-import requests
+import httpx
 from .utils import FileMode
 
 
@@ -13,7 +13,7 @@ class ArtifactHttpFile(io.IOBase):
     """A file-like object that supports both sync and async context manager protocols.
 
     This implements a file interface for Hypha artifacts, handling HTTP operations
-    via the requests library instead of relying on Pyodide.
+    via the httpx library instead of relying on Pyodide.
     """
 
     name: str | None
@@ -53,24 +53,23 @@ class ArtifactHttpFile(io.IOBase):
             if range_header:
                 headers["Range"] = range_header
 
-            response = requests.get(self._url, headers=headers, timeout=10)
-            response.raise_for_status()
-            self._buffer = io.BytesIO(response.content)
-        except requests.exceptions.RequestException as e:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(self._url, headers=headers)
+                response.raise_for_status()
+                self._buffer = io.BytesIO(response.content)
+        except httpx.HTTPStatusError as e:
             # More detailed error information for debugging
-            status_code = (
-                e.response.status_code
-                if hasattr(e, "response") and e.response is not None
-                else "unknown"
-            )
+            status_code = e.response.status_code
             message = str(e)
             raise IOError(
                 f"Error downloading content (status {status_code}): {message}"
             ) from e
+        except httpx.RequestError as e:
+            raise IOError(f"Request error downloading content: {str(e)}") from e
         except Exception as e:
             raise IOError(f"Unexpected error downloading content: {str(e)}") from e
 
-    def _upload_content(self: Self) -> requests.Response:
+    def _upload_content(self: Self) -> httpx.Response:
         """Upload buffer content to URL"""
         try:
             content = self._buffer.getvalue()
@@ -80,18 +79,18 @@ class ArtifactHttpFile(io.IOBase):
                 "Content-Length": str(len(content)),
             }
 
-            response = requests.put(self._url, data=content, headers=headers, timeout=3)
-
-            response.raise_for_status()
-            return response
-        except requests.exceptions.HTTPError as e:
-            status_code = (
-                e.response.status_code if hasattr(e, "response") else "unknown"
-            )
-            error_msg = e.response.text if hasattr(e, "response") else str(e)
+            with httpx.Client(timeout=3.0) as client:
+                response = client.put(self._url, content=content, headers=headers)
+                response.raise_for_status()
+                return response
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code
+            error_msg = e.response.text
             raise IOError(
                 f"HTTP error uploading content (status {status_code}): {error_msg}"
             ) from e
+        except httpx.RequestError as e:
+            raise IOError(f"Request error uploading content: {str(e)}") from e
         except Exception as e:
             raise IOError(f"Error uploading content: {str(e)}") from e
 
