@@ -41,8 +41,8 @@ class HyphaArtifact:
         The workspace identifier associated with the artifact.
     token : str | None
         The authentication token for accessing the artifact service.
-    service_url : str | None
-        The base URL for the Hypha artifact manager service.
+    server_url : str | None
+        The base URL for the Hypha server.
     use_proxy : bool | None
         Whether to use a proxy for HTTP requests.
 
@@ -66,7 +66,7 @@ class HyphaArtifact:
         artifact_id: str,
         workspace: str | None = None,
         token: str | None = None,
-        service_url: str | None = None,
+        server_url: str | None = None,
         use_proxy: bool | None = None,
     ):
         """Initialize a HyphaArtifact instance.
@@ -77,7 +77,7 @@ class HyphaArtifact:
             The identifier of the Hypha artifact to interact with
         """
         self._async_artifact = AsyncHyphaArtifact(
-            artifact_id, workspace, token, service_url, use_proxy=use_proxy
+            artifact_id, workspace, token, server_url, use_proxy=use_proxy
         )
 
     def edit(

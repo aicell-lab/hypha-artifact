@@ -22,7 +22,7 @@ class ArtifactHttpFile(io.IOBase):
     """A file-like object that supports both sync and async context manager protocols.
 
     This implements a file interface for Hypha artifacts, handling HTTP operations
-    via the requests library instead of relying on Pyodide.
+    via the httpx library instead of relying on Pyodide.
     """
 
     name: str | None

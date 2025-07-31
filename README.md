@@ -81,7 +81,8 @@ from hypha_artifact import HyphaArtifact
 artifact = HyphaArtifact(
     artifact_id="my-artifact",
     workspace="your-workspace-id", 
-    token="your-workspace-token"
+    token="your-workspace-token",
+    server_url="your-server-url"
 )
 
 # Stage changes to the artifact
@@ -129,6 +130,7 @@ async def main():
         artifact_id="my-artifact",
         workspace="your-workspace-id", 
         token="your-workspace-token"
+        server_url="your-server-url"
     ) as artifact:
         
         # Stage changes to the artifact
@@ -176,7 +178,7 @@ The `HyphaArtifact` class provides synchronous file operations:
 #### Initialization
 
 ```python
-HyphaArtifact(artifact_id: str, workspace: str, token: str)
+HyphaArtifact(artifact_id: str, workspace: str, token: str, server_url: str, use_proxy: bool)
 ```
 
 #### File Operations
@@ -194,7 +196,7 @@ HyphaArtifact(artifact_id: str, workspace: str, token: str)
 from hypha_artifact import HyphaArtifact
 
 # Initialize artifact
-artifact = HyphaArtifact("my-data", "workspace-123", "token-456")
+artifact = HyphaArtifact(artifact_id="my-data", workspace="workspace-123", token="token-456", server_url="your-server-url")
 
 # Stage changes before writing
 artifact.edit(stage=True)
@@ -255,7 +257,8 @@ from hypha_artifact import AsyncHyphaArtifact
 async_artifact = AsyncHyphaArtifact(
     artifact_id="my-artifact",
     workspace="workspace-id",
-    token="your-token"
+    token="your-token",
+    server_url="your-server-url"
 )
 ```
 
@@ -280,7 +283,7 @@ from hypha_artifact import AsyncHyphaArtifact
 
 async def main():
     # Method 1: Manual connection management
-    artifact = AsyncHyphaArtifact("my-workspace/my-artifact", token="token")
+    artifact = AsyncHyphaArtifact(artifact_id="my-workspace/my-artifact", token="token", workspace="my-workspace", server_url="your-server-url")
     
     await artifact.edit(stage=True)
     async with artifact.open("async_file.txt", "w") as f:
@@ -291,7 +294,7 @@ async def main():
     print(content)
     
     # Method 2: Context manager for the entire artifact
-    async with AsyncHyphaArtifact("my-artifact", "workspace", "token") as artifact:
+    async with AsyncHyphaArtifact(artifact_id="my-data", workspace="workspace-123", token="token-456", server_url="your-server-url") as artifact:
         # Stage, create, and commit
         await artifact.edit(stage=True)
         async with artifact.open("test.txt", "w") as f:
@@ -344,7 +347,7 @@ import asyncio
 from hypha_artifact import AsyncHyphaArtifact
 
 async def process_files():
-    async with AsyncHyphaArtifact("data-processing", "workspace", "token") as artifact:
+    async with AsyncHyphaArtifact(artifact_id="my-data", workspace="workspace-123", token="token-456", server_url="your-server-url") as artifact:
         
         # Stage changes before creating files
         await artifact.edit(stage=True)
@@ -385,7 +388,7 @@ The library provides powerful methods for transferring files between local files
 ```python
 from hypha_artifact import HyphaArtifact
 
-artifact = HyphaArtifact("my-artifact", "workspace", "token")
+artifact = HyphaArtifact(artifact_id="my-artifact", workspace="workspace", token="token", server_url="your-server-url")
 
 # Copy a single file from remote to local
 artifact.get("remote_file.txt", "local_file.txt")
@@ -423,7 +426,7 @@ import asyncio
 from hypha_artifact import AsyncHyphaArtifact
 
 async def transfer_files():
-    async with AsyncHyphaArtifact("my-artifact", "workspace", "token") as artifact:
+    async with AsyncHyphaArtifact(artifact_id="my-data", workspace="workspace-123", token="token-456", server_url="your-server-url") as artifact:
         
         # Copy files from remote to local
         await artifact.get("remote_file.txt", "local_file.txt")
@@ -494,7 +497,7 @@ async with artifact.open("large_file.txt", "r") as f:
 ```python
 from hypha_artifact import HyphaArtifact
 
-artifact = HyphaArtifact("my-artifact", "workspace", "token")
+artifact = HyphaArtifact(artifact_id="my-data", workspace="workspace-123", token="token-456", server_url="your-server-url")
 
 try:
     # Try to read a non-existent file

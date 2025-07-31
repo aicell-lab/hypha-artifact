@@ -21,7 +21,9 @@ async def get_async_artifact(
 ) -> Any:
     """Create a test artifact with a real async connection to Hypha."""
     token, workspace = artifact_setup_teardown
-    artifact = AsyncHyphaArtifact(artifact_name, workspace, token)
+    artifact = AsyncHyphaArtifact(
+        artifact_name, workspace, token, server_url="https://hypha.aicell.io"
+    )
     yield artifact
     await artifact.aclose()
 
@@ -237,6 +239,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             async_artifact.artifact_alias,
             async_artifact.workspace,
             async_artifact.token,
+            server_url="https://hypha.aicell.io",
         ) as ctx_artifact:
             await ctx_artifact.edit(stage=True)
             async with ctx_artifact.open(test_file_path, "w") as f:

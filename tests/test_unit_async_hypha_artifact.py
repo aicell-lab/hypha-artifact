@@ -19,7 +19,9 @@ def get_async_artifact(mocker: MockerFixture) -> AsyncHyphaArtifact:
         "hypha_artifact.async_hypha_artifact.httpx.AsyncClient",
         return_value=mock_client,
     )
-    artifact = AsyncHyphaArtifact("test-artifact", "test-workspace")
+    artifact = AsyncHyphaArtifact(
+        "test-artifact", "test-workspace", server_url="https://hypha.aicell.io"
+    )
     artifact._client = mock_client
     return artifact
 

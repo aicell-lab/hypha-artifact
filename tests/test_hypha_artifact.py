@@ -17,7 +17,7 @@ from hypha_artifact import HyphaArtifact
 def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -> Any:
     """Create a test artifact with a real connection to Hypha."""
     token, workspace = artifact_setup_teardown
-    return HyphaArtifact(artifact_name, workspace, token)
+    return HyphaArtifact(artifact_name, workspace, token, server_url="https://hypha.aicell.io")
 
 
 class TestHyphaArtifactIntegration(ArtifactTestMixin):
