@@ -77,7 +77,7 @@ class AsyncHyphaArtifact:
         artifact_id: str,
         workspace: str | None = None,
         token: str | None = None,
-        service_url: str | None = None,
+        server_url: str | None = None,
         use_proxy: bool | None = None,
     ):
         """Initialize an AsyncHyphaArtifact instance."""
@@ -92,11 +92,11 @@ class AsyncHyphaArtifact:
             self.workspace = workspace
             self.artifact_alias = artifact_id
         self.token = token
-        if service_url:
-            self.artifact_url = service_url
+        if server_url:
+            self.artifact_url = f"{server_url}/public/services/artifact-manager"
         else:
-            self.artifact_url = (
-                "https://hypha.aicell.io/public/services/artifact-manager"
+            raise ValueError(
+                "Server URL must be provided, e.g. https://hypha.aicell.io"
             )
         self._client = None
 
