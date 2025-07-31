@@ -493,9 +493,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             await async_artifact.commit()
 
             # Test get with progress callback
-            await async_artifact.get(
-                test_file, local_file, progress_callback=progress_callback
-            )
+            await async_artifact.get(test_file, local_file, callback=progress_callback)
 
             # Verify callback was called
             assert (
@@ -515,9 +513,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             test_file2 = "async_progress_test2.txt"
 
             await async_artifact.edit(stage=True)
-            await async_artifact.put(
-                local_file, test_file2, progress_callback=progress_callback
-            )
+            await async_artifact.put(local_file, test_file2, callback=progress_callback)
             await async_artifact.commit()
 
             # Verify callback was called for put operation
