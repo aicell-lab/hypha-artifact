@@ -6,7 +6,10 @@ using the fsspec specification, allowing for operations like reading, writing, l
 and manipulating files stored in Hypha artifacts.
 """
 
+from datetime import datetime
 from typing import Literal, Self, overload, Any, TYPE_CHECKING
+
+from hypha_artifact.dataclasses import ArtifactItem
 from .utils import FileMode, OnError
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
@@ -236,7 +239,7 @@ class HyphaArtifact:
         """Remove file or directory"""
         return run_sync(self._async_artifact.rm(path, recursive, maxdepth))
 
-    def created(self: Self, path: str) -> str | None:
+    def created(self: Self, path: str) -> datetime | None:
         """Get the creation time of a file"""
         return run_sync(self._async_artifact.created(path))
 
@@ -266,27 +269,27 @@ class HyphaArtifact:
         path: str,
         detail: Literal[True],
         **kwargs: Any,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[ArtifactItem]: ...
 
     @overload
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
         **kwargs: Any,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[ArtifactItem]: ...
 
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
         detail: Literal[True] | Literal[False] = True,
         **kwargs: Any,
-    ) -> list[str] | list[dict[str, Any]]:
+    ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory"""
         return run_sync(self._async_artifact.ls(path, detail, **kwargs))
 
     def info(
         self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
-    ) -> dict[str, Any]:
+    ) -> ArtifactItem:
         """Get information about a file or directory"""
         return run_sync(self._async_artifact.info(path, **kwargs))
 
@@ -313,7 +316,7 @@ class HyphaArtifact:
         *,
         detail: Literal[True],
         **kwargs: dict[str, Any],
-    ) -> dict[str, dict[str, Any]]: ...
+    ) -> dict[str, ArtifactItem]: ...
 
     @overload
     def find(
@@ -332,7 +335,7 @@ class HyphaArtifact:
         withdirs: bool = False,
         detail: bool = False,
         **kwargs: dict[str, Any],
-    ) -> list[str] | dict[str, dict[str, Any]]:
+    ) -> list[str] | dict[str, ArtifactItem]:
         """Find all files (and optional directories) under a path"""
         return run_sync(
             self._async_artifact.find(

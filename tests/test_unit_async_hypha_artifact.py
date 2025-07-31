@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, AsyncMock
 import pytest
 from pytest_mock import MockerFixture
 from hypha_artifact import AsyncHyphaArtifact
+from hypha_artifact.dataclasses import ArtifactItem
 
 
 @pytest.fixture(name="async_artifact")
@@ -71,16 +72,18 @@ class TestAsyncHyphaArtifactUnit:
         """Test the ls method."""
         async_artifact._remote_list_contents = AsyncMock(return_value=[])
         await async_artifact.ls("/")
-        async_artifact._remote_list_contents.assert_called_once_with("")
+        async_artifact._remote_list_contents.assert_called_once_with("/")
 
     @pytest.mark.asyncio
     async def test_info(self, async_artifact: AsyncHyphaArtifact):
         """Test the info method."""
         # Mock the ls method that info actually calls
-        async_artifact.ls = AsyncMock(return_value=[{"name": "test.txt", "type": "file"}])
+        async_artifact.ls = AsyncMock(
+            return_value=[ArtifactItem(name="test.txt", type="file", size=123)]
+        )
         result = await async_artifact.info("test.txt")
         async_artifact.ls.assert_called_once_with("")
-        assert result == {"name": "test.txt", "type": "file"}
+        assert result == ArtifactItem(name="test.txt", type="file", size=123)
 
     @pytest.mark.asyncio
     async def test_info_root(self, async_artifact: AsyncHyphaArtifact):

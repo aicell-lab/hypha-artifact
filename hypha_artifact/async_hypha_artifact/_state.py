@@ -1,10 +1,10 @@
-# pylint: disable=protected-access
-# pyright: reportPrivateUsage=false
 """Methods for managing the artifact's state."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+
+from ._remote import remote_post
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -43,7 +43,7 @@ async def edit(
         "comment": comment,
         "stage": stage,
     }
-    await self._remote_post("edit", params)
+    await remote_post(self, "edit", params)
 
 
 async def commit(
@@ -65,4 +65,4 @@ async def commit(
         "version": version,
         "comment": comment,
     }
-    await self._remote_post("commit", params)
+    await remote_post(self, "commit", params)

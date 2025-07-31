@@ -52,7 +52,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Verify the file was created
             files = await async_artifact.ls("/")
-            file_names = [f.get("name") for f in files]
+            file_names = [f.name for f in files]
             assert (
                 test_file_path in file_names
             ), f"Created file {test_file_path} not found in {file_names}"

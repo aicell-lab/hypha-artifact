@@ -1,10 +1,9 @@
-# pylint: disable=protected-access
-# pyright: reportPrivateUsage=false
 """Methods for file I/O operations."""
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -14,8 +13,10 @@ from typing import (
 
 import httpx
 
-from ..utils import FileMode, OnError, normalize_path
+from ..utils import FileMode, OnError
 from ..async_artifact_file import AsyncArtifactHttpFile
+
+from ._remote import remote_get_file_url, remote_put_file_url
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -109,17 +110,15 @@ def fsspec_open(
     AsyncArtifactHttpFile
         A file-like object
     """
-    normalized_path = normalize_path(urlpath)
-
     if "r" in mode:
 
         async def get_url():
-            return await self._remote_get_file_url(normalized_path)
+            return await remote_get_file_url(self, urlpath)
 
     elif "w" in mode or "a" in mode:
 
         async def get_url():
-            url = await self._remote_put_file_url(normalized_path)
+            url = await remote_put_file_url(self, urlpath)
             return url
 
     else:
@@ -128,7 +127,7 @@ def fsspec_open(
     return AsyncArtifactHttpFile(
         url_func=get_url,
         mode=mode,
-        name=normalized_path,
+        name=str(urlpath),
     )
 
 
@@ -159,27 +158,27 @@ async def copy(
     if recursive and await self.isdir(path1):
         files = await self.find(path1, maxdepth=maxdepth, withdirs=False)
         for src_path in files:
-            rel_path = src_path[len(path1) :].lstrip("/")
-            dst_path = f"{path2}/{rel_path}"
+            rel_path = Path(src_path).relative_to(path1)
+            dst_path = Path(path2) / rel_path
             try:
-                await self._copy_single_file(src_path, dst_path)
+                await copy_single_file(self, src_path, str(dst_path))
             except (FileNotFoundError, IOError, httpx.RequestError) as e:
                 if on_error == "raise":
                     raise e
     else:
-        await self._copy_single_file(path1, path2)
+        await copy_single_file(self, path1, path2)
 
 
 def _callback_msg(
-    file_dict: str,
+    file_path: str,
     num_total_files: int,
     current_file_index: int,
 ) -> dict[str, dict[str, Any] | str | int]:
     """Create a progress callback message."""
     return {
         "type": "info",
-        "message": f"Downloading file {current_file_index + 1}/{num_total_files}: {file_dict}",
-        "file": file_dict,
+        "message": f"Downloading file {current_file_index + 1}/{num_total_files}: {file_path}",
+        "file": str(file_path),
         "total_files": num_total_files,
         "current_file": current_file_index + 1,
     }
@@ -264,14 +263,14 @@ async def get_recursive(
 
     for i, remote_file in enumerate(files):
         if rpath:
-            rel_path = remote_file[len(rpath) :].lstrip("/")
+            rel_path = Path(remote_file).relative_to(rpath)
         else:
             rel_path = remote_file
-        local_file = os.path.join(lpath, rel_path)
+        local_file = Path(lpath) / rel_path
 
-        local_dir = os.path.dirname(local_file)
+        local_dir = local_file.parent
         if local_dir:
-            os.makedirs(local_dir, exist_ok=True)
+            local_dir.mkdir(parents=True, exist_ok=True)
 
         if progress_callback:
             callback_msg = _callback_msg(
@@ -282,7 +281,7 @@ async def get_recursive(
             progress_callback(callback_msg)
 
         try:
-            await self._get_single_file(remote_file, local_file)
+            await get_single_file(self, remote_file, str(local_file))
             if progress_callback:
                 progress_callback(
                     {
@@ -350,7 +349,8 @@ async def get(
         - "current_file": Current file index (if applicable)
     """
     if isinstance(rpath, list) and isinstance(lpath, list):
-        await self._get_list(
+        await get_list(
+            self,
             rpath,
             lpath,
             recursive=recursive,
@@ -366,7 +366,8 @@ async def get(
     ), "rpath and lpath must be either both strings or both lists of strings"
 
     if recursive and await self.isdir(rpath):
-        await self._get_recursive(
+        await get_recursive(
+            self,
             rpath,
             lpath,
             maxdepth=maxdepth,
@@ -389,7 +390,7 @@ async def get(
         )
 
     try:
-        await self._get_single_file(rpath, lpath)
+        await get_single_file(self, rpath, lpath)
         if progress_callback:
             progress_callback(
                 {
@@ -472,9 +473,9 @@ async def put(
 
     Parameters
     ----------
-    lpath: str or list of str
+    lpath: str or list of Path
         Local path(s) to copy from
-    rpath: str or list of str
+    rpath: str or list of Path
         Remote path(s) to copy to
     recursive: bool
         If True and lpath is a directory, copy all its contents recursively
@@ -491,8 +492,15 @@ async def put(
         - "current_file": Current file index (if applicable)
     """
     if isinstance(lpath, list) and isinstance(rpath, list):
-        await self._put_list(
-            lpath, rpath, recursive, maxdepth, on_error, progress_callback, **kwargs
+        await put_list(
+            self,
+            lpath,
+            rpath,
+            recursive,
+            maxdepth,
+            on_error,
+            progress_callback,
+            **kwargs,
         )
 
         return
@@ -516,8 +524,8 @@ async def put(
         all_files: list[str] = []
         for root, dirs, files in os.walk(lpath):
             for file_name in files:
-                local_file = os.path.join(root, file_name)
-                all_files.append(local_file)
+                local_file = Path(root) / file_name
+                all_files.append(str(local_file))
 
         if progress_callback:
             progress_callback(
@@ -534,17 +542,17 @@ async def put(
             if rel_root == ".":
                 remote_dir = rpath
             else:
-                remote_dir = f"{rpath}/{rel_root}"
+                remote_dir = Path(rpath) / rel_root
 
             for dir_name in dirs:
-                remote_subdir = f"{remote_dir}/{dir_name}"
-                await self.makedirs(remote_subdir, exist_ok=True)
+                remote_subdir = Path(remote_dir) / dir_name
+                await self.makedirs(str(remote_subdir), exist_ok=True)
 
             for file_name in files:
-                local_file = os.path.join(root, file_name)
-                remote_file = f"{remote_dir}/{file_name}"
+                local_file = Path(root) / file_name
+                remote_file = Path(remote_dir) / file_name
 
-                current_index = all_files.index(local_file) + 1
+                current_index = all_files.index(str(local_file)) + 1
 
                 if progress_callback:
                     progress_callback(
@@ -558,7 +566,7 @@ async def put(
                     )
 
                 try:
-                    await self._put_single_file(local_file, remote_file)
+                    await put_single_file(self, str(local_file), str(remote_file))
                     if progress_callback:
                         progress_callback(
                             {
@@ -589,7 +597,7 @@ async def put(
             )
 
         try:
-            await self._put_single_file(lpath, rpath)
+            await put_single_file(self, lpath, rpath)
             if progress_callback:
                 progress_callback(
                     {

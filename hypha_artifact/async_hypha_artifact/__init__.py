@@ -56,6 +56,7 @@ from ._fs import (
     mkdir,
     makedirs,
     rmdir,
+    touch,
 )
 
 
@@ -123,7 +124,7 @@ class AsyncHyphaArtifact:
             await self._client.aclose()
             self._client = None
 
-    def _get_client(self: Self) -> httpx.AsyncClient:
+    def get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient()
@@ -168,3 +169,4 @@ class AsyncHyphaArtifact:
     mkdir = mkdir
     makedirs = makedirs
     rmdir = rmdir
+    touch = touch
