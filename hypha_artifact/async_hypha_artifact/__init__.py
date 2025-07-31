@@ -6,23 +6,11 @@ using the fsspec specification, allowing for operations like reading, writing, l
 and manipulating files stored in Hypha artifacts.
 """
 
-# TODO: replicate fsspec code implementation as much as possible
 import os
 from typing import Self, Any
 
 import httpx
 
-# Imported methods
-from ._remote import (
-    extend_params,
-    remote_request,
-    remote_post,
-    remote_get,
-    remote_put_file_url,
-    remote_remove_file,
-    remote_get_file_url,
-    remote_list_contents,
-)
 from ._state import edit, commit
 from ._io import (
     cat,
@@ -32,12 +20,6 @@ from ._io import (
     get,
     put,
     head,
-    copy_single_file,
-    put_single_file,
-    get_single_file,
-    get_recursive,
-    get_list,
-    put_list,
 )
 from ._fs import (
     ls,
@@ -130,14 +112,6 @@ class AsyncHyphaArtifact:
             self._client = httpx.AsyncClient()
         return self._client
 
-    _extend_params = extend_params
-    _remote_request = remote_request
-    _remote_post = remote_post
-    _remote_get = remote_get
-    _remote_put_file_url = remote_put_file_url
-    _remote_remove_file = remote_remove_file
-    _remote_get_file_url = remote_get_file_url
-    _remote_list_contents = remote_list_contents
     edit = edit
     commit = commit
     cat = cat
@@ -147,12 +121,6 @@ class AsyncHyphaArtifact:
     get = get
     put = put
     head = head
-    _copy_single_file = copy_single_file
-    _put_single_file = put_single_file
-    _get_single_file = get_single_file
-    _get_recursive = get_recursive
-    _get_list = get_list
-    _put_list = put_list
     ls = ls
     listdir = listdir
     info = info
