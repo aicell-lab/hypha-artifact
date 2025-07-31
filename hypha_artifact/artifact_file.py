@@ -47,7 +47,7 @@ class ArtifactHttpFile(io.IOBase):
     def _download_content(self: Self, range_header: str | None = None) -> None:
         """Download content from URL into buffer, optionally using a range header."""
         try:
-            headers: dict[str, str | None] = {
+            headers: dict[str, str] = {
                 "Accept-Encoding": "identity"  # Prevent gzip compression
             }
             if range_header:
