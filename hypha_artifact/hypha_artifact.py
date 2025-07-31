@@ -6,11 +6,14 @@ using the fsspec specification, allowing for operations like reading, writing, l
 and manipulating files stored in Hypha artifacts.
 """
 
-from typing import Literal, Self, overload, Any, TYPE_CHECKING
-from .utils import FileMode, OnError
+from datetime import datetime
+from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
+
+from .utils import OnError
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
 from .sync_utils import run_sync
+from .classes import ArtifactItem
 
 if not TYPE_CHECKING:
     try:
@@ -127,7 +130,7 @@ class HyphaArtifact:
     def open(
         self: Self,
         urlpath: str,
-        mode: FileMode = "rb",
+        mode: str = "rb",
         **kwargs: Any,  # pylint: disable=unused-argument
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing"""
@@ -162,6 +165,7 @@ class HyphaArtifact:
         rpath: str | list[str],
         lpath: str | list[str],
         recursive: bool = False,
+        callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         **kwargs: Any,
@@ -183,7 +187,7 @@ class HyphaArtifact:
         """
         return run_sync(
             self._async_artifact.get(
-                rpath, lpath, recursive, maxdepth, on_error, **kwargs
+                rpath, lpath, recursive, callback, maxdepth, on_error, **kwargs
             )
         )
 
@@ -192,6 +196,7 @@ class HyphaArtifact:
         lpath: str | list[str],
         rpath: str | list[str],
         recursive: bool = False,
+        callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         **kwargs: Any,
@@ -213,7 +218,7 @@ class HyphaArtifact:
         """
         return run_sync(
             self._async_artifact.put(
-                lpath, rpath, recursive, maxdepth, on_error, **kwargs
+                lpath, rpath, recursive, callback, maxdepth, on_error, **kwargs
             )
         )
 
@@ -236,7 +241,7 @@ class HyphaArtifact:
         """Remove file or directory"""
         return run_sync(self._async_artifact.rm(path, recursive, maxdepth))
 
-    def created(self: Self, path: str) -> str | None:
+    def created(self: Self, path: str) -> datetime | None:
         """Get the creation time of a file"""
         return run_sync(self._async_artifact.created(path))
 
@@ -266,27 +271,27 @@ class HyphaArtifact:
         path: str,
         detail: Literal[True],
         **kwargs: Any,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[ArtifactItem]: ...
 
     @overload
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
         **kwargs: Any,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[ArtifactItem]: ...
 
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
         detail: Literal[True] | Literal[False] = True,
         **kwargs: Any,
-    ) -> list[str] | list[dict[str, Any]]:
+    ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory"""
         return run_sync(self._async_artifact.ls(path, detail, **kwargs))
 
     def info(
         self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
-    ) -> dict[str, Any]:
+    ) -> ArtifactItem:
         """Get information about a file or directory"""
         return run_sync(self._async_artifact.info(path, **kwargs))
 
@@ -313,7 +318,7 @@ class HyphaArtifact:
         *,
         detail: Literal[True],
         **kwargs: dict[str, Any],
-    ) -> dict[str, dict[str, Any]]: ...
+    ) -> dict[str, ArtifactItem]: ...
 
     @overload
     def find(
@@ -332,7 +337,7 @@ class HyphaArtifact:
         withdirs: bool = False,
         detail: bool = False,
         **kwargs: dict[str, Any],
-    ) -> list[str] | dict[str, dict[str, Any]]:
+    ) -> list[str] | dict[str, ArtifactItem]:
         """Find all files (and optional directories) under a path"""
         return run_sync(
             self._async_artifact.find(

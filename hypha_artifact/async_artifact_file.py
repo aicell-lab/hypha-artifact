@@ -7,7 +7,6 @@ from collections.abc import Callable, Awaitable
 from typing import Self
 from types import TracebackType
 import httpx
-from .utils import FileMode
 
 
 class AsyncArtifactHttpFile:
@@ -23,7 +22,7 @@ class AsyncArtifactHttpFile:
     def __init__(
         self: Self,
         url_func: Callable[[], Awaitable[str]],
-        mode: FileMode = "r",
+        mode: str = "r",
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
@@ -197,7 +196,7 @@ class AsyncArtifactHttpFile:
             return
 
         try:
-            if ("w" in self._mode or "a" in self._mode) and self._buffer.tell() > 0:
+            if "w" in self._mode or "a" in self._mode:
                 await self._upload_content()
         finally:
             self._closed = True
