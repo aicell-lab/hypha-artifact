@@ -14,6 +14,8 @@ from pathlib import Path
 
 import httpx
 
+from ..classes import ArtifactItem
+
 from ._remote import (
     remote_list_contents,
     remote_remove_file,
@@ -38,7 +40,7 @@ async def ls(
     path: str,
     detail: Literal[True],
     **kwargs: Any,
-) -> list[dict[str, float | int | str]]: ...
+) -> list[ArtifactItem]: ...
 
 
 @overload
@@ -46,7 +48,7 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     **kwargs: Any,
-) -> list[dict[str, float | int | str]]: ...
+) -> list[ArtifactItem]: ...
 
 
 # TODO: test with directories
@@ -55,16 +57,12 @@ async def ls(
     path: str,
     detail: Literal[True] | Literal[False] = True,
     **kwargs: Any,
-) -> list[str] | list[dict[str, float | int | str]]:
+) -> list[str] | list[ArtifactItem]:
     """List contents of path"""
     contents = await remote_list_contents(self, path)
 
     if detail:
-        return [
-            dict[str, float | int | str](**item)
-            for item in contents
-            if isinstance(item, dict)
-        ]
+        return [ArtifactItem(**item) for item in contents if isinstance(item, dict)]
 
     return [item["name"] for item in contents if isinstance(item, dict)]
 
@@ -73,7 +71,7 @@ async def info(
     self: "AsyncHyphaArtifact",
     path: str,
     **kwargs: Any,
-) -> dict[str, float | int | str]:
+) -> ArtifactItem:
     """Get information about a file or directory
 
     Parameters
@@ -100,7 +98,7 @@ async def info(
     if len(out1) == 1:
         return out1[0]
     elif len(out1) > 1 or out:
-        return {"name": path, "type": "directory", "size": 0}
+        return {"name": path, "type": "directory", "size": 0, "last_modified": None}
     else:
         raise FileNotFoundError(path)
 
@@ -176,7 +174,7 @@ async def find(
     *,
     detail: Literal[True],
     **kwargs: dict[str, Any],
-) -> dict[str, dict[str, float | int | str]]: ...
+) -> dict[str, ArtifactItem]: ...
 
 
 @overload
@@ -197,7 +195,7 @@ async def find(
     withdirs: bool = False,
     detail: bool = False,
     **kwargs: dict[str, Any],
-) -> list[str] | dict[str, dict[str, float | int | str]]:
+) -> list[str] | dict[str, ArtifactItem]:
     """Find all files (and optional directories) under a path
 
     Parameters
@@ -220,8 +218,8 @@ async def find(
 
     async def _walk_dir(
         current_path: str, current_depth: int
-    ) -> dict[str, dict[str, float | int | str]]:
-        results: dict[str, dict[str, float | int | str]] = {}
+    ) -> dict[str, ArtifactItem]:
+        results: dict[str, ArtifactItem] = {}
 
         try:
             items = await self.ls(current_path)
@@ -272,9 +270,15 @@ async def created(self: "AsyncHyphaArtifact", path: str) -> datetime | None:
     datetime or None
         Creation time of the file, if available
     """
-    raise NotImplementedError
-    # path_info = await self.info(path)
-    # return path_info.last_modified
+    path_info = await self.info(path)
+
+    last_modified = path_info["last_modified"]
+
+    if last_modified:
+        datetime_modified = datetime.fromtimestamp(last_modified)
+        return datetime_modified
+
+    return None
 
 
 async def size(self: "AsyncHyphaArtifact", path: str) -> int:
@@ -399,7 +403,7 @@ async def rmdir(self: "AsyncHyphaArtifact", path: str) -> None:
 async def touch(
     self: "AsyncHyphaArtifact",
     path: str,
-    # truncate: bool = True,
+    truncate: bool = True,
     **kwargs: Any,
 ) -> None:
     """Create a file if it does not exist, or update its last modified time
@@ -412,12 +416,16 @@ async def touch(
         If True, always set file size to 0;
         if False, update timestamp and leave file unchanged
     """
-    try:
-        async with self.open(path, "a") as f:
-            await f.write("")
-    except FileNotFoundError:
-        async with self.open(path, "w") as f:
-            await f.write("")
+    if truncate or not await self.exists(path):
+        async with self.open(path, "wb", **kwargs):
+            pass
+
+    # try:
+    #     async with self.open(path, "a") as f:
+    #         await f.write("")
+    # except FileNotFoundError:
+    #     async with self.open(path, "w") as f:
+    #         await f.write("")
 
     # TODO: handle truncate option
 
