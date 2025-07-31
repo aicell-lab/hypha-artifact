@@ -86,19 +86,23 @@ async def info(
     dict
         Dictionary with file information
     """
-    # TODO: implement this properly
+    parent_path = str(Path(path).parent)
 
-    # parent_path, filename = parent_and_filename(path)
+    out = await self.ls(parent_path, detail=True, **kwargs)
+    out = [o for o in out if str(o["name"]).rstrip("/") == Path(path).name]
 
-    # if filename == "":
-    #     return dict[str, float | int | str](type="directory", name="", size=0)
+    if out:
+        return out[0]
 
-    # listing = await self.ls(parent_path)
-    # for item in listing:
-    #     if item.name == filename:
-    #         return item
-
-    raise FileNotFoundError(f"Path not found: {path}")
+    out = await self.ls(path, detail=True, **kwargs)
+    path = str(Path(path))
+    out1 = [o for o in out if str(o["name"]).rstrip("/") == path]
+    if len(out1) == 1:
+        return out1[0]
+    elif len(out1) > 1 or out:
+        return {"name": path, "type": "directory", "size": 0}
+    else:
+        raise FileNotFoundError(path)
 
 
 async def isdir(self: "AsyncHyphaArtifact", path: str) -> bool:
