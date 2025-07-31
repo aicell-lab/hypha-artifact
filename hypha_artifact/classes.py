@@ -1,5 +1,6 @@
 """Represents a file or directory in the artifact storage."""
 
+from dataclasses import dataclass
 from typing import Any, TypedDict, Literal
 
 
@@ -12,6 +13,14 @@ class ArtifactItem(TypedDict):
     type: Literal["file", "directory"]
     size: int
     last_modified: float | None
+
+
+@dataclass
+class TransferPaths:
+    """Helper class to store source and destination paths."""
+
+    src: str
+    dst: str
 
 
 class StatusMessage:

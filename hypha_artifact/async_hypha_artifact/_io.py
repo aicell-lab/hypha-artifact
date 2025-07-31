@@ -16,7 +16,7 @@ import httpx
 
 from ..utils import OnError
 from ..async_artifact_file import AsyncArtifactHttpFile
-from ..classes import StatusMessage
+from ..classes import StatusMessage, TransferPaths
 
 from ._remote import remote_get_file_url, remote_put_file_url
 
@@ -173,40 +173,40 @@ async def copy(
 
 async def _get_single_file(
     self: "AsyncHyphaArtifact",
-    remote_path: str,
-    local_path: str,
+    src_path: str,
+    dst_path: str,
 ) -> None:
     """Helper method to copy a single file from remote to local."""
-    local_dir = os.path.dirname(local_path)
+    local_dir = os.path.dirname(dst_path)
     if local_dir:
         os.makedirs(local_dir, exist_ok=True)
 
-    async with self.open(remote_path, "rb") as remote_file:
+    async with self.open(src_path, "rb") as remote_file:
         content = await remote_file.read()
 
     content_bytes = content.encode("utf-8") if isinstance(content, str) else content
 
-    with open(local_path, "wb") as local_file:
+    with open(dst_path, "wb") as local_file:
         local_file.write(content_bytes)
 
 
 async def _put_single_file(
     self: "AsyncHyphaArtifact",
-    local_path: str,
-    remote_path: str,
+    src_path: str,
+    dst_path: str,
 ) -> None:
     """Helper method to copy a single file from local to remote."""
-    with open(local_path, "rb") as local_file:
+    with open(src_path, "rb") as local_file:
         content = local_file.read()
 
-    async with self.open(remote_path, "wb") as remote_file:
+    async with self.open(dst_path, "wb") as remote_file:
         await remote_file.write(content)
 
 
 async def _transfer_single_file(
     self: "AsyncHyphaArtifact",
-    local_path: str,
-    remote_path: str,
+    src_path: str,
+    dst_path: str,
     callback: None | Callable[[dict[str, Any]], None] = None,
     on_error: OnError = "raise",
     current_file_index: int = 0,
@@ -218,19 +218,19 @@ async def _transfer_single_file(
     status_message = StatusMessage(method_name, total_files)
 
     if callback:
-        callback(status_message.in_progress(local_path, current_file_index))
+        callback(status_message.in_progress(src_path, current_file_index))
 
     try:
         if transfer_type == "PUT":
-            await _put_single_file(self, local_path, remote_path)
+            await _put_single_file(self, src_path=src_path, dst_path=dst_path)
         elif transfer_type == "GET":
-            await _get_single_file(self, remote_path, local_path)
+            await _get_single_file(self, dst_path=dst_path, src_path=src_path)
 
         if callback:
-            callback(status_message.success(local_path))
+            callback(status_message.success(src_path))
     except (FileNotFoundError, IOError, httpx.RequestError) as e:
         if callback:
-            callback(status_message.error(local_path, str(e)))
+            callback(status_message.error(src_path, str(e)))
         if on_error == "raise":
             raise e
 
@@ -260,34 +260,118 @@ def _local_find(
     return files
 
 
+def _get_transfer_paths(
+    lpath: str,
+    rpath: str,
+    transfer_type: Literal["PUT", "GET"],
+) -> TransferPaths:
+    """Get source and destination paths based on transfer type."""
+    if transfer_type == "GET":
+        return TransferPaths(src=rpath, dst=lpath)
+
+    return TransferPaths(src=lpath, dst=rpath)
+
+
+async def _prepare_recursive_transfer(
+    self: "AsyncHyphaArtifact",
+    paths: TransferPaths,
+    maxdepth: int | None,
+    transfer_type: Literal["PUT", "GET"],
+) -> list[tuple[str, str]]:
+    """Prepare a list of file transfers for recursive operations."""
+    files: list[str] = []
+    file_pairs: list[tuple[str, str]] = []
+    os.makedirs(paths.dst, exist_ok=True)
+
+    if transfer_type == "PUT":
+        files = _local_find(paths.src, maxdepth=maxdepth)
+
+    if transfer_type == "GET":
+        files = await self.find(paths.src, maxdepth=maxdepth, withdirs=False)
+
+    for f in files:
+        rel = Path(f).relative_to(paths.src)
+        file_pairs.append((f, str(Path(paths.dst) / rel)))
+
+    return file_pairs
+
+
 async def _prepare_transfer(
     self: "AsyncHyphaArtifact",
-    src_path: str,
-    dst_path: str,
+    lpath: str,
+    rpath: str,
     recursive: bool,
     maxdepth: int | None,
     transfer_type: Literal["PUT", "GET"],
 ) -> list[tuple[str, str]]:
     """Prepare a list of file transfers."""
-    file_pairs: list[tuple[str, str]] = []
+    paths: TransferPaths = _get_transfer_paths(
+        lpath=lpath, rpath=rpath, transfer_type=transfer_type
+    )
+
     if recursive:
-        os.makedirs(dst_path, exist_ok=True)
-        files: list[str] = []
+        return await _prepare_recursive_transfer(
+            self,
+            paths=paths,
+            maxdepth=maxdepth,
+            transfer_type=transfer_type,
+        )
 
-        if transfer_type == "PUT":
-            files = _local_find(src_path, maxdepth=maxdepth)
+    return [(paths.src, paths.dst)]
 
-        if transfer_type == "GET":
-            files = await self.find(src_path, maxdepth=maxdepth, withdirs=False)
 
-        if recursive:
-            for f in files:
-                rel = Path(f).relative_to(src_path)
-                file_pairs.append((f, str(Path(dst_path) / rel)))
+async def _transfer(
+    self: "AsyncHyphaArtifact",
+    rpath: str | list[str],
+    lpath: str | list[str],
+    recursive: bool = False,
+    callback: None | Callable[[dict[str, Any]], None] = None,
+    maxdepth: int | None = None,
+    on_error: OnError = "raise",
+    transfer_type: Literal["PUT", "GET"] = "PUT",
+    **kwargs: Any,
+) -> None:
+    """Copy file(s) from remote (artifact) to local filesystem."""
+    if isinstance(rpath, list) and isinstance(lpath, list):
+        if len(rpath) != len(lpath):
+            raise ValueError("rpath and lpath must be lists of the same length")
+        all_files: list[tuple[str, str]] = []
+        for rp, lp in zip(rpath, lpath):
+            all_files.extend(
+                await _prepare_transfer(
+                    self,
+                    rpath=rp,
+                    lpath=lp,
+                    recursive=recursive,
+                    maxdepth=maxdepth,
+                    transfer_type=transfer_type,
+                )
+            )
+    elif isinstance(rpath, str) and isinstance(lpath, str):
+        all_files = await _prepare_transfer(
+            self,
+            rpath=rpath,
+            lpath=lpath,
+            recursive=recursive,
+            maxdepth=maxdepth,
+            transfer_type=transfer_type,
+        )
     else:
-        file_pairs.append((src_path, dst_path))
+        raise TypeError(
+            "rpath and lpath must be either both strings or both lists of strings"
+        )
 
-    return file_pairs
+    for i, (src, dst) in enumerate(all_files):
+        await _transfer_single_file(
+            self,
+            src_path=src,
+            dst_path=dst,
+            callback=callback,
+            on_error=on_error,
+            current_file_index=i,
+            total_files=len(all_files),
+            transfer_type=transfer_type,
+        )
 
 
 async def get(
@@ -301,36 +385,16 @@ async def get(
     **kwargs: Any,
 ) -> None:
     """Copy file(s) from remote (artifact) to local filesystem."""
-    if isinstance(rpath, list) and isinstance(lpath, list):
-        if len(rpath) != len(lpath):
-            raise ValueError("rpath and lpath must be lists of the same length")
-        all_files: list[tuple[str, str]] = []
-        for rp, lp in zip(rpath, lpath):
-            all_files.extend(
-                await _prepare_transfer(
-                    self, rp, lp, recursive, maxdepth, transfer_type="GET"
-                )
-            )
-    elif isinstance(rpath, str) and isinstance(lpath, str):
-        all_files = await _prepare_transfer(
-            self, rpath, lpath, recursive, maxdepth, transfer_type="GET"
-        )
-    else:
-        raise TypeError(
-            "rpath and lpath must be either both strings or both lists of strings"
-        )
-
-    for i, (rp, lp) in enumerate(all_files):
-        await _transfer_single_file(
-            self,
-            local_path=lp,
-            remote_path=rp,
-            callback=callback,
-            on_error=on_error,
-            current_file_index=i,
-            total_files=len(all_files),
-            transfer_type="GET",
-        )
+    await _transfer(
+        self,
+        rpath=rpath,
+        lpath=lpath,
+        recursive=recursive,
+        callback=callback,
+        maxdepth=maxdepth,
+        on_error=on_error,
+        transfer_type="GET",
+    )
 
 
 async def put(
@@ -344,36 +408,16 @@ async def put(
     **kwargs: Any,
 ) -> None:
     """Copy file(s) from local filesystem to remote (artifact)."""
-    if isinstance(lpath, list) and isinstance(rpath, list):
-        if len(lpath) != len(rpath):
-            raise ValueError("lpath and rpath must be lists of the same length")
-        all_files: list[tuple[str, str]] = []
-        for lp, rp in zip(lpath, rpath):
-            all_files.extend(
-                await _prepare_transfer(
-                    self, lp, rp, recursive, maxdepth, transfer_type="PUT"
-                )
-            )
-    elif isinstance(lpath, str) and isinstance(rpath, str):
-        all_files = await _prepare_transfer(
-            self, lpath, rpath, recursive, maxdepth, transfer_type="PUT"
-        )
-    else:
-        raise TypeError(
-            "lpath and rpath must be either both strings or both lists of strings"
-        )
-
-    for i, (lp, rp) in enumerate(all_files):
-        await _transfer_single_file(
-            self,
-            local_path=lp,
-            remote_path=rp,
-            callback=callback,
-            on_error=on_error,
-            current_file_index=i,
-            total_files=len(all_files),
-            transfer_type="PUT",
-        )
+    await _transfer(
+        self,
+        rpath=rpath,
+        lpath=lpath,
+        recursive=recursive,
+        callback=callback,
+        maxdepth=maxdepth,
+        on_error=on_error,
+        transfer_type="PUT",
+    )
 
 
 async def _copy_single_file(self: "AsyncHyphaArtifact", src: str, dst: str) -> None:
