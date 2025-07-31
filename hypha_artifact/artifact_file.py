@@ -53,7 +53,7 @@ class ArtifactHttpFile(io.IOBase):
             if range_header:
                 headers["Range"] = range_header
 
-            response = requests.get(self._url, headers=headers, timeout=60)
+            response = requests.get(self._url, headers=headers, timeout=10)
             response.raise_for_status()
             self._buffer = io.BytesIO(response.content)
         except requests.exceptions.RequestException as e:
@@ -76,14 +76,11 @@ class ArtifactHttpFile(io.IOBase):
             content = self._buffer.getvalue()
 
             headers = {
-                "Content-Type": "", # Important for s3 compatibility
-                # "Content-Type": "application/octet-stream",
+                "Content-Type": "",
                 "Content-Length": str(len(content)),
             }
 
-            response = requests.put(
-                self._url, data=content, headers=headers, timeout=60
-            )
+            response = requests.put(self._url, data=content, headers=headers, timeout=3)
 
             response.raise_for_status()
             return response

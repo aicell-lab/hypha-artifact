@@ -18,3 +18,8 @@ def parent_and_filename(path: str) -> tuple[str | None, str]:
     if len(parts) == 1:
         return None, parts[-1]  # Root directory
     return "/".join(parts[:-1]), parts[-1]
+
+
+def normalize_path(path: str) -> str:
+    """Normalize the path by removing all leading slashes."""
+    return path.lstrip("/")
