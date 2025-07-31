@@ -440,7 +440,6 @@ async def mkdir(
     create_parents: bool
         If True, create parent directories if they don't exist
     """
-    # TODO: check if path requires parent directories to be created
     parent_path = str(Path(path).parent)
     child_path = str(Path(path).name)
 
@@ -461,10 +460,11 @@ async def makedirs(
     path: str,
     exist_ok: bool = True,
 ) -> None:
-    """Create a directory tree
+    """Recursively make directories
 
-    In the Hypha artifact system, directories don't need to be explicitly created,
-    they are implicitly created when files are added under a path.
+    Creates directory at path and any intervening required directories.
+    Raises exception if, for instance, the path already exists but is a
+    file.
 
     Parameters
     ----------
@@ -473,9 +473,10 @@ async def makedirs(
     exist_ok: bool
         If False and the directory exists, raise an error
     """
-    if not exist_ok and await self.exists(path) and await self.isdir(path):
+    if not exist_ok and await self.exists(path):
         raise FileExistsError(f"Directory already exists: {path}")
-    return
+
+    await self.mkdir(path, create_parents=True)
 
 
 async def exists(
@@ -496,8 +497,14 @@ async def exists(
         True if the path exists, False otherwise
     """
     try:
-        async with self.open(path, "r") as f:
+        keep_path = str(Path(path) / ".keep")
+        async with self.open(keep_path, "r") as f:
             await f.read(0)
             return True
     except (FileNotFoundError, IOError, httpx.RequestError):
-        return False
+        try:
+            async with self.open(path, "r") as f:
+                await f.read(0)
+                return True
+        except (FileNotFoundError, IOError, httpx.RequestError):
+            return False
