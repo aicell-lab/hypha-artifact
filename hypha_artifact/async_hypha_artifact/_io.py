@@ -316,6 +316,7 @@ async def get_single_file(
         local_file.write(content_bytes)
 
 
+# TODO: refactor, simplify
 async def get(
     self: "AsyncHyphaArtifact",
     rpath: str | list[str],
@@ -459,6 +460,7 @@ async def put_list(
     return
 
 
+# TODO: refactor, simplify
 async def put(
     self: "AsyncHyphaArtifact",
     lpath: str | list[str],
@@ -509,6 +511,7 @@ async def put(
         rpath, str
     ), "lpath and rpath must be either both strings or both lists of strings"
 
+    # TODO: fix recursive (infinite loop now)
     if recursive and os.path.isdir(lpath):
         await self.makedirs(rpath, exist_ok=True)
 
