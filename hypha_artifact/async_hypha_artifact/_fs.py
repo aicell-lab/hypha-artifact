@@ -14,8 +14,6 @@ from pathlib import Path
 
 import httpx
 
-from ..dataclasses import ArtifactItem
-
 from ._remote import (
     remote_list_contents,
     remote_remove_file,
@@ -40,7 +38,7 @@ async def ls(
     path: str,
     detail: Literal[True],
     **kwargs: Any,
-) -> list[ArtifactItem]: ...
+) -> list[dict[str, float | int | str]]: ...
 
 
 @overload
@@ -48,7 +46,7 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     **kwargs: Any,
-) -> list[ArtifactItem]: ...
+) -> list[dict[str, float | int | str]]: ...
 
 
 # TODO: test with directories
@@ -57,12 +55,16 @@ async def ls(
     path: str,
     detail: Literal[True] | Literal[False] = True,
     **kwargs: Any,
-) -> list[str] | list[ArtifactItem]:
+) -> list[str] | list[dict[str, float | int | str]]:
     """List contents of path"""
     contents = await remote_list_contents(self, path)
 
     if detail:
-        return [ArtifactItem(**item) for item in contents if isinstance(item, dict)]
+        return [
+            dict[str, float | int | str](**item)
+            for item in contents
+            if isinstance(item, dict)
+        ]
 
     return [item["name"] for item in contents if isinstance(item, dict)]
 
@@ -71,7 +73,7 @@ async def info(
     self: "AsyncHyphaArtifact",
     path: str,
     **kwargs: Any,
-) -> ArtifactItem:
+) -> dict[str, float | int | str]:
     """Get information about a file or directory
 
     Parameters
@@ -89,7 +91,7 @@ async def info(
     # parent_path, filename = parent_and_filename(path)
 
     # if filename == "":
-    #     return ArtifactItem(type="directory", name="", size=0)
+    #     return dict[str, float | int | str](type="directory", name="", size=0)
 
     # listing = await self.ls(parent_path)
     # for item in listing:
@@ -114,7 +116,7 @@ async def isdir(self: "AsyncHyphaArtifact", path: str) -> bool:
     """
     try:
         path_info = await self.info(path)
-        return path_info.type == "directory"
+        return path_info["type"] == "directory"
     except (FileNotFoundError, IOError):
         return False
 
@@ -134,7 +136,7 @@ async def isfile(self: "AsyncHyphaArtifact", path: str) -> bool:
     """
     try:
         path_info = await self.info(path)
-        return path_info.type == "file"
+        return path_info["type"] == "file"
     except (FileNotFoundError, IOError):
         return False
 
@@ -170,7 +172,7 @@ async def find(
     *,
     detail: Literal[True],
     **kwargs: dict[str, Any],
-) -> dict[str, ArtifactItem]: ...
+) -> dict[str, dict[str, float | int | str]]: ...
 
 
 @overload
@@ -191,7 +193,7 @@ async def find(
     withdirs: bool = False,
     detail: bool = False,
     **kwargs: dict[str, Any],
-) -> list[str] | dict[str, ArtifactItem]:
+) -> list[str] | dict[str, dict[str, float | int | str]]:
     """Find all files (and optional directories) under a path
 
     Parameters
@@ -214,8 +216,8 @@ async def find(
 
     async def _walk_dir(
         current_path: str, current_depth: int
-    ) -> dict[str, ArtifactItem]:
-        results: dict[str, ArtifactItem] = {}
+    ) -> dict[str, dict[str, float | int | str]]:
+        results: dict[str, dict[str, float | int | str]] = {}
 
         try:
             items = await self.ls(current_path)
@@ -223,17 +225,17 @@ async def find(
             return {}
 
         for item in items:
-            item_type = item.type
-            item_name = item.name
+            item_type = item["type"]
+            item_name = item["name"]
 
             if item_type == "file" or (withdirs and item_type == "directory"):
-                full_path = Path(current_path) / item_name
+                full_path = Path(current_path) / str(item_name)
                 results[str(full_path)] = item
 
             if item_type == "directory" and (
                 maxdepth is None or current_depth < maxdepth
             ):
-                subdir_path = Path(current_path) / item_name
+                subdir_path = Path(current_path) / str(item_name)
                 subdirectory_results = await _walk_dir(
                     str(subdir_path), current_depth + 1
                 )
@@ -285,9 +287,9 @@ async def size(self: "AsyncHyphaArtifact", path: str) -> int:
         Size of the file in bytes
     """
     path_info = await self.info(path)
-    if path_info.type == "directory":
+    if path_info["type"] == "directory":
         return 0
-    return path_info.size
+    return int(path_info["size"])
 
 
 async def sizes(self: "AsyncHyphaArtifact", paths: list[str]) -> list[int]:

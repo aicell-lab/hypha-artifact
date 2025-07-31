@@ -9,7 +9,6 @@ and manipulating files stored in Hypha artifacts.
 from datetime import datetime
 from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
 
-from hypha_artifact.dataclasses import ArtifactItem
 from .utils import FileMode, OnError
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
@@ -271,27 +270,27 @@ class HyphaArtifact:
         path: str,
         detail: Literal[True],
         **kwargs: Any,
-    ) -> list[ArtifactItem]: ...
+    ) -> list[dict[str, float | int | str]]: ...
 
     @overload
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
         **kwargs: Any,
-    ) -> list[ArtifactItem]: ...
+    ) -> list[dict[str, float | int | str]]: ...
 
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
         detail: Literal[True] | Literal[False] = True,
         **kwargs: Any,
-    ) -> list[str] | list[ArtifactItem]:
+    ) -> list[str] | list[dict[str, float | int | str]]:
         """List files and directories in a directory"""
         return run_sync(self._async_artifact.ls(path, detail, **kwargs))
 
     def info(
         self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
-    ) -> ArtifactItem:
+    ) -> dict[str, float | int | str]:
         """Get information about a file or directory"""
         return run_sync(self._async_artifact.info(path, **kwargs))
 
@@ -318,7 +317,7 @@ class HyphaArtifact:
         *,
         detail: Literal[True],
         **kwargs: dict[str, Any],
-    ) -> dict[str, ArtifactItem]: ...
+    ) -> dict[str, dict[str, float | int | str]]: ...
 
     @overload
     def find(
@@ -337,7 +336,7 @@ class HyphaArtifact:
         withdirs: bool = False,
         detail: bool = False,
         **kwargs: dict[str, Any],
-    ) -> list[str] | dict[str, ArtifactItem]:
+    ) -> list[str] | dict[str, dict[str, float | int | str]]:
         """Find all files (and optional directories) under a path"""
         return run_sync(
             self._async_artifact.find(
