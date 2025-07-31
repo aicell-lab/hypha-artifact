@@ -497,13 +497,13 @@ async def exists(
         True if the path exists, False otherwise
     """
     try:
-        keep_path = str(Path(path) / ".keep")
-        async with self.open(keep_path, "r") as f:
+        async with self.open(path, "r") as f:
             await f.read(0)
             return True
     except (FileNotFoundError, IOError, httpx.RequestError):
         try:
-            async with self.open(path, "r") as f:
+            keep_path = str(Path(path) / ".keep")
+            async with self.open(keep_path, "r") as f:
                 await f.read(0)
                 return True
         except (FileNotFoundError, IOError, httpx.RequestError):
