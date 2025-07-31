@@ -235,6 +235,31 @@ async def _transfer_single_file(
             raise e
 
 
+def _local_find(
+    src_path: str,
+    maxdepth: int | None = None,
+) -> list[str]:
+    """Find all files in a directory.
+
+    Args:
+        src_path (str): The source directory path.
+        maxdepth (int | None, optional): The maximum depth to search. Defaults to None.
+
+    Returns:
+        list[str]: A list of file paths.
+    """
+    files: list[str] = []
+    for root, _, dir_files in os.walk(src_path):
+        if maxdepth is not None:
+            rel_path = Path(root).relative_to(src_path)
+            if len(rel_path.parts) >= maxdepth:
+                continue
+        for file_name in dir_files:
+            files.append(str(Path(root) / file_name))
+
+    return files
+
+
 async def _prepare_transfer(
     self: "AsyncHyphaArtifact",
     src_path: str,
@@ -244,26 +269,21 @@ async def _prepare_transfer(
     transfer_type: Literal["PUT", "GET"],
 ) -> list[tuple[str, str]]:
     """Prepare a list of file transfers."""
-    files: list[str] = []
-    if recursive and transfer_type == "PUT":
-        os.makedirs(dst_path, exist_ok=True)
-        for root, _, dir_files in os.walk(src_path):
-            if maxdepth is not None:
-                rel_path = Path(root).relative_to(src_path)
-                if len(rel_path.parts) >= maxdepth:
-                    continue
-            for file_name in dir_files:
-                files.append(str(Path(root) / file_name))
-
-    if recursive and transfer_type == "GET":
-        os.makedirs(dst_path, exist_ok=True)
-        files = await self.find(src_path, maxdepth=maxdepth, withdirs=False)
-
     file_pairs: list[tuple[str, str]] = []
     if recursive:
-        for f in files:
-            rel = Path(f).relative_to(src_path)
-            file_pairs.append((f, str(Path(dst_path) / rel)))
+        os.makedirs(dst_path, exist_ok=True)
+        files: list[str] = []
+
+        if transfer_type == "PUT":
+            files = _local_find(src_path, maxdepth=maxdepth)
+
+        if transfer_type == "GET":
+            files = await self.find(src_path, maxdepth=maxdepth, withdirs=False)
+
+        if recursive:
+            for f in files:
+                rel = Path(f).relative_to(src_path)
+                file_pairs.append((f, str(Path(dst_path) / rel)))
     else:
         file_pairs.append((src_path, dst_path))
 
