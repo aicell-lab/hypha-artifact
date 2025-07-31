@@ -197,7 +197,7 @@ class AsyncArtifactHttpFile:
             return
 
         try:
-            if ("w" in self._mode or "a" in self._mode) and self._buffer.tell() > 0:
+            if "w" in self._mode or "a" in self._mode:
                 await self._upload_content()
         finally:
             self._closed = True
