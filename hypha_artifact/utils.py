@@ -1,6 +1,5 @@
 """Utility functions for Hypha Artifact."""
 
-from pathlib import Path
 from typing import Any, Literal
 
 FileMode = Literal["r", "rb", "w", "wb", "a", "ab"]

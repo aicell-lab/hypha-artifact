@@ -173,7 +173,7 @@ def _callback_msg(
     file_path: str,
     num_total_files: int,
     current_file_index: int,
-) -> dict[str, dict[str, Any] | str | int]:
+) -> dict[str, str | int]:
     """Create a progress callback message."""
     return {
         "type": "info",
