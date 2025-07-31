@@ -524,7 +524,7 @@ asyncio.run(main())
 
 Both `HyphaArtifact` and `AsyncHyphaArtifact` classes use HTTP requests to interact with the Hypha artifact service. Under the hood, they:
 
-1. Use the `requests` library (sync) or `aiohttp` library (async) to make HTTP requests
+1. Use the `httpx` library make HTTP requests
 2. Authenticate using a personal token
 3. Extract workspace information from the token
 4. Provide an fsspec-compatible interface for file operations
