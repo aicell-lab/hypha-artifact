@@ -42,6 +42,19 @@ An **artifact** is a folder-like container that represents a project, applicatio
 - Share computational workflows and environments
 - Archive experimental data with metadata
 
+### Performance Features
+
+**🚀 Multipart Upload Support**
+- Automatic multipart upload for files over 100MB
+- Parallel chunk upload in async mode for faster transfers
+- Configurable chunk sizes and thresholds
+- Efficient handling of very large files (GB+)
+
+**⚡ Concurrent Operations**
+- Async version supports parallel file operations
+- Batch folder uploads with concurrent file transfers
+- Optimized for high-throughput data workflows
+
 ### Example Artifact Structure
 
 ```
@@ -190,6 +203,10 @@ HyphaArtifact(artifact_id: str, workspace: str, token: str, server_url: str, use
 - **`copy(source: str, destination: str)`** - Copy a file
 - **`rm(path: str)`** - Remove a file
 
+#### Upload Operations
+
+- **`upload(local_path, remote_path="", recursive=True, enable_multipart=False, ...)`** - Upload files or folders with multipart support
+
 #### Example Usage
 
 ```python
@@ -243,6 +260,25 @@ if artifact.exists(source_file):
 artifact.edit(stage=True)
 artifact.rm(backup_file)
 artifact.commit(comment="Removed backup")
+
+# Upload Operations Examples
+
+# Upload a large file with multipart support
+artifact.upload(
+    "large_dataset.zip",
+    "/datasets/large_dataset.zip",
+    enable_multipart=True,
+    chunk_size=10*1024*1024  # 10MB chunks
+)
+
+# Upload an entire project folder
+artifact.upload(
+    "./my-project",
+    "/projects/my-project",
+    recursive=True,
+    enable_multipart=True,  # For large files in the folder
+    multipart_threshold=50*1024*1024  # 50MB threshold
+)
 ```
 
 ### Asynchronous API
@@ -318,6 +354,22 @@ await artifact.commit(comment="Copied test.txt")
 await artifact.edit(stage=True)
 await artifact.rm("test_copy.txt")
 await artifact.commit(comment="Removed test_copy.txt")
+        # Upload large files with parallel multipart support
+await artifact.upload(
+    "large_model.bin",
+    "/models/large_model.bin",
+    enable_multipart=True,
+    max_parallel_uploads=8,  # Upload parts in parallel
+    chunk_size=20*1024*1024  # 20MB chunks
+)
+
+# Upload folders with concurrent file uploads
+await artifact.upload(
+    "./dataset",
+    "/data/dataset",
+    enable_multipart=True,
+    max_parallel_uploads=4
+)
 
 # Copy files between local and remote filesystems
 # Get a file from remote to local
@@ -475,6 +527,29 @@ artifact.get(
 - **Error handling**: Choose to ignore or raise errors for missing files
 - **Depth control**: Limit recursion depth for large directory trees
 - **Progress tracking**: Built-in support for monitoring transfer progress
+
+## Command Line Interface (CLI)
+
+The `hypha-artifact` package includes a comprehensive CLI tool for managing artifacts from the command line:
+
+```bash
+# Install with CLI support
+pip install hypha-artifact
+
+# Upload files and folders
+hypha-artifact --artifact-id=my-data upload local-file.txt /remote/path/
+hypha-artifact --artifact-id=my-data upload ./my-project /projects/
+
+# List and manage files
+hypha-artifact --artifact-id=my-data ls /
+hypha-artifact --artifact-id=my-data cat /data.txt
+hypha-artifact --artifact-id=my-data rm /old-file.txt
+
+# Large file support with multipart upload
+hypha-artifact --artifact-id=my-data upload --enable-multipart large-file.zip /data/
+```
+
+For complete CLI documentation including all commands, options, and examples, see the [CLI Documentation](docs/CLI.md).
 
 ## Advanced Usage
 

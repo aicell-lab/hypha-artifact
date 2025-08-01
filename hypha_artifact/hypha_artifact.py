@@ -346,7 +346,7 @@ class HyphaArtifact:
         )
 
     def mkdir(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path: str,
         create_parents: bool = True,  # pylint: disable=unused-argument
         **kwargs: Any,  # pylint: disable=unused-argument
