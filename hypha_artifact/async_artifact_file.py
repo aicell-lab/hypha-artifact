@@ -26,6 +26,7 @@ class AsyncArtifactHttpFile:
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
+        content_type: str = "",
     ) -> None:
         self._url_func = url_func
         self._url: str | None = None
@@ -37,6 +38,8 @@ class AsyncArtifactHttpFile:
         self._closed = False
         self._buffer = io.BytesIO()
         self._client: httpx.AsyncClient | None = None
+        self._timeout = 300
+        self._content_type = content_type
 
         if "r" in mode:
             self._size = 0  # Will be set when content is downloaded
@@ -109,13 +112,13 @@ class AsyncArtifactHttpFile:
             url = await self.get_url()
 
             headers = {
-                "Content-Type": "",
+                "Content-Type": self._content_type,
                 "Content-Length": str(len(content)),
             }
 
             client = self._get_client()
             response = await client.put(
-                url, content=content, headers=headers, timeout=10
+                url, content=content, headers=headers, timeout=self._timeout
             )
 
             response.raise_for_status()

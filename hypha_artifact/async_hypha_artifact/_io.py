@@ -22,7 +22,6 @@ from ._utils import (
     copy_single_file,
     transfer,
     upload_multipart,
-    upload_single,
 )
 
 if TYPE_CHECKING:
@@ -101,6 +100,7 @@ def fsspec_open(
     self: "AsyncHyphaArtifact",
     urlpath: str,
     mode: str = "rb",
+    content_type: str = "application/octet-stream",
     **kwargs: Any,
 ) -> AsyncArtifactHttpFile:
     """Open a file for reading or writing
@@ -135,6 +135,7 @@ def fsspec_open(
         url_func=get_url,
         mode=mode,
         name=str(urlpath),
+        content_type=content_type,
     )
 
 
@@ -208,7 +209,6 @@ async def upload(
     multipart_threshold: int = 100 * 1024 * 1024,  # 100MB
     chunk_size: int = 10 * 1024 * 1024,  # 10MB per part
     max_parallel_uploads: int = 4,
-    download_weight: float = 1.0,
 ) -> None:
     """Upload a file or folder to the artifact with optional multipart upload.
 
@@ -228,8 +228,6 @@ async def upload(
         Size of each part in multipart upload (default: 10MB)
     max_parallel_uploads: int
         Maximum number of parallel part uploads (default: 4)
-    download_weight: float
-        Download weight for files (default: 1.0)
     auto_commit: bool
         Whether to automatically commit after upload (default: True)
     """
@@ -253,10 +251,14 @@ async def upload(
                 remote_path,
                 chunk_size,
                 max_parallel_uploads,
-                download_weight,
             )
         else:
-            await upload_single(self, local_path, remote_path, download_weight)
+            # TODO: download_weight
+            await put(
+                self,
+                str(local_path),
+                str(remote_path),
+            )
 
     elif local_path.is_dir():
 
@@ -287,11 +289,13 @@ async def upload(
                         remote_file_path,
                         chunk_size,
                         max_parallel_uploads,
-                        download_weight,
                     )
                 else:
-                    task = upload_single(
-                        self, local_file_path, remote_file_path, download_weight
+                    # TODO: download_weight
+                    task = put(
+                        self,
+                        str(local_file_path),
+                        str(remote_file_path),
                     )
 
                 upload_tasks.append(task)
