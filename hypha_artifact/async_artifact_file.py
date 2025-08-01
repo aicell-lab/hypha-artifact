@@ -7,7 +7,6 @@ from collections.abc import Callable, Awaitable
 from typing import Self
 from types import TracebackType
 import httpx
-from .utils import clean_url, FileMode
 
 
 class AsyncArtifactHttpFile:
@@ -23,7 +22,7 @@ class AsyncArtifactHttpFile:
     def __init__(
         self: Self,
         url_func: Callable[[], Awaitable[str]],
-        mode: FileMode = "r",
+        mode: str = "r",
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
@@ -77,15 +76,15 @@ class AsyncArtifactHttpFile:
         """Download content from URL into buffer, optionally using a range header."""
         try:
             url = await self.get_url()
-            # Clean the URL by removing any surrounding quotes and converting to string if needed
-            cleaned_url = clean_url(url)
 
-            headers: dict[str, str] = {}
+            headers: dict[str, str] = {
+                "Accept-Encoding": "identity"  # Prevent gzip compression
+            }
             if range_header:
                 headers["Range"] = range_header
 
             client = self._get_client()
-            response = await client.get(cleaned_url, headers=headers, timeout=60)
+            response = await client.get(url, headers=headers, timeout=60)
             response.raise_for_status()
             self._buffer = io.BytesIO(response.content)
             self._size = len(response.content)
@@ -108,16 +107,15 @@ class AsyncArtifactHttpFile:
         try:
             content = self._buffer.getvalue()
             url = await self.get_url()
-            cleaned_url = clean_url(url)
 
             headers = {
-                "Content-Type": "application/octet-stream",
+                "Content-Type": "",
                 "Content-Length": str(len(content)),
             }
 
             client = self._get_client()
             response = await client.put(
-                cleaned_url, content=content, headers=headers, timeout=60
+                url, content=content, headers=headers, timeout=10
             )
 
             response.raise_for_status()
@@ -198,7 +196,7 @@ class AsyncArtifactHttpFile:
             return
 
         try:
-            if ("w" in self._mode or "a" in self._mode) and self._buffer.tell() > 0:
+            if "w" in self._mode or "a" in self._mode:
                 await self._upload_content()
         finally:
             self._closed = True

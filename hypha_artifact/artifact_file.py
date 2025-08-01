@@ -1,19 +1,28 @@
+# pylint: disable=protected-access
+# pyright: reportPrivateUsage=false
 """Artifact file handling for Hypha."""
 
 import io
-import locale
-import os
-from typing import Self
+from typing import TYPE_CHECKING, Self
 from types import TracebackType
-import requests
-from .utils import clean_url, FileMode
+import httpx
+from .sync_utils import run_sync
+from .async_artifact_file import AsyncArtifactHttpFile
+
+if not TYPE_CHECKING:
+    try:
+        # Try to import the pyodide-specific run_sync
+        from pyodide.ffi import run_sync
+    except ImportError:
+        # Fallback to the default implementation if pyodide is not available
+        pass
 
 
 class ArtifactHttpFile(io.IOBase):
     """A file-like object that supports both sync and async context manager protocols.
 
     This implements a file interface for Hypha artifacts, handling HTTP operations
-    via the requests library instead of relying on Pyodide.
+    via the httpx library instead of relying on Pyodide.
     """
 
     name: str | None
@@ -22,177 +31,27 @@ class ArtifactHttpFile(io.IOBase):
     def __init__(
         self: Self,
         url: str,
-        mode: FileMode = "r",
+        mode: str = "r",
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
     ) -> None:
-        self._url = url
-        self._pos = 0
-        self._mode = mode
-        self._encoding = encoding or locale.getpreferredencoding()
-        self._newline = newline or os.linesep
-        self.name = name
-        self._closed = False
-        self._buffer = io.BytesIO()
+        async def get_url() -> str:
+            """Get the URL for the artifact file."""
+            return url
 
-        if "r" in mode:
-            # For read mode, download the content immediately
-            self._download_content()
-            self._size = len(self._buffer.getvalue())
-        else:
-            # For write modes, initialize an empty buffer
-            self._size = 0
-
-    def _download_content(self: Self, range_header: str | None = None) -> None:
-        """Download content from URL into buffer, optionally using a range header."""
-        try:
-            # Clean the URL by removing any surrounding quotes and converting to string if needed
-            cleaned_url = clean_url(self._url)
-
-            headers: dict[str, str | None] = {}
-            if range_header:
-                headers["Range"] = range_header
-
-            response = requests.get(cleaned_url, headers=headers, timeout=60)
-            response.raise_for_status()
-            self._buffer = io.BytesIO(response.content)
-        except requests.exceptions.RequestException as e:
-            # More detailed error information for debugging
-            status_code = (
-                e.response.status_code
-                if hasattr(e, "response") and e.response is not None
-                else "unknown"
-            )
-            message = str(e)
-            raise IOError(
-                f"Error downloading content (status {status_code}): {message}"
-            ) from e
-        except Exception as e:
-            raise IOError(f"Unexpected error downloading content: {str(e)}") from e
-
-    def _upload_content(self: Self) -> requests.Response:
-        """Upload buffer content to URL"""
-        try:
-            content = self._buffer.getvalue()
-
-            cleaned_url = clean_url(self._url)
-
-            headers = {
-                "Content-Type": "application/octet-stream",
-                "Content-Length": str(len(content)),
-            }
-
-            response = requests.put(
-                cleaned_url, data=content, headers=headers, timeout=60
-            )
-
-            response.raise_for_status()
-            return response
-        except requests.exceptions.HTTPError as e:
-            status_code = (
-                e.response.status_code if hasattr(e, "response") else "unknown"
-            )
-            error_msg = e.response.text if hasattr(e, "response") else str(e)
-            raise IOError(
-                f"HTTP error uploading content (status {status_code}): {error_msg}"
-            ) from e
-        except Exception as e:
-            raise IOError(f"Error uploading content: {str(e)}") from e
-
-    def tell(self: Self) -> int:
-        """Return current position in the file"""
-        return self._pos
-
-    def seek(self: Self, offset: int, whence: int = 0) -> int:
-        """Change stream position"""
-        if whence == 0:  # os.SEEK_SET
-            self._pos = offset
-        elif whence == 1:  # os.SEEK_CUR
-            self._pos += offset
-        elif whence == 2:  # os.SEEK_END
-            self._pos = self._size + offset
-
-        # Make sure buffer's position is synced
-        self._buffer.seek(self._pos)
-        return self._pos
-
-    def read(self: Self, size: int = -1) -> bytes | str:
-        """Read up to size bytes from the file, using HTTP range if necessary."""
-        if "r" not in self._mode:
-            raise IOError("File not open for reading")
-
-        if size < 0:
-            self._download_content()
-        else:
-            range_header = f"bytes={self._pos}-{self._pos + size - 1}"
-            self._download_content(range_header=range_header)
-
-        data = self._buffer.read()
-        self._pos += len(data)
-
-        if "b" not in self._mode:
-            return data.decode(self._encoding)
-        return data
-
-    def write(self: Self, data: str | bytes) -> int:
-        """Write data to the file"""
-        if "w" not in self._mode and "a" not in self._mode:
-            raise IOError("File not open for writing")
-
-        # Convert string to bytes if necessary
-        if isinstance(data, str) and "b" in self._mode:
-            data = data.encode(self._encoding)
-        elif isinstance(data, bytes) and "b" not in self._mode:
-            data = data.decode(self._encoding)
-            data = data.encode(self._encoding)
-
-        # Ensure we're at the right position
-        self._buffer.seek(self._pos)
-
-        # Write the data
-        if isinstance(data, str):
-            bytes_written = self._buffer.write(data.encode(self._encoding))
-        else:
-            bytes_written = self._buffer.write(data)
-
-        self._pos = self._buffer.tell()
-        if self._pos > self._size:
-            self._size = self._pos
-
-        return bytes_written
-
-    def readable(self: Self) -> bool:
-        """Return whether the file is readable"""
-        return "r" in self._mode
-
-    def writable(self: Self) -> bool:
-        """Return whether the file is writable"""
-        return "w" in self._mode or "a" in self._mode
-
-    def seekable(self: Self) -> bool:
-        """Return whether the file is seekable"""
-        return True
-
-    def close(self: Self) -> None:
-        """Close the file and upload content if in write mode"""
-        if self._closed:
-            return
-
-        try:
-            if ("w" in self._mode or "a" in self._mode) and self._buffer.tell() > 0:
-                self._upload_content()
-        finally:
-            self._closed = True
-            self._buffer.close()
-
-    @property
-    def closed(self: Self) -> bool:
-        """Return whether the file is closed"""
-        return self._closed
+        self._async_file = AsyncArtifactHttpFile(
+            url_func=get_url,
+            mode=mode,
+            encoding=encoding,
+            newline=newline,
+            name=name,
+        )
 
     def __enter__(self: Self) -> Self:
         """Enter context manager"""
+        run_sync(self._async_file.__aenter__())
+
         return self
 
     def __exit__(
@@ -202,17 +61,48 @@ class ArtifactHttpFile(io.IOBase):
         exc_tb: TracebackType | None,
     ) -> None:
         """Exit context manager"""
-        self.close()
+        run_sync(self._async_file.__aexit__(exc_type, exc_val, exc_tb))
 
-    def __aenter__(self: Self) -> Self:
-        """Enter async context manager"""
-        return self
+    def _download_content(self: Self, range_header: str | None = None) -> None:
+        """Download content from URL into buffer, optionally using a range header."""
+        run_sync(self._async_file._download_content(range_header))
 
-    def __aexit__(
-        self: Self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Exit async context manager"""
-        self.close()
+    def _upload_content(self: Self) -> httpx.Response:
+        return run_sync(self._async_file._upload_content())
+
+    def tell(self: Self) -> int:
+        """Return current position in the file"""
+        return self._async_file._pos
+
+    def seek(self: Self, offset: int, whence: int = 0) -> int:
+        """Change stream position"""
+        return self._async_file.seek(offset, whence)
+
+    def read(self: Self, size: int = -1) -> bytes | str:
+        """Read up to size bytes from the file, using HTTP range if necessary."""
+        return run_sync(self._async_file.read(size))
+
+    def write(self: Self, data: str | bytes) -> int:
+        """Write data to the file"""
+        return run_sync(self._async_file.write(data))
+
+    def readable(self: Self) -> bool:
+        """Return whether the file is readable"""
+        return self._async_file.readable()
+
+    def writable(self: Self) -> bool:
+        """Return whether the file is writable"""
+        return self._async_file.writable()
+
+    def seekable(self: Self) -> bool:
+        """Return whether the file is seekable"""
+        return self._async_file.seekable()
+
+    def close(self: Self) -> None:
+        """Close the file and upload content if in write mode"""
+        run_sync(self._async_file.close())
+
+    @property
+    def closed(self: Self) -> bool:
+        """Return whether the file is closed"""
+        return self._async_file.closed
