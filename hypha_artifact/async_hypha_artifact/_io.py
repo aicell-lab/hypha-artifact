@@ -131,6 +131,7 @@ def fsspec_open(
         url_func=get_url,
         mode=mode,
         name=str(urlpath),
+        ssl=self.ssl
     )
 
 
