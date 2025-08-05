@@ -26,7 +26,7 @@ class AsyncArtifactHttpFile:
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
-        ssl: bool = False
+        ssl: bool | None = None
     ) -> None:
         self._url_func = url_func
         self._url: str | None = None
