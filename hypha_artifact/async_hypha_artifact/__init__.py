@@ -107,7 +107,7 @@ class AsyncHyphaArtifact:
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient(verify=self.ssl)
+        self._client = httpx.AsyncClient(verify=bool(self.ssl))
         return self
 
     async def __aexit__(self: Self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -123,7 +123,7 @@ class AsyncHyphaArtifact:
     def get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(verify=self.ssl)
+            self._client = httpx.AsyncClient(verify=bool(self.ssl))
         return self._client
 
     edit = edit

@@ -233,7 +233,7 @@ class HyphaArtifact:
             )
         )
 
-    async def upload(
+    def upload(
         self: Self,
         local_path: str | Path,
         remote_path: str = "",
@@ -243,6 +243,25 @@ class HyphaArtifact:
         chunk_size: int = 10 * 1024 * 1024,  # 10MB per part
         max_parallel_uploads: int = 4,
     ) -> None:
+        """Upload a file or folder to the artifact with optional multipart upload.
+
+        Parameters
+        ----------
+        local_path: str or Path
+            Path to the local file or folder to upload
+        remote_path: str
+            Path within the artifact where the content will be stored (default: same name)
+        recursive: bool
+            Whether to upload subdirectories recursively when uploading folders (default: True)
+        enable_multipart: bool
+            Force multipart upload even for small files (default: False)
+        multipart_threshold: int
+            File size threshold for automatic multipart upload (default: 100MB)
+        chunk_size: int
+            Size of each part in multipart upload (default: 10MB)
+        max_parallel_uploads: int
+            Maximum number of parallel part uploads (default: 4)
+        """
         return run_sync(
             self._async_artifact.upload(
                 local_path,

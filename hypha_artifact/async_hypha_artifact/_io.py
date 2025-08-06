@@ -229,8 +229,6 @@ async def upload(
         Size of each part in multipart upload (default: 10MB)
     max_parallel_uploads: int
         Maximum number of parallel part uploads (default: 4)
-    auto_commit: bool
-        Whether to automatically commit after upload (default: True)
     """
     local_path = Path(local_path)
     if not local_path.exists():

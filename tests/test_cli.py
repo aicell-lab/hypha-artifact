@@ -1,3 +1,5 @@
+# pylint: disable=protected-access
+# pyright: reportPrivateUsage=false
 """
 Real integration tests for the Hypha Artifact CLI.
 
@@ -18,6 +20,13 @@ from dotenv import load_dotenv, find_dotenv
 from hypha_artifact.cli import (
     get_connection_params,
     create_artifact,
+)
+from hypha_artifact.hypha_artifact import HyphaArtifact
+from hypha_artifact.sync_utils import run_sync
+from hypha_artifact.async_hypha_artifact._remote import (
+    remote_post,
+    remote_list_contents,
+    remote_put_file_url,
 )
 
 # Load environment variables
@@ -70,56 +79,62 @@ class TestRealFileOperations:
     """Test real file operations with actual Hypha connections."""
 
     @pytest.fixture
-    def real_artifact(self):
+    def real_artifact(self) -> HyphaArtifact:
         """Create a real artifact connection."""
         return create_artifact("test-cli-artifact")
 
-    def test_real_ls_command(self, real_artifact):
+    def test_real_ls_command(self, real_artifact: HyphaArtifact):
         """Test real ls command."""
         items = real_artifact.ls("/")
         print(f"✅ Found {len(items)} items in artifact root")
         assert isinstance(items, list)
 
-    def test_real_staging_workflow(self, real_artifact):
+    def test_real_staging_workflow(self, real_artifact: HyphaArtifact):
         """Test real staging workflow using proper artifact manager API."""
+        artifact_self = real_artifact._async_artifact
+
         # Create a test file
         test_content = "This is a test file for API staging workflow\n"
 
         # Step 1: Put artifact in staging mode
         print("Before staging - checking current artifact state...")
         try:
-            current_files = real_artifact._remote_list_contents(dir_path="/")
-            print(f"Current files in artifact: {[f['name'] for f in current_files]}")
+            current_files = run_sync(remote_list_contents(artifact_self, dir_path="/"))
+            print(
+                f"Current files in artifact: {[f['name'] for f in current_files if isinstance(f, dict)]}"
+            )
         except Exception as e:
             print(f"Could not list current files: {e}")
 
         # Clean up any existing staged changes first
         print("Discarding any existing staged changes...")
         try:
-            real_artifact._remote_post("discard", {})
+            run_sync(remote_post(artifact_self, "discard", {}))
             print("Successfully discarded existing staged changes")
         except Exception as e:
             print(f"No staged changes to discard (expected): {e}")
 
         print("Putting artifact in staging mode with new version intent...")
-        real_artifact._remote_edit(
+        real_artifact.edit(
             stage=True, version="new", comment="Testing proper staging workflow"
         )
         print("Artifact is now in staging mode with new version intent")
 
         # Step 2: Get presigned URL and upload file
-        put_url = real_artifact._remote_put_file_url("/api-staging-test.txt")
+        put_url = run_sync(remote_put_file_url(artifact_self, "/api-staging-test.txt"))
         response = requests.put(put_url, data=test_content.encode(), timeout=30)
         assert response.ok, f"File upload failed: {response.status_code}"
 
         # Step 3: Verify file exists in staging
-        files = real_artifact._remote_list_contents(dir_path="/", version="stage")
-        file_names = [f["name"] for f in files]
+        files = run_sync(
+            remote_list_contents(artifact_self, dir_path="/", version="stage")
+        )
+        file_names = [f["name"] for f in files if isinstance(f, dict)]
         assert "api-staging-test.txt" in file_names
 
         # Step 4: Commit the changes
         try:
-            real_artifact._remote_commit(comment="Committed API staging test")
+            real_artifact.commit(comment="Committed API staging test")
         except HTTPStatusError as e:
             # Get more detailed error information
             print(f"Commit error: {e}")
@@ -138,8 +153,9 @@ class TestRealFileOperations:
 
         print("✅ API staging workflow completed successfully")
 
-    def test_real_multipart_upload(self, real_artifact):
+    def test_real_multipart_upload(self, real_artifact: HyphaArtifact):
         """Test real multipart upload using proper API workflow."""
+        artifact_self = real_artifact._async_artifact
         # First test if S3 endpoint is reachable
 
         try:
@@ -170,26 +186,24 @@ class TestRealFileOperations:
             # Step 1: Clean up and put artifact in staging mode
             # Clean up any existing staged changes first
             try:
-                real_artifact._remote_post("discard", {})
+                run_sync(remote_post(artifact_self, "discard", {}))
             except Exception:
                 pass  # No staged changes to discard
 
-            real_artifact._remote_edit(
+            real_artifact.edit(
                 stage=True, version="new", comment="Testing multipart upload"
             )
 
-            # Step 2: Use upload method with auto_commit=False and smaller file
             real_artifact.upload(
                 local_path=Path(temp_file_path),
                 remote_path="/multipart-test.bin",
                 enable_multipart=True,
                 multipart_threshold=2 * 1024 * 1024,  # 2MB threshold
                 chunk_size=chunk_size,
-                auto_commit=False,  # Don't auto-commit, we'll do it manually
             )
 
             # Step 3: Commit the upload
-            real_artifact._remote_commit(comment="Committed multipart upload")
+            real_artifact.commit(comment="Committed multipart upload")
 
             # Step 4: Verify file exists and has correct size
             assert real_artifact.exists("/multipart-test.bin")
@@ -209,8 +223,10 @@ class TestRealFileOperations:
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
 
-    def test_real_directory_upload(self, real_artifact):
+    def test_real_directory_upload(self, real_artifact: HyphaArtifact):
         """Test real directory upload using proper API workflow."""
+        artifact_self = real_artifact._async_artifact
+
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
@@ -223,24 +239,22 @@ class TestRealFileOperations:
             # Step 1: Clean up and put artifact in staging mode
             # Clean up any existing staged changes first
             try:
-                real_artifact._remote_post("discard", {})
+                run_sync(remote_post(artifact_self, "discard", {}))
             except Exception:
                 pass  # No staged changes to discard
 
-            real_artifact._remote_edit(
+            real_artifact.edit(
                 stage=True, version="new", comment="Testing directory upload"
             )
 
-            # Step 2: Upload directory with auto_commit=False
             real_artifact.upload(
                 local_path=temp_path,
                 remote_path="/api-test-dir",
                 recursive=True,
-                auto_commit=False,
             )
 
             # Step 3: Commit the upload
-            real_artifact._remote_commit(comment="Committed directory upload")
+            real_artifact.commit(comment="Committed directory upload")
 
             # Step 4: Verify directory structure
             assert real_artifact.exists("/api-test-dir")
@@ -257,28 +271,28 @@ class TestRealFileOperations:
 
             print("✅ Directory upload completed successfully")
 
-    def test_real_file_operations(self, real_artifact):
+    def test_real_file_operations(self, real_artifact: HyphaArtifact):
         """Test real file operations using proper API workflow."""
+        artifact_self = real_artifact._async_artifact
+
         # Create initial test file
         test_content = "Test file for operations\n"
 
         # Step 1: Clean up and put artifact in staging mode
         # Clean up any existing staged changes first
         try:
-            real_artifact._remote_post("discard", {})
+            run_sync(remote_post(artifact_self, "discard", {}))
         except Exception:
             pass  # No staged changes to discard
 
-        real_artifact._remote_edit(
-            stage=True, version="new", comment="Testing file operations"
-        )
+        real_artifact.edit(stage=True, version="new", comment="Testing file operations")
 
-        put_url = real_artifact._remote_put_file_url("/ops-test.txt")
+        put_url: str = run_sync(remote_put_file_url(artifact_self, "/ops-test.txt"))
         response = requests.put(put_url, data=test_content.encode(), timeout=30)
         assert response.ok, f"File upload failed: {response.status_code}"
 
         # Step 2: Commit the initial upload
-        real_artifact._remote_commit(comment="Initial file for operations test")
+        real_artifact.commit(comment="Initial file for operations test")
 
         # Step 3: Test file operations (these work on committed files)
 
@@ -301,7 +315,7 @@ class TestRealFileOperations:
 
         print("✅ File operations completed successfully")
 
-    def test_real_find_command(self, real_artifact):
+    def test_real_find_command(self, real_artifact: HyphaArtifact):
         """Test real find command."""
         files = real_artifact.find("/")
         print(f"✅ Found {len(files)} files in artifact")
@@ -312,7 +326,7 @@ class TestRealCLICommands:
     """Test real CLI commands with actual subprocess calls."""
 
     @pytest.fixture
-    def cli_env(self):
+    def cli_env(self) -> dict[str, str]:
         """Get environment variables for CLI testing."""
         env = os.environ.copy()
         # Ensure we have the required environment variables
@@ -326,7 +340,7 @@ class TestRealCLICommands:
         """Get the test artifact ID."""
         return "test-cli-artifact"
 
-    def test_real_cli_ls(self, cli_env, test_artifact_id):
+    def test_real_cli_ls(self, cli_env: dict[str, str], test_artifact_id: str):
         """Test real CLI ls command."""
         result = subprocess.run(
             [
@@ -346,7 +360,9 @@ class TestRealCLICommands:
         assert result.returncode == 0, f"CLI ls command failed: {result.stderr}"
         print("✅ CLI ls command executed successfully")
 
-    def test_real_cli_staging_workflow(self, cli_env, test_artifact_id):
+    def test_real_cli_staging_workflow(
+        self, cli_env: dict[str, str], test_artifact_id: str
+    ):
         """Test real CLI staging workflow using edit and commit commands."""
         # Create a test file to upload
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
@@ -456,7 +472,9 @@ class TestRealCLICommands:
             if os.path.exists(temp_file):
                 os.unlink(temp_file)
 
-    def test_real_cli_multipart_upload(self, cli_env, test_artifact_id):
+    def test_real_cli_multipart_upload(
+        self, cli_env: dict[str, str], test_artifact_id: str
+    ):
         """Test real CLI multipart upload with proper staging."""
         # First test if S3 endpoint is reachable
 
