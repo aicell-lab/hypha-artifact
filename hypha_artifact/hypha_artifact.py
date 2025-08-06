@@ -70,6 +70,7 @@ class HyphaArtifact:
         token: str | None = None,
         server_url: str | None = None,
         use_proxy: bool | None = None,
+        use_local_url: bool | None = None,
         disable_ssl: bool = False
     ):
         """Initialize a HyphaArtifact instance.
@@ -80,7 +81,7 @@ class HyphaArtifact:
             The identifier of the Hypha artifact to interact with
         """
         self._async_artifact = AsyncHyphaArtifact(
-            artifact_id, workspace, token, server_url, use_proxy=use_proxy, disable_ssl=disable_ssl
+            artifact_id, workspace, token, server_url, use_proxy=use_proxy, use_local_url=use_local_url, disable_ssl=disable_ssl
         )
 
     def edit(
