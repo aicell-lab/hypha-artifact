@@ -178,7 +178,7 @@ The `HyphaArtifact` class provides synchronous file operations:
 #### Initialization
 
 ```python
-HyphaArtifact(artifact_id: str, workspace: str, token: str, server_url: str, use_proxy: bool)
+HyphaArtifact(artifact_id: str, workspace: str, token: str, server_url: str, use_proxy: bool, use_local_url: bool)
 ```
 
 #### File Operations
@@ -254,11 +254,13 @@ The `AsyncHyphaArtifact` class provides asynchronous file operations for better 
 ```python
 from hypha_artifact import AsyncHyphaArtifact
 
-async_artifact = AsyncHyphaArtifact(
-    artifact_id="my-artifact",
-    workspace="workspace-id",
-    token="your-token",
-    server_url="your-server-url"
+artifact = AsyncHyphaArtifact(
+    artifact_id: str,
+    workspace: str,
+    token: str,
+    server_url: str,
+    use_proxy: bool,
+    use_local_url: bool,
 )
 ```
 
