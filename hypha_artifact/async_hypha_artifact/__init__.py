@@ -53,6 +53,7 @@ class AsyncHyphaArtifact:
     artifact_alias: str
     artifact_url: str
     use_proxy: bool | None = None
+    use_local_url: bool | None = None
     disable_ssl: bool = False
     _client: httpx.AsyncClient | None
 
@@ -63,6 +64,7 @@ class AsyncHyphaArtifact:
         token: str | None = None,
         server_url: str | None = None,
         use_proxy: bool | None = None,
+        use_local_url: bool | None = None,
         disable_ssl: bool = False
     ):
         """Initialize an AsyncHyphaArtifact instance."""
@@ -93,6 +95,14 @@ class AsyncHyphaArtifact:
             self.use_proxy = env_proxy.lower() == "true"
         else:
             self.use_proxy = None
+
+        env_local_url = os.getenv("HYPHA_USE_LOCAL_URL")
+        if use_local_url is not None:
+            self.use_local_url = use_local_url
+        elif env_local_url is not None:
+            self.use_local_url = env_local_url.lower() == "true"
+        else:
+            self.use_local_url = None
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
