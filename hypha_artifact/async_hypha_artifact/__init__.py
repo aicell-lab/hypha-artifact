@@ -20,6 +20,7 @@ from ._io import (
     get,
     put,
     head,
+    upload,
 )
 from ._fs import (
     ls,
@@ -65,7 +66,7 @@ class AsyncHyphaArtifact:
         server_url: str | None = None,
         use_proxy: bool | None = None,
         use_local_url: bool | None = None,
-        disable_ssl: bool = False
+        disable_ssl: bool = False,
     ):
         """Initialize an AsyncHyphaArtifact instance."""
         if "/" in artifact_id:
@@ -151,3 +152,4 @@ class AsyncHyphaArtifact:
     makedirs = makedirs
     rmdir = rmdir
     touch = touch
+    upload = upload
