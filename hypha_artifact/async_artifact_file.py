@@ -27,6 +27,7 @@ class AsyncArtifactHttpFile:
         newline: str | None = None,
         name: str | None = None,
         content_type: str = "",
+        ssl: bool | None = None,
     ) -> None:
         self._url_func = url_func
         self._url: str | None = None
@@ -40,6 +41,7 @@ class AsyncArtifactHttpFile:
         self._client: httpx.AsyncClient | None = None
         self._timeout = 300
         self._content_type = content_type
+        self.ssl = ssl
 
         if "r" in mode:
             self._size = 0  # Will be set when content is downloaded
@@ -49,7 +51,7 @@ class AsyncArtifactHttpFile:
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient()
+        self._client = httpx.AsyncClient(verify=self.ssl)
         if "r" in self._mode:
             await self._download_content()
         return self
@@ -72,7 +74,7 @@ class AsyncArtifactHttpFile:
     def _get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None:
-            self._client = httpx.AsyncClient()
+            self._client = httpx.AsyncClient(verify=self.ssl)
         return self._client
 
     async def _download_content(self: Self, range_header: str | None = None) -> None:

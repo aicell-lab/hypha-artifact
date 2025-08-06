@@ -53,6 +53,8 @@ class AsyncHyphaArtifact:
     artifact_alias: str
     artifact_url: str
     use_proxy: bool | None = None
+    use_local_url: bool | None = None
+    disable_ssl: bool = False
     _client: httpx.AsyncClient | None
 
     def __init__(
@@ -62,6 +64,8 @@ class AsyncHyphaArtifact:
         token: str | None = None,
         server_url: str | None = None,
         use_proxy: bool | None = None,
+        use_local_url: bool | None = None,
+        disable_ssl: bool = False
     ):
         """Initialize an AsyncHyphaArtifact instance."""
         if "/" in artifact_id:
@@ -82,6 +86,7 @@ class AsyncHyphaArtifact:
                 "Server URL must be provided, e.g. https://hypha.aicell.io"
             )
         self._client = None
+        self.ssl = False if disable_ssl else None
 
         env_proxy = os.getenv("HYPHA_USE_PROXY")
         if use_proxy is not None:
@@ -91,9 +96,17 @@ class AsyncHyphaArtifact:
         else:
             self.use_proxy = None
 
+        env_local_url = os.getenv("HYPHA_USE_LOCAL_URL")
+        if use_local_url is not None:
+            self.use_local_url = use_local_url
+        elif env_local_url is not None:
+            self.use_local_url = env_local_url.lower() == "true"
+        else:
+            self.use_local_url = None
+
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient()
+        self._client = httpx.AsyncClient(verify=self.ssl)
         return self
 
     async def __aexit__(self: Self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -109,7 +122,7 @@ class AsyncHyphaArtifact:
     def get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient()
+            self._client = httpx.AsyncClient(verify=self.ssl)
         return self._client
 
     edit = edit
