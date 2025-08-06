@@ -1,3 +1,5 @@
+"""Hypha Apps CLI Reference Documentation"""
+
 import os
 import sys
 import json
@@ -8,41 +10,51 @@ import asyncio
 from pathlib import Path
 from typing import List, Dict, Any
 from dotenv import load_dotenv, find_dotenv
-from hypha_rpc import connect_to_server
+from hypha_rpc import connect_to_server  # pyright: ignore
 import yaml
 
 load_dotenv(dotenv_path=find_dotenv(usecwd=True))
 
+
 async def connect() -> Any:
+    """Connect to the Hypha server."""
     server_url = os.getenv("HYPHA_SERVER_URL")
     token = os.getenv("HYPHA_TOKEN")
     workspace = os.getenv("HYPHA_WORKSPACE")
     client_id = os.getenv("HYPHA_CLIENT_ID", "hypha-apps-cli")
 
     if not all([server_url, token, workspace]):
-        print("❌ Missing environment variables. Set HYPHA_SERVER_URL, HYPHA_TOKEN, HYPHA_WORKSPACE", file=sys.stderr)
+        print(
+            "❌ Missing environment variables. Set HYPHA_SERVER_URL, HYPHA_TOKEN, HYPHA_WORKSPACE",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-    return await connect_to_server({
-        "client_id": client_id,
-        "server_url": server_url,
-        "token": token,
-        "workspace": workspace,
-    })
+    return await connect_to_server(  # pyright: ignore
+        {
+            "client_id": client_id,
+            "server_url": server_url,
+            "token": token,
+            "workspace": workspace,
+        }
+    )
 
 
 def progress_callback(info: Dict[str, Any]):
+    """Handle progress updates from the Hypha server."""
     emoji = {
         "info": "ℹ️",
         "success": "✅",
         "error": "❌",
         "warning": "⚠️",
         "upload": "📤",
-        "download": "📥"
+        "download": "📥",
     }.get(info.get("type", ""), "🔸")
     print(f"{emoji} {info.get('message', '')}")
 
+
 def load_manifest(manifest_path: str) -> Dict[str, Any]:
+    """Load the app manifest from a file."""
     with open(manifest_path, "r", encoding="utf-8") as f:
         content = f.read()
         try:
@@ -50,33 +62,25 @@ def load_manifest(manifest_path: str) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return yaml.safe_load(content)
 
+
 def infer_format_and_content(filepath: Path) -> Dict[str, Any]:
+    """Infer the format and content of a file based on its MIME type."""
     mime_type, _ = mimetypes.guess_type(filepath)
     if mime_type == "application/json":
         with open(filepath, "r", encoding="utf-8") as f:
-            return {
-                "name": str(filepath),
-                "content": json.load(f),
-                "format": "json"
-            }
+            return {"name": str(filepath), "content": json.load(f), "format": "json"}
     elif mime_type and mime_type.startswith("text/"):
         with open(filepath, "r", encoding="utf-8") as f:
-            return {
-                "name": str(filepath),
-                "content": f.read(),
-                "format": "text"
-            }
+            return {"name": str(filepath), "content": f.read(), "format": "text"}
     else:
         with open(filepath, "rb") as f:
             encoded = base64.b64encode(f.read()).decode("utf-8")
-            return {
-                "name": str(filepath),
-                "content": encoded,
-                "format": "base64"
-            }
+            return {"name": str(filepath), "content": encoded, "format": "base64"}
+
 
 def collect_files(directory: str) -> List[Dict[str, Any]]:
-    files = []
+    """Collect files from a directory and infer their format and content."""
+    files: list[dict[str, Any]] = []
     root = Path(directory).resolve()
     for path in root.rglob("*"):
         if path.is_file():
@@ -86,7 +90,15 @@ def collect_files(directory: str) -> List[Dict[str, Any]]:
             files.append(file_data)
     return files
 
-async def install_app(app_id: str, source_path: str, manifest_path: str, files_path: str, overwrite: bool = False):
+
+async def install_app(
+    app_id: str,
+    source_path: str,
+    manifest_path: str,
+    files_path: str,
+    overwrite: bool = False,
+):
+    """Install a new app."""
     api = await connect()
     controller = await api.get_service("public/server-apps")
 
@@ -95,31 +107,41 @@ async def install_app(app_id: str, source_path: str, manifest_path: str, files_p
     manifest = load_manifest(manifest_path)
     files = collect_files(files_path) if files_path else []
 
-    print(f"📦 Installing app '{app_id}' from {source_path} with manifest {manifest_path}...")
+    print(
+        f"📦 Installing app '{app_id}' from {source_path} with manifest {manifest_path}..."
+    )
     await controller.install(
         app_id=app_id,
         source=source,
         manifest=manifest,
         files=files,
         overwrite=overwrite,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
     )
-    
+
     app_info = await controller.get_app_info(app_id)
     print(f"📦 App info: {json.dumps(app_info, indent=2)}")
     print(f"✅ App '{app_id}' successfully installed")
 
+
 async def start_app(app_id: str):
+    """Start a running app."""
     api = await connect()
     controller = await api.get_service("public/server-apps")
     print(f"🚀 Starting app '{app_id}'...")
-    started = await controller.start(app_id, timeout=30, progress_callback=progress_callback)
+    started = await controller.start(
+        app_id, timeout=30, progress_callback=progress_callback
+    )
     print("✅ Available services:")
     for service in started.services:
-        print(f"  - {service.id.split(':')[1]} ({service.get('name', '')}): {service.get('description', 'No description')}")
+        print(
+            f"  - {service.id.split(':')[1]} ({service.get('name', '')}): {service.get('description', 'No description')}"
+        )
     print(f"🚀 Started app with client ID: {started.id}")
 
+
 async def stop_app(app_id: str):
+    """Stop a running app."""
     api = await connect()
     controller = await api.get_service("public/server-apps")
     running = await controller.list_running()
@@ -130,7 +152,9 @@ async def stop_app(app_id: str):
     await controller.stop(app_id)
     print(f"🛑 Stopped app '{app_id}'.")
 
+
 async def stop_all_apps():
+    """Stop all running apps."""
     api = await connect()
     controller = await api.get_service("public/server-apps")
     running = await controller.list_running()
@@ -141,13 +165,17 @@ async def stop_all_apps():
         await controller.stop(app.id)
         print(f"🛑 Stopped app '{app.id}'.")
 
+
 async def uninstall_app(app_id: str):
+    """Uninstall an app."""
     api = await connect()
     controller = await api.get_service("public/server-apps")
     await controller.uninstall(app_id)
     print(f"🗑️ Uninstalled app '{app_id}'")
 
+
 async def list_apps(running: bool = False):
+    """List installed or running apps."""
     api = await connect()
     controller = await api.get_service("public/server-apps")
     if running:
@@ -158,9 +186,13 @@ async def list_apps(running: bool = False):
         print(f"📦 Installed apps ({len(apps)}):")
 
     for app in apps:
-        print(f"- {app.get('name')} (app_id: `{app.id}`): {app.get('description', 'No description')}")
+        print(
+            f"- {app.get('name')} (app_id: `{app.id}`): {app.get('description', 'No description')}"
+        )
+
 
 async def list_services():
+    """List all available services."""
     api = await connect()
     services = await api.list_services()
     print(f"🔧 Available services ({len(services)}):")
@@ -169,7 +201,9 @@ async def list_services():
         print(f"🔧 {svc['id']}")
         print(f"  {json.dumps(svc, indent=2)}")
 
+
 def main():
+    """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(description="Hypha Apps CLI")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -185,7 +219,7 @@ def main():
 
     stop = subparsers.add_parser("stop", help="Stop a running app")
     stop.add_argument("--app-id", required=True)
-    
+
     stop_all = subparsers.add_parser("stop-all", help="Stop all running apps")
     stop_all.set_defaults(func=stop_all_apps)
 
@@ -199,7 +233,11 @@ def main():
     args = parser.parse_args()
 
     if args.command == "install":
-        asyncio.run(install_app(args.app_id, args.source, args.manifest, args.files, args.overwrite))
+        asyncio.run(
+            install_app(
+                args.app_id, args.source, args.manifest, args.files, args.overwrite
+            )
+        )
     elif args.command == "start":
         asyncio.run(start_app(args.app_id))
     elif args.command == "stop":
@@ -216,6 +254,7 @@ def main():
         asyncio.run(list_services())
     else:
         parser.print_help()
+
 
 if __name__ == "__main__":
     main()

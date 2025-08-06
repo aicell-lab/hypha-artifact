@@ -181,21 +181,7 @@ class HyphaArtifact:
         on_error: OnError = "raise",
         **kwargs: Any,
     ) -> None:
-        """Copy file(s) from remote (artifact) to local filesystem
-
-        Parameters
-        ----------
-        rpath: str or list of str
-            Remote path(s) to copy from
-        lpath: str or list of str
-            Local path(s) to copy to
-        recursive: bool
-            If True and rpath is a directory, copy all its contents recursively
-        maxdepth: int or None
-            Maximum recursion depth when recursive=True
-        on_error: "raise" or "ignore"
-            What to do if a file is not found
-        """
+        """Copy file(s) from remote (artifact) to local filesystem"""
         return run_sync(
             self._async_artifact.get(
                 rpath, lpath, recursive, callback, maxdepth, on_error, **kwargs
@@ -212,21 +198,7 @@ class HyphaArtifact:
         on_error: OnError = "raise",
         **kwargs: Any,
     ) -> None:
-        """Copy file(s) from local filesystem to remote (artifact)
-
-        Parameters
-        ----------
-        lpath: str or list of str
-            Local path(s) to copy from
-        rpath: str or list of str
-            Remote path(s) to copy to
-        recursive: bool
-            If True and lpath is a directory, copy all its contents recursively
-        maxdepth: int or None
-            Maximum recursion depth when recursive=True
-        on_error: "raise" or "ignore"
-            What to do if a file is not found
-        """
+        """Copy file(s) from local filesystem to remote (artifact)"""
         return run_sync(
             self._async_artifact.put(
                 lpath, rpath, recursive, callback, maxdepth, on_error, **kwargs
@@ -243,25 +215,7 @@ class HyphaArtifact:
         chunk_size: int = 10 * 1024 * 1024,  # 10MB per part
         max_parallel_uploads: int = 4,
     ) -> None:
-        """Upload a file or folder to the artifact with optional multipart upload.
-
-        Parameters
-        ----------
-        local_path: str or Path
-            Path to the local file or folder to upload
-        remote_path: str
-            Path within the artifact where the content will be stored (default: same name)
-        recursive: bool
-            Whether to upload subdirectories recursively when uploading folders (default: True)
-        enable_multipart: bool
-            Force multipart upload even for small files (default: False)
-        multipart_threshold: int
-            File size threshold for automatic multipart upload (default: 100MB)
-        chunk_size: int
-            Size of each part in multipart upload (default: 10MB)
-        max_parallel_uploads: int
-            Maximum number of parallel part uploads (default: 4)
-        """
+        """Upload a file or folder to the artifact with optional multipart upload."""
         return run_sync(
             self._async_artifact.upload(
                 local_path,
@@ -434,3 +388,7 @@ class HyphaArtifact:
     def sizes(self: Self, paths: list[str]) -> list[int]:
         """Get the size of multiple files"""
         return run_sync(self._async_artifact.sizes(paths))
+
+    def touch(self: Self, path: str, truncate: bool = True) -> None:
+        """Create an empty file or update the timestamp of an existing file"""
+        return run_sync(self._async_artifact.touch(path, truncate=truncate))

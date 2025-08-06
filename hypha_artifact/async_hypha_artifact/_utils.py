@@ -316,7 +316,7 @@ async def upload_part(
             "Content-Type": "application/octet-stream",
             "Content-Length": str(len(chunk_data)),
         },
-        timeout=300,
+        timeout=30,
     )
     response.raise_for_status()
 

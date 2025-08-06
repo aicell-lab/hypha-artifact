@@ -19,12 +19,15 @@ dependencies = [
 license = "MIT"
 license-files = ["LICENSE"]
 
+[project.optional-dependencies]
+cli = ["fire>=0.6.0"]
+
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["hypha_artifact*"]
+include = ["hypha_artifact*", "cli*"]
 exclude = ["tests*"]
 
 [project.scripts]
-hypha-artifact = "hypha_artifact.cli:main"
+hypha-artifact = "cli.main:main"

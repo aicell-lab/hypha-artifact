@@ -357,7 +357,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             content = artifact.cat(remote_file)
             self._validate_file_content(content, test_content + f"_{i+1}")
 
-    def test_multipart_upload_large_file(self, artifact: Any) -> None:
+    def test_multipart_upload_large_file(self, artifact: HyphaArtifact) -> None:
         """Test multipart upload with a large file."""
 
         # Create a temporary large file (20MB to test multipart)
@@ -375,6 +375,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             remote_path = "large_multipart_test.bin"
 
             # Upload using multipart
+            artifact.edit(stage=True)
             artifact.upload(
                 temp_file_path,
                 remote_path,
@@ -382,6 +383,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
                 chunk_size=chunk_size,
                 multipart_threshold=1024,  # Low threshold to force multipart
             )
+            artifact.commit()
 
             # Verify the file exists
             assert artifact.exists(
@@ -395,13 +397,15 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             ), f"File size should be {file_size} bytes"
 
             # Clean up remote file
+            artifact.edit(stage=True)
             artifact.rm(remote_path)
+            artifact.commit()
 
         finally:
             # Clean up local temp file
             os.unlink(temp_file_path)
 
-    def test_upload_folder(self, artifact: Any) -> None:
+    def test_upload_folder(self, artifact: HyphaArtifact) -> None:
         """Test uploading a folder with multiple files."""
 
         # Create a temporary folder structure
@@ -419,11 +423,13 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Upload folder
             remote_folder = "test_folder_upload"
+            artifact.edit(stage=True)
             artifact.upload(
                 temp_path,
                 remote_folder,
                 recursive=True,
             )
+            artifact.commit()
 
             # Verify files were uploaded
             files = artifact.ls(remote_folder, detail=False)
@@ -443,6 +449,8 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             assert content1 == "Content of file 1", "File content should match"
 
             # Clean up
+            artifact.edit(stage=True)
             artifact.rm(f"{remote_folder}/file1.txt")
             artifact.rm(f"{remote_folder}/file2.txt")
             artifact.rm(f"{remote_folder}/subdir/file3.txt")
+            artifact.commit()

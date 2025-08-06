@@ -13,15 +13,16 @@ import sys
 import tempfile
 import subprocess
 import socket
+from typing import Any
 from httpx import HTTPError, HTTPStatusError
 import requests
 import pytest
 from dotenv import load_dotenv, find_dotenv
-from cli.cli import (
+
+from cli.main import (
     get_connection_params,
-    create_artifact,
+    ArtifactCLI,
 )
-from hypha_artifact.hypha_artifact import HyphaArtifact
 from hypha_artifact.sync_utils import run_sync
 from hypha_artifact.async_hypha_artifact._remote import (
     remote_post,
@@ -56,17 +57,17 @@ class TestRealEnvironment:
 
     def test_real_connection_params(self):
         """Test real connection parameter retrieval."""
-        server_url, token, workspace = get_connection_params()
+        connection_params = get_connection_params()
 
-        assert server_url, "Server URL should not be empty"
-        assert workspace, "Workspace should not be empty"
-        assert token, "Token should not be empty"
+        assert connection_params["HYPHA_SERVER_URL"], "Server URL should not be empty"
+        assert connection_params["HYPHA_WORKSPACE"], "Workspace should not be empty"
+        assert connection_params["HYPHA_TOKEN"], "Token should not be empty"
 
         print("✅ Connection parameters retrieved successfully")
 
     def test_real_artifact_creation(self):
         """Test real artifact creation."""
-        artifact = create_artifact("test-cli-artifact")
+        artifact = ArtifactCLI("test-cli-artifact")
         assert artifact is not None
         # Check that the artifact was created successfully
         assert hasattr(artifact, "ls")
@@ -75,21 +76,25 @@ class TestRealEnvironment:
         print("✅ Artifact connection created successfully")
 
 
+@pytest.fixture(scope="module", name="real_artifact")
+def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -> Any:
+    """Create a test artifact with a real connection to Hypha."""
+    token, workspace = artifact_setup_teardown
+    return ArtifactCLI(
+        artifact_name, workspace, token, server_url="https://hypha.aicell.io"
+    )
+
+
 class TestRealFileOperations:
     """Test real file operations with actual Hypha connections."""
 
-    @pytest.fixture
-    def real_artifact(self) -> HyphaArtifact:
-        """Create a real artifact connection."""
-        return create_artifact("test-cli-artifact")
-
-    def test_real_ls_command(self, real_artifact: HyphaArtifact):
+    def test_real_ls_command(self, real_artifact: ArtifactCLI):
         """Test real ls command."""
         items = real_artifact.ls("/")
         print(f"✅ Found {len(items)} items in artifact root")
         assert isinstance(items, list)
 
-    def test_real_staging_workflow(self, real_artifact: HyphaArtifact):
+    def test_real_staging_workflow(self, real_artifact: ArtifactCLI):
         """Test real staging workflow using proper artifact manager API."""
         artifact_self = real_artifact._async_artifact
 
@@ -153,7 +158,7 @@ class TestRealFileOperations:
 
         print("✅ API staging workflow completed successfully")
 
-    def test_real_multipart_upload(self, real_artifact: HyphaArtifact):
+    def test_real_multipart_upload(self, real_artifact: ArtifactCLI):
         """Test real multipart upload using proper API workflow."""
         artifact_self = real_artifact._async_artifact
         # First test if S3 endpoint is reachable
@@ -223,7 +228,7 @@ class TestRealFileOperations:
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
 
-    def test_real_directory_upload(self, real_artifact: HyphaArtifact):
+    def test_real_directory_upload(self, real_artifact: ArtifactCLI):
         """Test real directory upload using proper API workflow."""
         artifact_self = real_artifact._async_artifact
 
@@ -271,7 +276,7 @@ class TestRealFileOperations:
 
             print("✅ Directory upload completed successfully")
 
-    def test_real_file_operations(self, real_artifact: HyphaArtifact):
+    def test_real_file_operations(self, real_artifact: ArtifactCLI):
         """Test real file operations using proper API workflow."""
         artifact_self = real_artifact._async_artifact
 
@@ -315,7 +320,7 @@ class TestRealFileOperations:
 
         print("✅ File operations completed successfully")
 
-    def test_real_find_command(self, real_artifact: HyphaArtifact):
+    def test_real_find_command(self, real_artifact: ArtifactCLI):
         """Test real find command."""
         files = real_artifact.find("/")
         print(f"✅ Found {len(files)} files in artifact")
@@ -335,19 +340,14 @@ class TestRealCLICommands:
         env["HYPHA_TOKEN"] = os.getenv("HYPHA_TOKEN", "")
         return env
 
-    @pytest.fixture
-    def test_artifact_id(self):
-        """Get the test artifact ID."""
-        return "test-cli-artifact"
-
-    def test_real_cli_ls(self, cli_env: dict[str, str], test_artifact_id: str):
+    def test_real_cli_ls(self, cli_env: dict[str, str], artifact_name: str):
         """Test real CLI ls command."""
         result = subprocess.run(
             [
                 sys.executable,
                 "-m",
-                "hypha_artifact.cli",
-                f"--artifact-id={test_artifact_id}",
+                "cli.main",
+                f"--artifact-id={artifact_name}",
                 "ls",
                 "/",
             ],
@@ -361,7 +361,7 @@ class TestRealCLICommands:
         print("✅ CLI ls command executed successfully")
 
     def test_real_cli_staging_workflow(
-        self, cli_env: dict[str, str], test_artifact_id: str
+        self, cli_env: dict[str, str], artifact_name: str
     ):
         """Test real CLI staging workflow using edit and commit commands."""
         # Create a test file to upload
@@ -376,7 +376,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "edit",
                     "--stage",
                     "--comment",
@@ -396,7 +396,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "upload",
                     temp_file,
                     "/cli-staging-test.txt",
@@ -415,7 +415,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "commit",
                     "--comment",
                     "CLI staging workflow commit",
@@ -434,7 +434,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "exists",
                     "/cli-staging-test.txt",
                 ],
@@ -452,7 +452,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "cat",
                     "/cli-staging-test.txt",
                 ],
@@ -473,7 +473,7 @@ class TestRealCLICommands:
                 os.unlink(temp_file)
 
     def test_real_cli_multipart_upload(
-        self, cli_env: dict[str, str], test_artifact_id: str
+        self, cli_env: dict[str, str], artifact_name: str
     ):
         """Test real CLI multipart upload with proper staging."""
         # First test if S3 endpoint is reachable
@@ -506,7 +506,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "edit",
                     "--stage",
                     "--comment",
@@ -526,7 +526,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "upload",
                     "--enable-multipart",
                     "--multipart-threshold=2000000",  # 2MB
@@ -560,7 +560,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "commit",
                     "--comment",
                     "CLI multipart upload commit",
@@ -579,7 +579,7 @@ class TestRealCLICommands:
                     sys.executable,
                     "-m",
                     "hypha_artifact.cli",
-                    f"--artifact-id={test_artifact_id}",
+                    f"--artifact-id={artifact_name}",
                     "info",
                     "/cli-multipart-test.bin",
                 ],
@@ -643,7 +643,7 @@ class TestRealErrorHandling:
     def test_nonexistent_artifact(self):
         """Test handling of nonexistent artifact."""
         try:
-            artifact = create_artifact("nonexistent-artifact-12345")
+            artifact = ArtifactCLI("nonexistent-artifact-12345")
             # Try to list files - should fail gracefully
             try:
                 items = artifact.ls("/")
@@ -657,7 +657,7 @@ class TestRealErrorHandling:
 
     def test_invalid_paths(self):
         """Test handling of invalid paths."""
-        artifact = create_artifact("test-cli-artifact")
+        artifact = ArtifactCLI("test-cli-artifact")
 
         # Test invalid path operations
         try:
