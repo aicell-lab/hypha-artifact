@@ -94,6 +94,14 @@ class AsyncHyphaArtifact:
         else:
             self.use_proxy = None
 
+        env_local_url = os.getenv("HYPHA_USE_LOCAL_URL")
+        if use_local_url is not None:
+            self.use_local_url = use_local_url
+        elif env_local_url is not None:
+            self.use_local_url = env_local_url.lower() == "true"
+        else:
+            self.use_local_url = None
+
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
         self._client = httpx.AsyncClient(verify=self.ssl)

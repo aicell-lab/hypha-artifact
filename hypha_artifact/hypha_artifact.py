@@ -45,6 +45,8 @@ class HyphaArtifact:
         The base URL for the Hypha server.
     use_proxy : bool | None
         Whether to use a proxy for HTTP requests.
+    use_local_url : bool | None
+        Whether to use a local URL for HTTP requests.
 
     Examples
     --------
