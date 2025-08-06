@@ -17,7 +17,7 @@ from httpx import HTTPError, HTTPStatusError
 import requests
 import pytest
 from dotenv import load_dotenv, find_dotenv
-from hypha_artifact.cli import (
+from cli.cli import (
     get_connection_params,
     create_artifact,
 )
