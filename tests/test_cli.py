@@ -33,8 +33,14 @@ from hypha_artifact.async_hypha_artifact._remote import (
 # Load environment variables
 load_dotenv(dotenv_path=find_dotenv(usecwd=True))
 
-# # Add the CLI module to the path for testing
-# sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+@pytest.fixture(scope="module", name="real_artifact")
+def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -> Any:
+    """Create a test artifact with a real connection to Hypha."""
+    token, workspace = artifact_setup_teardown
+    return ArtifactCLI(
+        artifact_name, workspace, token, server_url="https://hypha.aicell.io"
+    )
 
 
 class TestRealEnvironment:
@@ -74,15 +80,6 @@ class TestRealEnvironment:
         assert hasattr(artifact, "upload")
 
         print("✅ Artifact connection created successfully")
-
-
-@pytest.fixture(scope="module", name="real_artifact")
-def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -> Any:
-    """Create a test artifact with a real connection to Hypha."""
-    token, workspace = artifact_setup_teardown
-    return ArtifactCLI(
-        artifact_name, workspace, token, server_url="https://hypha.aicell.io"
-    )
 
 
 class TestRealFileOperations:
@@ -302,7 +299,9 @@ class TestRealFileOperations:
         # Step 3: Test file operations (these work on committed files)
 
         # Copy file
+        real_artifact.edit(stage=True)
         real_artifact.copy("/ops-test.txt", "/ops-test-copy.txt")
+        real_artifact.commit()
         assert real_artifact.exists("/ops-test-copy.txt")
 
         # Verify copy has same content
@@ -310,12 +309,16 @@ class TestRealFileOperations:
         assert copy_content == test_content
 
         # Create directory and copy file there
+        real_artifact.edit(stage=True)
         real_artifact.mkdir("/ops-test-dir")
         real_artifact.copy("/ops-test.txt", "/ops-test-dir/operations.txt")
+        real_artifact.commit()
         assert real_artifact.exists("/ops-test-dir/operations.txt")
 
         # Remove files
+        real_artifact.edit(stage=True)
         real_artifact.rm("/ops-test-copy.txt")
+        real_artifact.commit()
         assert not real_artifact.exists("/ops-test-copy.txt")
 
         print("✅ File operations completed successfully")
@@ -340,7 +343,9 @@ class TestRealCLICommands:
         env["HYPHA_TOKEN"] = os.getenv("HYPHA_TOKEN", "")
         return env
 
-    def test_real_cli_ls(self, cli_env: dict[str, str], artifact_name: str):
+    def test_real_cli_ls(
+        self, cli_env: dict[str, str], artifact_name: str, real_artifact: ArtifactCLI
+    ):
         """Test real CLI ls command."""
         result = subprocess.run(
             [
@@ -361,7 +366,7 @@ class TestRealCLICommands:
         print("✅ CLI ls command executed successfully")
 
     def test_real_cli_staging_workflow(
-        self, cli_env: dict[str, str], artifact_name: str
+        self, cli_env: dict[str, str], artifact_name: str, real_artifact: ArtifactCLI
     ):
         """Test real CLI staging workflow using edit and commit commands."""
         # Create a test file to upload
@@ -375,7 +380,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "edit",
                     "--stage",
@@ -395,7 +400,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "upload",
                     temp_file,
@@ -414,7 +419,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "commit",
                     "--comment",
@@ -433,7 +438,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "exists",
                     "/cli-staging-test.txt",
@@ -451,7 +456,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "cat",
                     "/cli-staging-test.txt",
@@ -505,7 +510,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "edit",
                     "--stage",
@@ -525,7 +530,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "upload",
                     "--enable-multipart",
@@ -559,7 +564,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "commit",
                     "--comment",
@@ -578,7 +583,7 @@ class TestRealCLICommands:
                 [
                     sys.executable,
                     "-m",
-                    "hypha_artifact.cli",
+                    "cli.main",
                     f"--artifact-id={artifact_name}",
                     "info",
                     "/cli-multipart-test.bin",

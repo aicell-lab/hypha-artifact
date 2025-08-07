@@ -412,6 +412,9 @@ async def mkdir(
     create_parents: bool
         If True, create parent directories if they don't exist
     """
+    if path in ["", "/"]:
+        return
+
     parent_path = str(Path(path).parent)
     child_path = str(Path(path).name)
 
