@@ -297,16 +297,7 @@ async def upload_part(
 ) -> dict[str, Any]:
     """Upload a single part."""
     part_number = part_info.get("part_number", index)
-
-    # Handle different possible URL field names
-    upload_url = None
-    for url_field in ["upload_url", "url", "presigned_url", "uploadUrl"]:
-        if url_field in part_info:
-            upload_url = part_info[url_field]
-            break
-
-    if not upload_url:
-        raise KeyError(f"No upload URL found in part info: {part_info}")
+    upload_url = part_info["url"]
 
     client = self.get_client()
     response = await client.put(
@@ -325,6 +316,53 @@ async def upload_part(
     return {"part_number": part_number, "etag": etag}
 
 
+def read_chunks(
+    file_path: Path,
+    chunk_size: int,
+) -> list[bytes]:
+    """Read file in chunks."""
+    chunks: list[bytes] = []
+    with open(file_path, "rb") as f:
+        while True:
+            chunk_data = f.read(chunk_size)
+            if not chunk_data:
+                break
+            chunks.append(chunk_data)
+
+    return chunks
+
+
+async def upload_with_semaphore(
+    self: "AsyncHyphaArtifact",
+    semaphore: asyncio.Semaphore,
+    index: int,
+    part_info: dict[str, Any],
+    chunk_data: bytes,
+) -> dict[str, Any]:
+    async with semaphore:
+        return await upload_part(self, part_info, chunk_data, index=index + 1)
+
+
+async def upload_multipart_with_semaphore(
+    self: "AsyncHyphaArtifact",
+    parts_info: list[dict[str, Any]],
+    chunks: list[bytes],
+    max_parallel_uploads: int,
+) -> list[dict[str, Any]]:
+    """Upload a part using a semaphore for concurrency control."""
+    semaphore = asyncio.Semaphore(max_parallel_uploads)
+
+    # Upload all parts in parallel
+    completed_parts = await asyncio.gather(
+        *[
+            upload_with_semaphore(self, semaphore, index, part_info, chunk)
+            for index, (part_info, chunk) in enumerate(zip(parts_info, chunks))
+        ]
+    )
+
+    return completed_parts
+
+
 async def upload_multipart(
     self: "AsyncHyphaArtifact",
     local_path: Path,
@@ -334,65 +372,19 @@ async def upload_multipart(
     download_weight: float = 1.0,
 ) -> None:
     """Upload a file using multipart upload with parallel uploads."""
-    # Calculate part count based on file size and chunk size
     file_size = local_path.stat().st_size
     part_count = math.ceil(file_size / chunk_size)
 
-    # Start multipart upload
-    try:
-        multipart_info = await remote_put_file_start_multipart(
-            self, remote_path, part_count, download_weight=download_weight
-        )
+    multipart_info = await remote_put_file_start_multipart(
+        self, remote_path, part_count, download_weight=download_weight
+    )
 
-        upload_id = multipart_info["upload_id"]
+    upload_id = multipart_info["upload_id"]
+    parts_info = multipart_info["parts"]
+    chunks = read_chunks(local_path, chunk_size)
 
-        # Handle different possible response structures
-        if "parts" in multipart_info:
-            parts_info = multipart_info["parts"]
-        elif "urls" in multipart_info:
-            # Alternative structure where URLs might be in a different field
-            parts_info = multipart_info["urls"]
-        else:
-            # If no parts/urls, try to generate part info from upload_id
-            # This might be a case where we need to make separate calls for each part URL
-            raise ValueError(
-                f"Unexpected multipart response structure: {multipart_info}"
-            )
+    completed_parts = await upload_multipart_with_semaphore(
+        self, parts_info, chunks, max_parallel_uploads
+    )
 
-    except Exception as e:
-        raise IOError(f"Failed to start multipart upload: {str(e)}") from e
-
-    try:
-        # Read all chunks into memory (for smaller files this should be fine)
-        chunks: list[tuple[dict[str, Any], bytes]] = []
-        with open(local_path, "rb") as f:
-            for part_info in parts_info:
-                chunk_data = f.read(chunk_size)
-                if not chunk_data:
-                    break
-                chunks.append((part_info, chunk_data))
-
-        # Upload parts in parallel with semaphore to limit concurrency
-        semaphore = asyncio.Semaphore(max_parallel_uploads)
-
-        async def upload_with_semaphore(
-            part_info_chunk: tuple[dict[str, Any], bytes],
-        ) -> dict[str, Any]:
-            async with semaphore:
-                part_info = part_info_chunk[0]
-                chunk_data = part_info_chunk[1]
-                index = parts_info.index(part_info) + 1
-                return await upload_part(self, part_info, chunk_data, index=index)
-
-        # Upload all parts in parallel
-        completed_parts = await asyncio.gather(
-            *[upload_with_semaphore(chunk) for chunk in chunks]
-        )
-
-        # Complete multipart upload
-        await remote_put_file_complete_multipart(self, upload_id, completed_parts)
-
-    except Exception as e:
-        # If something goes wrong, we should ideally abort the multipart upload
-        # but the API doesn't seem to have an abort endpoint in the docs
-        raise IOError(f"Multipart upload failed: {str(e)}") from e
+    await remote_put_file_complete_multipart(self, upload_id, completed_parts)
