@@ -7,6 +7,8 @@ These tests use actual Hypha connections and real file operations.
 Requires valid credentials in .env file.
 """
 
+# TODO: move non-CLI specific tests to a separate file
+
 import os
 from pathlib import Path
 import sys

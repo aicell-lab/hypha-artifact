@@ -201,6 +201,7 @@ async def get(
     )
 
 
+# TODO: refactor this function
 async def upload(
     self: "AsyncHyphaArtifact",
     local_path: str | Path,
