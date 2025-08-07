@@ -217,10 +217,10 @@ class TestRealFileOperations:
             print("✅ Multipart upload completed successfully")
 
         except Exception as e:
-            if "timeout" in str(e).lower() or "connection" in str(e).lower():
-                pytest.skip(f"Network connectivity issue during multipart upload: {e}")
-            else:
-                raise e
+            # if "timeout" in str(e).lower() or "connection" in str(e).lower():
+            #     pytest.skip(f"Network connectivity issue during multipart upload: {e}")
+            # else:
+            raise e
 
         finally:
             # Clean up temp file
@@ -480,7 +480,7 @@ class TestRealCLICommands:
                 os.unlink(temp_file)
 
     def test_real_cli_multipart_upload(
-        self, cli_env: dict[str, str], artifact_name: str
+        self, cli_env: dict[str, str], artifact_name: str, real_artifact: ArtifactCLI
     ):
         """Test real CLI multipart upload with proper staging."""
         # First test if S3 endpoint is reachable
