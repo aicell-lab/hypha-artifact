@@ -9,6 +9,7 @@ from typing import (
     Callable,
     overload,
 )
+from urllib.parse import urlparse
 
 import httpx
 
@@ -111,7 +112,12 @@ def fsspec_open(
     AsyncArtifactHttpFile
         A file-like object
     """
-    if "r" in mode:
+    if urlparse(urlpath).scheme in ["http", "https", "ftp"]:
+
+        async def get_url():
+            return urlpath
+
+    elif "r" in mode:
 
         async def get_url():
             return await remote_get_file_url(self, urlpath)

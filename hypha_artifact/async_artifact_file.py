@@ -17,7 +17,7 @@ class AsyncArtifactHttpFile:
     """
 
     name: str | None
-    mode: str
+    etag: str | None
 
     def __init__(
         self: Self,
@@ -35,13 +35,14 @@ class AsyncArtifactHttpFile:
         self._mode = mode
         self._encoding = encoding or locale.getpreferredencoding()
         self._newline = newline or os.linesep
-        self.name = name
         self._closed = False
         self._buffer = io.BytesIO()
         self._client: httpx.AsyncClient | None = None
         self._timeout = 300
         self._content_type = content_type
-        self.ssl = ssl
+        self._ssl = ssl
+        self.name = name
+        self.etag = None
 
         if "r" in mode:
             self._size = 0  # Will be set when content is downloaded
@@ -51,7 +52,7 @@ class AsyncArtifactHttpFile:
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient(verify=bool(self.ssl))
+        self._client = httpx.AsyncClient(verify=bool(self._ssl))
         if "r" in self._mode:
             await self._download_content()
         return self
@@ -74,7 +75,7 @@ class AsyncArtifactHttpFile:
     def _get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None:
-            self._client = httpx.AsyncClient(verify=bool(self.ssl))
+            self._client = httpx.AsyncClient(verify=bool(self._ssl))
         return self._client
 
     async def _download_content(self: Self, range_header: str | None = None) -> None:
@@ -202,7 +203,8 @@ class AsyncArtifactHttpFile:
 
         try:
             if "w" in self._mode or "a" in self._mode:
-                await self._upload_content()
+                response = await self._upload_content()
+                self.etag = response.headers.get("ETag", "").strip('"')
         finally:
             self._closed = True
             self._buffer.close()
