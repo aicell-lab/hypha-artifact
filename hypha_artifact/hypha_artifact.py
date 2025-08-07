@@ -8,7 +8,6 @@ and manipulating files stored in Hypha artifacts.
 
 from datetime import datetime
 from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
-from pathlib import Path
 
 from .utils import OnError
 from .artifact_file import ArtifactHttpFile
@@ -202,29 +201,6 @@ class HyphaArtifact:
         return run_sync(
             self._async_artifact.put(
                 lpath, rpath, recursive, callback, maxdepth, on_error, **kwargs
-            )
-        )
-
-    def upload(
-        self: Self,
-        local_path: str | Path,
-        remote_path: str = "",
-        recursive: bool = True,
-        enable_multipart: bool = False,
-        multipart_threshold: int = 100 * 1024 * 1024,  # 100MB
-        chunk_size: int = 10 * 1024 * 1024,  # 10MB per part
-        max_parallel_uploads: int = 4,
-    ) -> None:
-        """Upload a file or folder to the artifact with optional multipart upload."""
-        return run_sync(
-            self._async_artifact.upload(
-                local_path,
-                remote_path,
-                recursive,
-                enable_multipart,
-                multipart_threshold,
-                chunk_size,
-                max_parallel_uploads,
             )
         )
 

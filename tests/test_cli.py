@@ -79,7 +79,7 @@ class TestRealEnvironment:
         assert artifact is not None
         # Check that the artifact was created successfully
         assert hasattr(artifact, "ls")
-        assert hasattr(artifact, "upload")
+        assert hasattr(artifact, "put")
 
         print("✅ Artifact connection created successfully")
 
@@ -198,12 +198,16 @@ class TestRealFileOperations:
                 stage=True, version="new", comment="Testing multipart upload"
             )
 
-            real_artifact.upload(
-                local_path=Path(temp_file_path),
-                remote_path="/multipart-test.bin",
-                enable_multipart=True,
-                multipart_threshold=2 * 1024 * 1024,  # 2MB threshold
-                chunk_size=chunk_size,
+            multipart_config: dict[str, bool | int] = {
+                "enable": True,
+                "threshold": 2 * 1024 * 1024,  # 2MB threshold
+                "chunk_size": chunk_size,
+            }
+
+            real_artifact.put(
+                lpath=temp_file_path,
+                rpath="/multipart-test.bin",
+                multipart_config=multipart_config,
             )
 
             # Step 3: Commit the upload
@@ -251,9 +255,9 @@ class TestRealFileOperations:
                 stage=True, version="new", comment="Testing directory upload"
             )
 
-            real_artifact.upload(
-                local_path=temp_path,
-                remote_path="/api-test-dir",
+            real_artifact.put(
+                lpath=str(temp_path),
+                rpath="/api-test-dir",
                 recursive=True,
             )
 
@@ -404,7 +408,7 @@ class TestRealCLICommands:
                     "-m",
                     "cli.main",
                     f"--artifact-id={artifact_name}",
-                    "upload",
+                    "put",
                     temp_file,
                     "/cli-staging-test.txt",
                 ],
@@ -534,7 +538,7 @@ class TestRealCLICommands:
                     "-m",
                     "cli.main",
                     f"--artifact-id={artifact_name}",
-                    "upload",
+                    "put",
                     "--enable-multipart",
                     "--multipart-threshold=2000000",  # 2MB
                     "--chunk-size=1000000",  # 1MB chunks

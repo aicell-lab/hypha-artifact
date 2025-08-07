@@ -20,7 +20,6 @@ from ._io import (
     get,
     put,
     head,
-    upload,
 )
 from ._fs import (
     ls,
@@ -107,7 +106,7 @@ class AsyncHyphaArtifact:
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient(verify=bool(self.ssl))
+        self._client = httpx.AsyncClient(verify=bool(self.ssl), timeout=30.0)
         return self
 
     async def __aexit__(self: Self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -152,4 +151,3 @@ class AsyncHyphaArtifact:
     makedirs = makedirs
     rmdir = rmdir
     touch = touch
-    upload = upload

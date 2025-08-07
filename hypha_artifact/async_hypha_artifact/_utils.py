@@ -102,6 +102,7 @@ async def transfer_single_file(
     current_file_index: int = 0,
     total_files: int = 1,
     transfer_type: Literal["PUT", "GET"] = "PUT",
+    multipart_config: dict[str, Any] | None = None,
 ) -> None:
     """Transfer a single file with status updates."""
     method_name = "upload" if transfer_type == "PUT" else "download"
@@ -113,6 +114,14 @@ async def transfer_single_file(
     try:
         if transfer_type == "PUT":
             await put_single_file(self, src_path=src_path, dst_path=dst_path)
+
+            if multipart_config:
+                await upload_multipart(
+                    self,
+                    Path(src_path),
+                    dst_path,
+                    multipart_config,
+                )
         elif transfer_type == "GET":
             await get_single_file(self, dst_path=dst_path, src_path=src_path)
 
@@ -157,8 +166,8 @@ def get_transfer_paths(
 async def prepare_recursive_transfer(
     self: "AsyncHyphaArtifact",
     paths: TransferPaths,
-    maxdepth: int | None,
     transfer_type: Literal["PUT", "GET"],
+    maxdepth: int | None = None,
 ) -> list[tuple[str, str]]:
     """Prepare a list of file transfers for recursive operations."""
     files: list[str] = []
@@ -183,8 +192,8 @@ async def prepare_transfer(
     lpath: str,
     rpath: str,
     recursive: bool,
-    maxdepth: int | None,
     transfer_type: Literal["PUT", "GET"],
+    maxdepth: int | None = None,
 ) -> list[tuple[str, str]]:
     """Prepare a list of file transfers."""
     paths: TransferPaths = get_transfer_paths(
@@ -207,8 +216,8 @@ async def _prepare_all_transfers(
     rpath: str | list[str],
     lpath: str | list[str],
     recursive: bool,
-    maxdepth: int | None,
     transfer_type: Literal["PUT", "GET"],
+    maxdepth: int | None = None,
 ) -> list[tuple[str, str]]:
     """Prepare all file transfers, handling both single and multiple paths."""
     if isinstance(rpath, list) and isinstance(lpath, list):
@@ -248,6 +257,7 @@ async def _execute_transfers(
     callback: None | Callable[[dict[str, Any]], None],
     on_error: OnError,
     transfer_type: Literal["PUT", "GET"],
+    multipart_config: dict[str, Any] | None = None,
 ) -> None:
     """Execute all file transfers."""
     for i, (src, dst) in enumerate(all_files):
@@ -260,6 +270,7 @@ async def _execute_transfers(
             current_file_index=i,
             total_files=len(all_files),
             transfer_type=transfer_type,
+            multipart_config=multipart_config,
         )
 
 
@@ -272,12 +283,15 @@ async def transfer(
     maxdepth: int | None = None,
     on_error: OnError = "raise",
     transfer_type: Literal["PUT", "GET"] = "PUT",
+    multipart_config: dict[str, Any] | None = None,
 ) -> None:
     """Copy file(s) between remote and local."""
     all_files = await _prepare_all_transfers(
-        self, rpath, lpath, recursive, maxdepth, transfer_type
+        self, rpath, lpath, recursive, transfer_type, maxdepth
     )
-    await _execute_transfers(self, all_files, callback, on_error, transfer_type)
+    await _execute_transfers(
+        self, all_files, callback, on_error, transfer_type, multipart_config
+    )
 
 
 async def copy_single_file(self: "AsyncHyphaArtifact", src: str, dst: str) -> None:
@@ -363,16 +377,31 @@ async def upload_multipart_with_semaphore(
     return completed_parts
 
 
+def should_use_multipart(file_size: int, multipart_config: dict[str, Any]) -> bool:
+    """Determine if multipart upload should be used."""
+    if not file_size > multipart_config.get("chunk_size", 0):
+        return False
+
+    if multipart_config.get("enable"):
+        return True
+    return file_size >= multipart_config.get("threshold", 0)
+
+
+# TODO: move into artifact file
 async def upload_multipart(
     self: "AsyncHyphaArtifact",
     local_path: Path,
     remote_path: str,
-    chunk_size: int,
-    max_parallel_uploads: int,
+    multipart_config: dict[str, Any],
     download_weight: float = 1.0,
 ) -> None:
     """Upload a file using multipart upload with parallel uploads."""
     file_size = local_path.stat().st_size
+
+    if not should_use_multipart(file_size, multipart_config):
+        return
+
+    chunk_size = multipart_config.get("chunk_size", 0)
     part_count = math.ceil(file_size / chunk_size)
 
     multipart_info = await remote_put_file_start_multipart(
@@ -382,6 +411,7 @@ async def upload_multipart(
     upload_id = multipart_info["upload_id"]
     parts_info = multipart_info["parts"]
     chunks = read_chunks(local_path, chunk_size)
+    max_parallel_uploads = multipart_config.get("max_parallel_uploads", 4)
 
     completed_parts = await upload_multipart_with_semaphore(
         self, parts_info, chunks, max_parallel_uploads

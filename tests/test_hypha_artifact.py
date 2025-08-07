@@ -375,7 +375,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Upload using multipart
             artifact.edit(stage=True)
-            artifact.upload(
+            artifact.put(
                 temp_file_path,
                 remote_path,
                 enable_multipart=True,
@@ -423,8 +423,8 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             # Upload folder
             remote_folder = "test_folder_upload"
             artifact.edit(stage=True)
-            artifact.upload(
-                temp_path,
+            artifact.put(
+                str(temp_path),
                 remote_folder,
                 recursive=True,
             )

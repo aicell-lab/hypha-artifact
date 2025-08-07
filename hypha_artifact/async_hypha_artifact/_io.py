@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Coroutine,
     overload,
 )
 
@@ -18,11 +16,7 @@ from ..utils import OnError
 from ..async_artifact_file import AsyncArtifactHttpFile
 
 from ._remote import remote_get_file_url, remote_put_file_url
-from ._utils import (
-    copy_single_file,
-    transfer,
-    upload_multipart,
-)
+from ._utils import copy_single_file, transfer
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -201,124 +195,38 @@ async def get(
     )
 
 
-# TODO: refactor this function
-async def upload(
-    self: "AsyncHyphaArtifact",
-    local_path: str | Path,
-    remote_path: str = "",
-    recursive: bool = True,
-    enable_multipart: bool = False,
-    multipart_threshold: int = 100 * 1024 * 1024,  # 100MB
-    chunk_size: int = 10 * 1024 * 1024,  # 10MB per part
-    max_parallel_uploads: int = 4,
-) -> None:
-    """Upload a file or folder to the artifact with optional multipart upload.
-
-    Parameters
-    ----------
-    local_path: str or Path
-        Path to the local file or folder to upload
-    remote_path: str
-        Path within the artifact where the content will be stored (default: same name)
-    recursive: bool
-        Whether to upload subdirectories recursively when uploading folders (default: True)
-    enable_multipart: bool
-        Force multipart upload even for small files (default: False)
-    multipart_threshold: int
-        File size threshold for automatic multipart upload (default: 100MB)
-    chunk_size: int
-        Size of each part in multipart upload (default: 10MB)
-    max_parallel_uploads: int
-        Maximum number of parallel part uploads (default: 4)
-    """
-    local_path = Path(local_path)
-    if not local_path.exists():
-        raise FileNotFoundError(f"Local path does not exist: {local_path}")
-
-    # If no remote_path specified, use the local name
-    if not remote_path:
-        remote_path = local_path.name
-
-    if local_path.is_file():
-        # Upload single file
-        file_size = local_path.stat().st_size
-        use_multipart = enable_multipart or file_size >= multipart_threshold
-
-        if use_multipart and file_size > chunk_size:
-            await upload_multipart(
-                self,
-                local_path,
-                remote_path,
-                chunk_size,
-                max_parallel_uploads,
-            )
-        else:
-            # TODO: download_weight
-            await put(
-                self,
-                str(local_path),
-                str(remote_path),
-            )
-
-    elif local_path.is_dir():
-
-        try:
-            files_to_upload: list[tuple[Path, str]] = []
-            if recursive:
-                for file_path in local_path.rglob("*"):
-                    if file_path.is_file():
-                        relative_path = file_path.relative_to(local_path)
-                        remote_file_path = f"{remote_path}/{relative_path}".strip("/")
-                        files_to_upload.append((file_path, remote_file_path))
-            else:
-                for file_path in local_path.iterdir():
-                    if file_path.is_file():
-                        remote_file_path = f"{remote_path}/{file_path.name}".strip("/")
-                        files_to_upload.append((file_path, remote_file_path))
-
-            # Upload files concurrently
-            upload_tasks: list[Coroutine[None, None, Any]] = []
-            for local_file_path, remote_file_path in files_to_upload:
-                file_size = local_file_path.stat().st_size
-                use_multipart = enable_multipart or file_size >= multipart_threshold
-
-                if use_multipart and file_size > chunk_size:
-                    task = upload_multipart(
-                        self,
-                        local_file_path,
-                        remote_file_path,
-                        chunk_size,
-                        max_parallel_uploads,
-                    )
-                else:
-                    # TODO: download_weight
-                    task = put(
-                        self,
-                        str(local_file_path),
-                        str(remote_file_path),
-                    )
-
-                upload_tasks.append(task)
-
-            await asyncio.gather(*upload_tasks)
-
-        except Exception as e:
-            raise IOError(f"Folder upload failed: {str(e)}") from e
-    else:
-        raise ValueError(f"Path is neither a file nor a directory: {local_path}")
+# TODO: make TypedDict:
+# enable_multipart: bool
+#    Force multipart upload even for small files (default: False)
+# multipart_threshold: int
+#     File size threshold for automatic multipart upload (default: 100MB)
+# chunk_size: int
+#     Size of each part in multipart upload (default: 10MB)
+# max_parallel_uploads: int
+#     Maximum number of parallel part uploads (default: 4)
+# multipart_config = {
+#     "enable": True,
+#     "threshold": 100 * 1024 * 1024,  # 100MB
+#     "chunk_size": 10 * 1024 * 1024,  # 10MB per part
+#     "max_parallel_uploads": 4,
+# }
 
 
 async def put(
     self: "AsyncHyphaArtifact",
     lpath: str | list[str],
-    rpath: str | list[str],
+    rpath: str | list[str] | None = None,
     recursive: bool = False,
     callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
+    multipart_config: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> None:
     """Copy file(s) from local filesystem to remote (artifact)."""
+    if not rpath:
+        rpath = lpath
+
     await transfer(
         self,
         rpath=rpath,
@@ -328,6 +236,7 @@ async def put(
         maxdepth=maxdepth,
         on_error=on_error,
         transfer_type="PUT",
+        multipart_config=multipart_config,
     )
 
 
