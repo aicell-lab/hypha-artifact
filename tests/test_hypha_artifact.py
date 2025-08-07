@@ -303,7 +303,6 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         self, artifact: HyphaArtifact, test_content: str, tmp_path: Path
     ) -> None:
         """Test copying multiple files from remote to local using lists."""
-        import os
 
         remote_files = ["sync_get_multi1.txt", "sync_get_multi2.txt"]
         local_files = [
