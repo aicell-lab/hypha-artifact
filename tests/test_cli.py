@@ -217,10 +217,10 @@ class TestRealFileOperations:
             print("✅ Multipart upload completed successfully")
 
         except Exception as e:
-            # if "timeout" in str(e).lower() or "connection" in str(e).lower():
-            #     pytest.skip(f"Network connectivity issue during multipart upload: {e}")
-            # else:
-            raise e
+            if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                pytest.skip(f"Network connectivity issue during multipart upload: {e}")
+            else:
+                raise e
 
         finally:
             # Clean up temp file
