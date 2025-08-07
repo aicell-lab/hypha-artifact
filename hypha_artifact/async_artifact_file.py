@@ -51,7 +51,7 @@ class AsyncArtifactHttpFile:
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient(verify=self.ssl)
+        self._client = httpx.AsyncClient(verify=bool(self.ssl))
         if "r" in self._mode:
             await self._download_content()
         return self
@@ -74,7 +74,7 @@ class AsyncArtifactHttpFile:
     def _get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None:
-            self._client = httpx.AsyncClient(verify=self.ssl)
+            self._client = httpx.AsyncClient(verify=bool(self.ssl))
         return self._client
 
     async def _download_content(self: Self, range_header: str | None = None) -> None:
