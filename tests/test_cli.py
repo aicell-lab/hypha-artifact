@@ -14,7 +14,7 @@ from pathlib import Path
 import sys
 import tempfile
 import subprocess
-import socket
+import json
 from typing import Any
 from httpx import HTTPError, HTTPStatusError
 import pytest
@@ -140,19 +140,20 @@ class TestRealFileOperations:
 
     def test_real_multipart_upload(self, real_artifact: ArtifactCLI):
         """Test real multipart upload using proper API workflow."""
-        # First test if S3 endpoint is reachable
-        try:
-            # Test S3 connectivity with a short timeout
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)  # 5 second timeout
-            result = sock.connect_ex(("s3.cloud.kth.se", 443))
-            sock.close()
-            if result != 0:
-                pytest.skip(
-                    "S3 endpoint s3.cloud.kth.se not reachable - network connectivity issue"
-                )
-        except Exception:
-            pytest.skip("Cannot test S3 connectivity - network connectivity issue")
+        # TODO: remove this comment
+        # # First test if S3 endpoint is reachable
+        # try:
+        #     # Test S3 connectivity with a short timeout
+        #     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #     sock.settimeout(5)  # 5 second timeout
+        #     result = sock.connect_ex(("s3.cloud.kth.se", 443))
+        #     sock.close()
+        #     if result != 0:
+        #         pytest.skip(
+        #             "S3 endpoint s3.cloud.kth.se not reachable - network connectivity issue"
+        #         )
+        # except Exception:
+        #     pytest.skip("Cannot test S3 connectivity - network connectivity issue")
 
         # Create a smaller test file (4MB) to reduce network load
         file_size = 4 * 1024 * 1024  # 4MB
@@ -464,18 +465,19 @@ class TestRealCLICommands:
         """Test real CLI multipart upload with proper staging."""
         # First test if S3 endpoint is reachable
 
-        try:
-            # Test S3 connectivity with a short timeout
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)  # 5 second timeout
-            result = sock.connect_ex(("s3.cloud.kth.se", 443))
-            sock.close()
-            if result != 0:
-                pytest.skip(
-                    "S3 endpoint s3.cloud.kth.se not reachable - network connectivity issue"
-                )
-        except Exception:
-            pytest.skip("Cannot test S3 connectivity - network connectivity issue")
+        # TODO: remove this comment
+        # try:
+        #     # Test S3 connectivity with a short timeout
+        #     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #     sock.settimeout(5)  # 5 second timeout
+        #     result = sock.connect_ex(("s3.cloud.kth.se", 443))
+        #     sock.close()
+        #     if result != 0:
+        #         pytest.skip(
+        #             "S3 endpoint s3.cloud.kth.se not reachable - network connectivity issue"
+        #         )
+        # except Exception:
+        #     pytest.skip("Cannot test S3 connectivity - network connectivity issue")
 
         # Create a smaller test file for multipart upload (4MB)
         # large_file_size = 4 * 1024 * 1024
@@ -506,6 +508,14 @@ class TestRealCLICommands:
 
             assert result.returncode == 0, f"CLI edit failed: {result.stderr}"
 
+            multipart_config: dict[str, bool | int] = {
+                "enable": True,
+                "threshold": 2 * 1024 * 1024,  # 2MB threshold
+                "chunk_size": 1 * 1024 * 1024,  # 1MB chunks
+            }
+
+            multipart_config_str = json.dumps(multipart_config)
+
             # Step 2: Upload with CLI using multipart (smaller thresholds)
             result = subprocess.run(
                 [
@@ -514,9 +524,7 @@ class TestRealCLICommands:
                     "cli.main",
                     f"--artifact-id={artifact_name}",
                     "put",
-                    "--enable-multipart",
-                    "--multipart-threshold=2000000",  # 2MB
-                    "--chunk-size=1000000",  # 1MB chunks
+                    f"--multipart-config={multipart_config_str}",
                     large_file_path,
                     "/cli-multipart-test.bin",
                 ],
