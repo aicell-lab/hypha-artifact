@@ -359,8 +359,13 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
     def test_multipart_upload_large_file(self, artifact: HyphaArtifact) -> None:
         """Test multipart upload with a large file."""
 
+        multipart_config: dict[str, bool | int] = {
+            "enable": True,
+            "threshold": 1024,  # 1MB threshold
+            "chunk_size": 10 * 1024 * 1024,  # 10MB chunks
+        }
+
         # Create a temporary large file (20MB to test multipart)
-        chunk_size = 10 * 1024 * 1024  # 10MB chunks
         file_size = 20 * 1024 * 1024  # 20MB total
 
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
@@ -378,9 +383,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             artifact.put(
                 temp_file_path,
                 remote_path,
-                enable_multipart=True,
-                chunk_size=chunk_size,
-                multipart_threshold=1024,  # Low threshold to force multipart
+                multipart_config=multipart_config,
             )
             artifact.commit()
 

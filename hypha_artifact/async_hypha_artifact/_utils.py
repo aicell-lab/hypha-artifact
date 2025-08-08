@@ -313,20 +313,12 @@ async def upload_part(
     part_number = part_info.get("part_number", index)
     upload_url = part_info["url"]
 
-    client = self.get_client()
-    response = await client.put(
-        upload_url,
-        content=chunk_data,
-        headers={
-            "Content-Type": "application/octet-stream",
-            "Content-Length": str(len(chunk_data)),
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
+    async with self.open(upload_url, "wb") as f:
+        await f.write(chunk_data)
+
+    etag = f.etag
 
     # Get ETag from response
-    etag = response.headers.get("ETag", "").strip('"')
     return {"part_number": part_number, "etag": etag}
 
 
@@ -387,7 +379,7 @@ def should_use_multipart(file_size: int, multipart_config: dict[str, Any]) -> bo
     return file_size >= multipart_config.get("threshold", 0)
 
 
-# TODO: move into artifact file
+# TODO: Refactor, merge with normal transfer
 async def upload_multipart(
     self: "AsyncHyphaArtifact",
     local_path: Path,
