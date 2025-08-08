@@ -5,3 +5,4 @@ hypha_rpc>=0.20.55
 python-dotenv>=1.0.0
 pytest_asyncio>=0.21.0
 fire==0.7.0
+requests
