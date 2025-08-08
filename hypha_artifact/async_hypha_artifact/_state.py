@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 async def edit(
     self: "AsyncHyphaArtifact",
     manifest: dict[str, Any] | None = None,
-    artifact_type: str | None = None,
+    type: str | None = None,
     config: dict[str, Any] | None = None,
     secrets: dict[str, str] | None = None,
     version: str | None = None,
@@ -26,7 +26,7 @@ async def edit(
 
     Args:
         manifest (dict[str, Any] | None): The manifest data to set for the artifact.
-        artifact_type (str | None): The type of the artifact (e.g., "generic", "collection").
+        type (str | None): The type of the artifact (e.g., "generic", "collection").
         config (dict[str, Any] | None): Configuration dictionary for the artifact.
         secrets (dict[str, str] | None): Secrets to store with the artifact.
         version (str | None): The version to edit or create.
@@ -36,7 +36,7 @@ async def edit(
     """
     params: dict[str, Any] = {
         "manifest": manifest,
-        "type": artifact_type,
+        "type": type,
         "config": config,
         "secrets": secrets,
         "version": version,

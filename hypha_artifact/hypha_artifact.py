@@ -107,7 +107,13 @@ class HyphaArtifact:
 
         return run_sync(
             self._async_artifact.edit(
-                manifest_dict, type, config_dict, secrets_dict, version, comment, stage
+                manifest=manifest_dict,
+                type=type,
+                config=config_dict,
+                secrets=secrets_dict,
+                version=version,
+                comment=comment,
+                stage=stage,
             )
         )
 
@@ -174,7 +180,12 @@ class HyphaArtifact:
         """Copy file(s) from path1 to path2 within the artifact"""
         return run_sync(
             self._async_artifact.copy(
-                path1, path2, recursive, maxdepth, on_error, **kwargs
+                path1=path1,
+                path2=path2,
+                recursive=recursive,
+                maxdepth=maxdepth,
+                on_error=on_error,
+                **kwargs,
             )
         )
 
@@ -191,7 +202,13 @@ class HyphaArtifact:
         """Copy file(s) from remote (artifact) to local filesystem"""
         return run_sync(
             self._async_artifact.get(
-                rpath, lpath, recursive, callback, maxdepth, on_error, **kwargs
+                rpath=rpath,
+                lpath=lpath,
+                recursive=recursive,
+                callback=callback,
+                maxdepth=maxdepth,
+                on_error=on_error,
+                **kwargs,
             )
         )
 
@@ -212,13 +229,13 @@ class HyphaArtifact:
 
         return run_sync(
             self._async_artifact.put(
-                lpath,
-                rpath,
-                recursive,
-                callback,
-                maxdepth,
-                on_error,
-                multipart_config_dict,
+                lpath=lpath,
+                rpath=rpath,
+                recursive=recursive,
+                callback=callback,
+                maxdepth=maxdepth,
+                on_error=on_error,
+                multipart_config=multipart_config_dict,
                 **kwargs,
             )
         )

@@ -113,8 +113,6 @@ async def transfer_single_file(
 
     try:
         if transfer_type == "PUT":
-            await put_single_file(self, src_path=src_path, dst_path=dst_path)
-
             if multipart_config:
                 await upload_multipart(
                     self,
@@ -122,6 +120,9 @@ async def transfer_single_file(
                     dst_path,
                     multipart_config,
                 )
+            else:
+                await put_single_file(self, src_path=src_path, dst_path=dst_path)
+
         elif transfer_type == "GET":
             await get_single_file(self, dst_path=dst_path, src_path=src_path)
 
