@@ -141,6 +141,8 @@ async def remote_put_file_start_multipart(
         "part_count": part_count,
         "expires_in": expires_in,
         "download_weight": download_weight,
+        "use_proxy": self.use_proxy,
+        "use_local_url": self.use_local_url,
     }
     response_content = await remote_post(self, "put_file_start_multipart", params)
     return json.loads(response_content.decode())
