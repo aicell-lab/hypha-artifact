@@ -66,3 +66,10 @@ async def commit(
         "comment": comment,
     }
     await remote_post(self, "commit", params)
+
+
+async def discard(
+    self: "AsyncHyphaArtifact",
+) -> None:
+    """Discards all staged changes for an artifact, reverting to the last committed state."""
+    await remote_post(self, "discard", {})

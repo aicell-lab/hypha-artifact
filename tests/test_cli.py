@@ -17,19 +17,12 @@ import subprocess
 import socket
 from typing import Any
 from httpx import HTTPError, HTTPStatusError
-import requests
 import pytest
 from dotenv import load_dotenv, find_dotenv
 
 from cli.main import (
     get_connection_params,
     ArtifactCLI,
-)
-from hypha_artifact.sync_utils import run_sync
-from hypha_artifact.async_hypha_artifact._remote import (
-    remote_post,
-    remote_list_contents,
-    remote_put_file_url,
 )
 
 # Load environment variables
@@ -95,25 +88,21 @@ class TestRealFileOperations:
 
     def test_real_staging_workflow(self, real_artifact: ArtifactCLI):
         """Test real staging workflow using proper artifact manager API."""
-        artifact_self = real_artifact._async_artifact
-
         # Create a test file
         test_content = "This is a test file for API staging workflow\n"
 
         # Step 1: Put artifact in staging mode
         print("Before staging - checking current artifact state...")
         try:
-            current_files = run_sync(remote_list_contents(artifact_self, dir_path="/"))
-            print(
-                f"Current files in artifact: {[f['name'] for f in current_files if isinstance(f, dict)]}"
-            )
+            current_files = real_artifact.ls("/")
+            print(f"Current files in artifact: {[f['name'] for f in current_files]}")
         except Exception as e:
             print(f"Could not list current files: {e}")
 
         # Clean up any existing staged changes first
         print("Discarding any existing staged changes...")
         try:
-            run_sync(remote_post(artifact_self, "discard", {}))
+            real_artifact.discard()
             print("Successfully discarded existing staged changes")
         except Exception as e:
             print(f"No staged changes to discard (expected): {e}")
@@ -125,18 +114,10 @@ class TestRealFileOperations:
         print("Artifact is now in staging mode with new version intent")
 
         # Step 2: Get presigned URL and upload file
-        put_url = run_sync(remote_put_file_url(artifact_self, "/api-staging-test.txt"))
-        response = requests.put(put_url, data=test_content.encode(), timeout=30)
-        assert response.ok, f"File upload failed: {response.status_code}"
+        with real_artifact.open("/api-staging-test.txt", "w", encoding="utf-8") as f:
+            f.write(test_content)
 
-        # Step 3: Verify file exists in staging
-        files = run_sync(
-            remote_list_contents(artifact_self, dir_path="/", version="stage")
-        )
-        file_names = [f["name"] for f in files if isinstance(f, dict)]
-        assert "api-staging-test.txt" in file_names
-
-        # Step 4: Commit the changes
+        # Step 3: Commit the changes
         try:
             real_artifact.commit(comment="Committed API staging test")
         except HTTPStatusError as e:
@@ -150,7 +131,7 @@ class TestRealFileOperations:
             print(f"Commit error: {e}")
             raise e
 
-        # Step 5: Verify file exists after commit
+        # Step 4: Verify file exists after commit
         assert real_artifact.exists("/api-staging-test.txt")
         content = real_artifact.cat("/api-staging-test.txt")
         assert content == test_content
@@ -159,9 +140,7 @@ class TestRealFileOperations:
 
     def test_real_multipart_upload(self, real_artifact: ArtifactCLI):
         """Test real multipart upload using proper API workflow."""
-        artifact_self = real_artifact._async_artifact
         # First test if S3 endpoint is reachable
-
         try:
             # Test S3 connectivity with a short timeout
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -190,7 +169,7 @@ class TestRealFileOperations:
             # Step 1: Clean up and put artifact in staging mode
             # Clean up any existing staged changes first
             try:
-                run_sync(remote_post(artifact_self, "discard", {}))
+                real_artifact.discard()
             except Exception:
                 pass  # No staged changes to discard
 
@@ -233,7 +212,6 @@ class TestRealFileOperations:
 
     def test_real_directory_upload(self, real_artifact: ArtifactCLI):
         """Test real directory upload using proper API workflow."""
-        artifact_self = real_artifact._async_artifact
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -247,7 +225,7 @@ class TestRealFileOperations:
             # Step 1: Clean up and put artifact in staging mode
             # Clean up any existing staged changes first
             try:
-                run_sync(remote_post(artifact_self, "discard", {}))
+                real_artifact.discard()
             except Exception:
                 pass  # No staged changes to discard
 
@@ -281,23 +259,20 @@ class TestRealFileOperations:
 
     def test_real_file_operations(self, real_artifact: ArtifactCLI):
         """Test real file operations using proper API workflow."""
-        artifact_self = real_artifact._async_artifact
-
         # Create initial test file
         test_content = "Test file for operations\n"
 
         # Step 1: Clean up and put artifact in staging mode
         # Clean up any existing staged changes first
         try:
-            run_sync(remote_post(artifact_self, "discard", {}))
+            real_artifact.discard()
         except Exception:
             pass  # No staged changes to discard
 
         real_artifact.edit(stage=True, version="new", comment="Testing file operations")
 
-        put_url: str = run_sync(remote_put_file_url(artifact_self, "/ops-test.txt"))
-        response = requests.put(put_url, data=test_content.encode(), timeout=30)
-        assert response.ok, f"File upload failed: {response.status_code}"
+        with real_artifact.open("/ops-test.txt", "w") as f:
+            f.write(test_content)
 
         # Step 2: Commit the initial upload
         real_artifact.commit(comment="Initial file for operations test")

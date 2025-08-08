@@ -11,7 +11,7 @@ from typing import Self, Any
 
 import httpx
 
-from ._state import edit, commit
+from ._state import edit, commit, discard
 from ._io import (
     cat,
     fsspec_open,
@@ -151,3 +151,4 @@ class AsyncHyphaArtifact:
     makedirs = makedirs
     rmdir = rmdir
     touch = touch
+    discard = discard

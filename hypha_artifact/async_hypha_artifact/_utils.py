@@ -172,12 +172,12 @@ async def prepare_recursive_transfer(
     """Prepare a list of file transfers for recursive operations."""
     files: list[str] = []
     file_pairs: list[tuple[str, str]] = []
-    os.makedirs(paths.dst, exist_ok=True)
 
     if transfer_type == "PUT":
         files = local_find(paths.src, maxdepth=maxdepth)
 
     if transfer_type == "GET":
+        os.makedirs(paths.dst, exist_ok=True)
         files = await self.find(paths.src, maxdepth=maxdepth, withdirs=False)
 
     for f in files:

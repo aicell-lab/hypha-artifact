@@ -115,6 +115,10 @@ class HyphaArtifact:
         """Commits the staged changes to the artifact."""
         return run_sync(self._async_artifact.commit(version, comment))
 
+    def discard(self: Self) -> None:
+        """Discards all staged changes for an artifact, reverting to the last committed state."""
+        return run_sync(self._async_artifact.discard())
+
     @overload
     def cat(
         self: Self,
