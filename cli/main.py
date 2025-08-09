@@ -1,10 +1,13 @@
 """Hypha Artifact Command Line Interface"""
 
+from collections.abc import Callable
 import os
 import sys
+from typing import Any
 import fire  # pyright: ignore
 from dotenv import load_dotenv
 from hypha_artifact.hypha_artifact import HyphaArtifact
+from hypha_artifact.utils import OnError, ensure_dict
 
 load_dotenv()
 
@@ -50,6 +53,54 @@ class ArtifactCLI(HyphaArtifact):
 
         super().__init__(
             artifact_id, workspace=workspace, token=token, server_url=server_url
+        )
+
+    def put(
+        self,
+        lpath: str | list[str],
+        rpath: str | list[str],
+        recursive: bool = False,
+        callback: None | Callable[[dict[str, Any]], None] = None,
+        maxdepth: int | None = None,
+        on_error: OnError = "raise",
+        multipart_config: str | dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        multipart_config_dict = ensure_dict(multipart_config)
+
+        super().put(
+            lpath=lpath,
+            rpath=rpath,
+            recursive=recursive,
+            callback=callback,
+            maxdepth=maxdepth,
+            on_error=on_error,
+            multipart_config=multipart_config_dict,
+            **kwargs,
+        )
+
+    def edit(
+        self,
+        manifest: str | dict[str, Any] | None = None,
+        type: str | None = None,  # pylint: disable=redefined-builtin
+        config: str | dict[str, Any] | None = None,
+        secrets: str | dict[str, str] | None = None,
+        version: str | None = None,
+        comment: str | None = None,
+        stage: bool = False,
+    ) -> None:
+        manifest_dict = ensure_dict(manifest)
+        config_dict = ensure_dict(config)
+        secrets_dict = ensure_dict(secrets)
+
+        super().edit(
+            manifest=manifest_dict,
+            type=type,
+            config=config_dict,
+            secrets=secrets_dict,
+            version=version,
+            comment=comment,
+            stage=stage,
         )
 
 

@@ -9,7 +9,7 @@ and manipulating files stored in Hypha artifacts.
 from datetime import datetime
 from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
 
-from .utils import OnError, ensure_dict
+from .utils import OnError
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
 from .sync_utils import run_sync
@@ -92,25 +92,21 @@ class HyphaArtifact:
 
     def edit(
         self: Self,
-        manifest: str | dict[str, Any] | None = None,
+        manifest: dict[str, Any] | None = None,
         type: str | None = None,  # pylint: disable=redefined-builtin
-        config: str | dict[str, Any] | None = None,
-        secrets: str | dict[str, str] | None = None,
+        config: dict[str, Any] | None = None,
+        secrets: dict[str, str] | None = None,
         version: str | None = None,
         comment: str | None = None,
         stage: bool = False,
     ) -> None:
         """Edits the artifact's metadata and saves it."""
-        manifest_dict = ensure_dict(manifest)
-        config_dict = ensure_dict(config)
-        secrets_dict = ensure_dict(secrets)
-
         return run_sync(
             self._async_artifact.edit(
-                manifest=manifest_dict,
+                manifest=manifest,
                 type=type,
-                config=config_dict,
-                secrets=secrets_dict,
+                config=config,
+                secrets=secrets,
                 version=version,
                 comment=comment,
                 stage=stage,
@@ -220,12 +216,10 @@ class HyphaArtifact:
         callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
-        multipart_config: dict[str, Any] | str | None = None,
+        multipart_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         """Copy file(s) from local filesystem to remote (artifact)"""
-
-        multipart_config_dict = ensure_dict(multipart_config)
 
         return run_sync(
             self._async_artifact.put(
@@ -235,7 +229,7 @@ class HyphaArtifact:
                 callback=callback,
                 maxdepth=maxdepth,
                 on_error=on_error,
-                multipart_config=multipart_config_dict,
+                multipart_config=multipart_config,
                 **kwargs,
             )
         )
