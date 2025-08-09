@@ -11,6 +11,7 @@ from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
 
 from .utils import OnError
 from .artifact_file import ArtifactHttpFile
+from ._hypha_artifact_base import HyphaArtifactBase
 from .async_hypha_artifact import AsyncHyphaArtifact
 from .sync_utils import run_sync
 from .classes import ArtifactItem
@@ -24,7 +25,7 @@ if not TYPE_CHECKING:
         pass
 
 
-class HyphaArtifact:
+class HyphaArtifact(HyphaArtifactBase):
     """
     HyphaArtifact provides an fsspec-like interface for interacting with Hypha artifact storage.
 
@@ -82,9 +83,9 @@ class HyphaArtifact:
         """
         self._async_artifact = AsyncHyphaArtifact(
             artifact_id,
-            workspace,
-            token,
-            server_url,
+            workspace=workspace,
+            token=token,
+            server_url=server_url,
             use_proxy=use_proxy,
             use_local_url=use_local_url,
             disable_ssl=disable_ssl,
@@ -281,21 +282,14 @@ class HyphaArtifact:
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
-        detail: Literal[True],
-        **kwargs: Any,
-    ) -> list[ArtifactItem]: ...
-
-    @overload
-    def ls(
-        self: Self,  # pylint: disable=unused-argument
-        path: str,
+        detail: None | Literal[True] = True,
         **kwargs: Any,
     ) -> list[ArtifactItem]: ...
 
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
-        detail: Literal[True] | Literal[False] = True,
+        detail: None | bool = True,
         **kwargs: Any,
     ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory"""
@@ -395,6 +389,6 @@ class HyphaArtifact:
         """Get the size of multiple files"""
         return run_sync(self._async_artifact.sizes(paths))
 
-    def touch(self: Self, path: str, truncate: bool = True) -> None:
+    def touch(self: Self, path: str, truncate: bool = True, **kwargs: Any) -> None:
         """Create an empty file or update the timestamp of an existing file"""
-        return run_sync(self._async_artifact.touch(path, truncate=truncate))
+        return run_sync(self._async_artifact.touch(path, truncate=truncate, **kwargs))

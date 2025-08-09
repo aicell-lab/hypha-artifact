@@ -48,6 +48,7 @@ async def ls(
 async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
+    detail: None | bool = True,
     **kwargs: Any,
 ) -> list[ArtifactItem]: ...
 
@@ -56,7 +57,7 @@ async def ls(
 async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
-    detail: Literal[True] | Literal[False] = True,
+    detail: None | bool = True,
     **kwargs: Any,
 ) -> list[str] | list[ArtifactItem]:
     """List contents of path"""
@@ -434,6 +435,7 @@ async def makedirs(
     self: "AsyncHyphaArtifact",
     path: str,
     exist_ok: bool = True,
+    **kwargs: Any,
 ) -> None:
     """Recursively make directories
 

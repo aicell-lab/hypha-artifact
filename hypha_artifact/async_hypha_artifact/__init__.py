@@ -11,6 +11,7 @@ from typing import Self, Any
 
 import httpx
 
+from .._hypha_artifact_base import HyphaArtifactBase
 from ._state import edit, commit, discard
 from ._io import (
     cat,
@@ -42,7 +43,7 @@ from ._fs import (
 )
 
 
-class AsyncHyphaArtifact:
+class AsyncHyphaArtifact(HyphaArtifactBase):
     """
     AsyncHyphaArtifact provides an async fsspec-like interface for interacting with Hypha
     artifact storage.
