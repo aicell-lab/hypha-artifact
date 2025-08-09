@@ -11,7 +11,8 @@ from typing import Self, Any
 
 import httpx
 
-from ._state import edit, commit
+from .._hypha_artifact_base import HyphaArtifactBase
+from ._state import edit, commit, discard
 from ._io import (
     cat,
     fsspec_open,
@@ -42,7 +43,7 @@ from ._fs import (
 )
 
 
-class AsyncHyphaArtifact:
+class AsyncHyphaArtifact(HyphaArtifactBase):
     """
     AsyncHyphaArtifact provides an async fsspec-like interface for interacting with Hypha
     artifact storage.
@@ -65,7 +66,7 @@ class AsyncHyphaArtifact:
         server_url: str | None = None,
         use_proxy: bool | None = None,
         use_local_url: bool | None = None,
-        disable_ssl: bool = False
+        disable_ssl: bool = False,
     ):
         """Initialize an AsyncHyphaArtifact instance."""
         if "/" in artifact_id:
@@ -106,7 +107,7 @@ class AsyncHyphaArtifact:
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient(verify=self.ssl)
+        self._client = httpx.AsyncClient(verify=bool(self.ssl), timeout=30.0)
         return self
 
     async def __aexit__(self: Self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -122,7 +123,7 @@ class AsyncHyphaArtifact:
     def get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(verify=self.ssl)
+            self._client = httpx.AsyncClient(verify=bool(self.ssl))
         return self._client
 
     edit = edit
@@ -151,3 +152,4 @@ class AsyncHyphaArtifact:
     makedirs = makedirs
     rmdir = rmdir
     touch = touch
+    discard = discard

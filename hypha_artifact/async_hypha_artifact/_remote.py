@@ -115,7 +115,55 @@ async def remote_put_file_url(
         "use_local_url": self.use_local_url,
     }
     response_content = await remote_post(self, "put_file", params)
-    return json.loads(response_content)
+    return response_content.decode().strip('"')
+
+
+async def remote_put_file_start_multipart(
+    self: "AsyncHyphaArtifact",
+    file_path: str,
+    part_count: int,
+    expires_in: int = 7200,
+    download_weight: float = 1.0,
+) -> dict[str, Any]:
+    """Start a multipart upload for a file.
+
+    Args:
+        file_path (str): The path within the artifact where the file will be stored.
+        part_count (int): The number of parts for the multipart upload.
+        expires_in (int): Expiration time in seconds (default: 7200 = 2 hours).
+        download_weight (float): The download weight for the file (default is 1.0).
+
+    Returns:
+        dict: Multipart upload information including upload_id and parts.
+    """
+    params: dict[str, Any] = {
+        "file_path": file_path,
+        "part_count": part_count,
+        "expires_in": expires_in,
+        "download_weight": download_weight,
+        "use_proxy": self.use_proxy,
+        "use_local_url": self.use_local_url,
+    }
+    response_content = await remote_post(self, "put_file_start_multipart", params)
+    return json.loads(response_content.decode())
+
+
+async def remote_put_file_complete_multipart(
+    self: "AsyncHyphaArtifact",
+    upload_id: str,
+    parts: list[dict[str, Any]],
+) -> None:
+    """Complete a multipart upload.
+
+    Args:
+        upload_id (str): The upload ID from put_file_start_multipart.
+        parts (list): List of completed parts with part_number and etag.
+    """
+    params: dict[str, Any] = {
+        "upload_id": upload_id,
+        "parts": parts,
+    }
+    await remote_post(self, "put_file_complete_multipart", params)
 
 
 async def remote_remove_file(

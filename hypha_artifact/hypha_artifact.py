@@ -11,6 +11,7 @@ from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
 
 from .utils import OnError
 from .artifact_file import ArtifactHttpFile
+from ._hypha_artifact_base import HyphaArtifactBase
 from .async_hypha_artifact import AsyncHyphaArtifact
 from .sync_utils import run_sync
 from .classes import ArtifactItem
@@ -24,7 +25,7 @@ if not TYPE_CHECKING:
         pass
 
 
-class HyphaArtifact:
+class HyphaArtifact(HyphaArtifactBase):
     """
     HyphaArtifact provides an fsspec-like interface for interacting with Hypha artifact storage.
 
@@ -71,7 +72,7 @@ class HyphaArtifact:
         server_url: str | None = None,
         use_proxy: bool | None = None,
         use_local_url: bool | None = None,
-        disable_ssl: bool = False
+        disable_ssl: bool = False,
     ):
         """Initialize a HyphaArtifact instance.
 
@@ -81,7 +82,13 @@ class HyphaArtifact:
             The identifier of the Hypha artifact to interact with
         """
         self._async_artifact = AsyncHyphaArtifact(
-            artifact_id, workspace, token, server_url, use_proxy=use_proxy, use_local_url=use_local_url, disable_ssl=disable_ssl
+            artifact_id,
+            workspace=workspace,
+            token=token,
+            server_url=server_url,
+            use_proxy=use_proxy,
+            use_local_url=use_local_url,
+            disable_ssl=disable_ssl,
         )
 
     def edit(
@@ -97,7 +104,13 @@ class HyphaArtifact:
         """Edits the artifact's metadata and saves it."""
         return run_sync(
             self._async_artifact.edit(
-                manifest, type, config, secrets, version, comment, stage
+                manifest=manifest,
+                type=type,
+                config=config,
+                secrets=secrets,
+                version=version,
+                comment=comment,
+                stage=stage,
             )
         )
 
@@ -108,6 +121,10 @@ class HyphaArtifact:
     ) -> None:
         """Commits the staged changes to the artifact."""
         return run_sync(self._async_artifact.commit(version, comment))
+
+    def discard(self: Self) -> None:
+        """Discards all staged changes for an artifact, reverting to the last committed state."""
+        return run_sync(self._async_artifact.discard())
 
     @overload
     def cat(
@@ -160,7 +177,12 @@ class HyphaArtifact:
         """Copy file(s) from path1 to path2 within the artifact"""
         return run_sync(
             self._async_artifact.copy(
-                path1, path2, recursive, maxdepth, on_error, **kwargs
+                path1=path1,
+                path2=path2,
+                recursive=recursive,
+                maxdepth=maxdepth,
+                on_error=on_error,
+                **kwargs,
             )
         )
 
@@ -174,24 +196,16 @@ class HyphaArtifact:
         on_error: OnError = "raise",
         **kwargs: Any,
     ) -> None:
-        """Copy file(s) from remote (artifact) to local filesystem
-
-        Parameters
-        ----------
-        rpath: str or list of str
-            Remote path(s) to copy from
-        lpath: str or list of str
-            Local path(s) to copy to
-        recursive: bool
-            If True and rpath is a directory, copy all its contents recursively
-        maxdepth: int or None
-            Maximum recursion depth when recursive=True
-        on_error: "raise" or "ignore"
-            What to do if a file is not found
-        """
+        """Copy file(s) from remote (artifact) to local filesystem"""
         return run_sync(
             self._async_artifact.get(
-                rpath, lpath, recursive, callback, maxdepth, on_error, **kwargs
+                rpath=rpath,
+                lpath=lpath,
+                recursive=recursive,
+                callback=callback,
+                maxdepth=maxdepth,
+                on_error=on_error,
+                **kwargs,
             )
         )
 
@@ -203,26 +217,21 @@ class HyphaArtifact:
         callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
+        multipart_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        """Copy file(s) from local filesystem to remote (artifact)
+        """Copy file(s) from local filesystem to remote (artifact)"""
 
-        Parameters
-        ----------
-        lpath: str or list of str
-            Local path(s) to copy from
-        rpath: str or list of str
-            Remote path(s) to copy to
-        recursive: bool
-            If True and lpath is a directory, copy all its contents recursively
-        maxdepth: int or None
-            Maximum recursion depth when recursive=True
-        on_error: "raise" or "ignore"
-            What to do if a file is not found
-        """
         return run_sync(
             self._async_artifact.put(
-                lpath, rpath, recursive, callback, maxdepth, on_error, **kwargs
+                lpath=lpath,
+                rpath=rpath,
+                recursive=recursive,
+                callback=callback,
+                maxdepth=maxdepth,
+                on_error=on_error,
+                multipart_config=multipart_config,
+                **kwargs,
             )
         )
 
@@ -273,21 +282,14 @@ class HyphaArtifact:
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
-        detail: Literal[True],
-        **kwargs: Any,
-    ) -> list[ArtifactItem]: ...
-
-    @overload
-    def ls(
-        self: Self,  # pylint: disable=unused-argument
-        path: str,
+        detail: None | Literal[True] = True,
         **kwargs: Any,
     ) -> list[ArtifactItem]: ...
 
     def ls(
         self: Self,  # pylint: disable=unused-argument
         path: str,
-        detail: Literal[True] | Literal[False] = True,
+        detail: None | bool = True,
         **kwargs: Any,
     ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory"""
@@ -350,7 +352,7 @@ class HyphaArtifact:
         )
 
     def mkdir(
-        self: Self,
+        self: Self,  # pylint: disable=unused-argument
         path: str,
         create_parents: bool = True,  # pylint: disable=unused-argument
         **kwargs: Any,  # pylint: disable=unused-argument
@@ -386,3 +388,7 @@ class HyphaArtifact:
     def sizes(self: Self, paths: list[str]) -> list[int]:
         """Get the size of multiple files"""
         return run_sync(self._async_artifact.sizes(paths))
+
+    def touch(self: Self, path: str, truncate: bool = True, **kwargs: Any) -> None:
+        """Create an empty file or update the timestamp of an existing file"""
+        return run_sync(self._async_artifact.touch(path, truncate=truncate, **kwargs))

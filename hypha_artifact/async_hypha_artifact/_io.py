@@ -9,6 +9,7 @@ from typing import (
     Callable,
     overload,
 )
+from urllib.parse import urlparse
 
 import httpx
 
@@ -16,10 +17,7 @@ from ..utils import OnError
 from ..async_artifact_file import AsyncArtifactHttpFile
 
 from ._remote import remote_get_file_url, remote_put_file_url
-from ._utils import (
-    copy_single_file,
-    transfer,
-)
+from ._utils import copy_single_file, transfer
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -97,6 +95,7 @@ def fsspec_open(
     self: "AsyncHyphaArtifact",
     urlpath: str,
     mode: str = "rb",
+    content_type: str = "application/octet-stream",
     **kwargs: Any,
 ) -> AsyncArtifactHttpFile:
     """Open a file for reading or writing
@@ -113,7 +112,12 @@ def fsspec_open(
     AsyncArtifactHttpFile
         A file-like object
     """
-    if "r" in mode:
+    if urlparse(urlpath).scheme in ["http", "https", "ftp"]:
+
+        async def get_url():
+            return urlpath
+
+    elif "r" in mode:
 
         async def get_url():
             return await remote_get_file_url(self, urlpath)
@@ -131,7 +135,8 @@ def fsspec_open(
         url_func=get_url,
         mode=mode,
         name=str(urlpath),
-        ssl=self.ssl
+        content_type=content_type,
+        ssl=self.ssl,
     )
 
 
@@ -196,17 +201,38 @@ async def get(
     )
 
 
+# TODO: make TypedDict:
+# enable_multipart: bool
+#    Force multipart upload even for small files (default: False)
+# multipart_threshold: int
+#     File size threshold for automatic multipart upload (default: 100MB)
+# chunk_size: int
+#     Size of each part in multipart upload (default: 10MB)
+# max_parallel_uploads: int
+#     Maximum number of parallel part uploads (default: 4)
+# multipart_config = {
+#     "enable": True,
+#     "threshold": 100 * 1024 * 1024,  # 100MB
+#     "chunk_size": 10 * 1024 * 1024,  # 10MB per part
+#     "max_parallel_uploads": 4,
+# }
+
+
 async def put(
     self: "AsyncHyphaArtifact",
     lpath: str | list[str],
-    rpath: str | list[str],
+    rpath: str | list[str] | None = None,
     recursive: bool = False,
     callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
+    multipart_config: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> None:
     """Copy file(s) from local filesystem to remote (artifact)."""
+    if not rpath:
+        rpath = lpath
+
     await transfer(
         self,
         rpath=rpath,
@@ -216,6 +242,7 @@ async def put(
         maxdepth=maxdepth,
         on_error=on_error,
         transfer_type="PUT",
+        multipart_config=multipart_config,
     )
 
 

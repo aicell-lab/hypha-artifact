@@ -15,7 +15,9 @@ def get_artifact(mocker: MockerFixture) -> HyphaArtifact:
     mock_async_artifact = mocker.patch(
         "hypha_artifact.hypha_artifact.AsyncHyphaArtifact"
     )
-    artifact = HyphaArtifact("test-artifact", "test-workspace", server_url="https://hypha.aicell.io")
+    artifact = HyphaArtifact(
+        "test-artifact", "test-workspace", server_url="https://hypha.aicell.io"
+    )
     artifact._async_artifact = mock_async_artifact.return_value
     return artifact
 
@@ -28,7 +30,13 @@ class TestHyphaArtifactUnit:
         artifact.edit(stage=True)
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.edit.assert_called_once_with(
-            None, None, None, None, None, None, True
+            manifest=None,
+            type=None,
+            config=None,
+            secrets=None,
+            version=None,
+            comment=None,
+            stage=True,
         )
 
     def test_commit(self, artifact: HyphaArtifact):
@@ -57,7 +65,11 @@ class TestHyphaArtifactUnit:
         artifact.copy("a.txt", "b.txt")
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.copy.assert_called_once_with(
-            "a.txt", "b.txt", False, None, "raise"
+            path1="a.txt",
+            path2="b.txt",
+            recursive=False,
+            maxdepth=None,
+            on_error="raise",
         )
 
     def test_rm(self, artifact: HyphaArtifact):

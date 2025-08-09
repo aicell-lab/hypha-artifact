@@ -48,6 +48,7 @@ async def ls(
 async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
+    detail: None | bool = True,
     **kwargs: Any,
 ) -> list[ArtifactItem]: ...
 
@@ -56,7 +57,7 @@ async def ls(
 async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
-    detail: Literal[True] | Literal[False] = True,
+    detail: None | bool = True,
     **kwargs: Any,
 ) -> list[str] | list[ArtifactItem]:
     """List contents of path"""
@@ -412,6 +413,9 @@ async def mkdir(
     create_parents: bool
         If True, create parent directories if they don't exist
     """
+    if path in ["", "/"]:
+        return
+
     parent_path = str(Path(path).parent)
     child_path = str(Path(path).name)
 
@@ -431,6 +435,7 @@ async def makedirs(
     self: "AsyncHyphaArtifact",
     path: str,
     exist_ok: bool = True,
+    **kwargs: Any,
 ) -> None:
     """Recursively make directories
 
@@ -474,9 +479,7 @@ async def exists(
             return True
     except (FileNotFoundError, IOError, httpx.RequestError):
         try:
-            keep_path = str(Path(path) / ".keep")
-            async with self.open(keep_path, "r") as f:
-                await f.read(0)
-                return True
+            dir_files = await self.ls(path, detail=False, **kwargs)
+            return len(dir_files) > 0
         except (FileNotFoundError, IOError, httpx.RequestError):
             return False
