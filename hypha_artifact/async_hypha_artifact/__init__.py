@@ -54,7 +54,7 @@ class AsyncHyphaArtifact(HyphaArtifactBase):
     artifact_alias: str
     artifact_url: str
     use_proxy: bool | None = None
-    use_local_url: bool | None = None
+    use_local_url: bool | None = False
     disable_ssl: bool = False
     _client: httpx.AsyncClient | None
 
@@ -65,7 +65,7 @@ class AsyncHyphaArtifact(HyphaArtifactBase):
         token: str | None = None,
         server_url: str | None = None,
         use_proxy: bool | None = None,
-        use_local_url: bool | None = None,
+        use_local_url: bool | None = False,
         disable_ssl: bool = False,
     ):
         """Initialize an AsyncHyphaArtifact instance."""

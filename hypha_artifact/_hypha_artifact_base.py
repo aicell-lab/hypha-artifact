@@ -19,7 +19,7 @@ class HyphaArtifactBase(ABC):
         token: str | None = None,
         server_url: str | None = None,
         use_proxy: bool | None = None,
-        use_local_url: bool | None = None,
+        use_local_url: bool | None = False,
         disable_ssl: bool = False,
     ):
         """Initialize a HyphaArtifact instance."""

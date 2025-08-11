@@ -38,7 +38,7 @@ class AsyncArtifactHttpFile:
         self._closed = False
         self._buffer = io.BytesIO()
         self._client: httpx.AsyncClient | None = None
-        self._timeout = 30
+        self._timeout = 120
         self._content_type = content_type
         self._ssl = ssl
         self.name = name
