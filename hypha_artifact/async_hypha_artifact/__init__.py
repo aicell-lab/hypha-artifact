@@ -68,6 +68,7 @@ class AsyncHyphaArtifact:
         disable_ssl: bool = False,
     ):
         """Initialize an AsyncHyphaArtifact instance."""
+        self.artifact_id = artifact_id
         if "/" in artifact_id:
             self.workspace, self.artifact_alias = artifact_id.split("/")
             if workspace:
