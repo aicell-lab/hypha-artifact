@@ -141,6 +141,7 @@ def get_artifact_setup_teardown(artifact_name: str, credentials: tuple[str, str]
     yield token, workspace
 
     # Teardown
+    # TODO: ensure this works
     run_func_sync(artifact_name, token, delete_artifact)
 
 

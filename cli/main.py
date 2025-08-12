@@ -106,6 +106,12 @@ class ArtifactCLI(HyphaArtifact):
 
 def main():
     """Main CLI entry point."""
+    # TODO: hide open
+    # TODO: add --stage option to all cli operations
+    # TODO: fix "is folder" errors in get
+    # TODO: try CLI methods in general
+    # TODO: list children (artifacts)
+    # TODO: automatically multipart if > ~100 MB
     fire.Fire(ArtifactCLI)  # pyright: ignore
 
 
