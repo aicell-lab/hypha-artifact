@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ._remote import remote_post
+from ._remote import remote_request, ArtifactMethod
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -43,7 +43,13 @@ async def edit(
         "comment": comment,
         "stage": stage,
     }
-    await remote_post(self, "edit", params)
+
+    await remote_request(
+        self,
+        ArtifactMethod.EDIT,
+        method="POST",
+        json_data=params,
+    )
 
 
 async def commit(
@@ -61,15 +67,24 @@ async def commit(
             If None, a new version is typically created. Cannot be "stage".
         comment (str | None): A comment describing the commit.
     """
-    params: dict[str, str | None] = {
+    params: dict[str, Any] = {
         "version": version,
         "comment": comment,
     }
-    await remote_post(self, "commit", params)
+
+    await remote_request(
+        self,
+        ArtifactMethod.COMMIT,
+        method="POST",
+        json_data=params,
+    )
 
 
 async def discard(
     self: "AsyncHyphaArtifact",
 ) -> None:
     """Discards all staged changes for an artifact, reverting to the last committed state."""
-    await remote_post(self, "discard", {})
+    params: dict[str, Any] = {
+        "artifact_id": f"{self.workspace}/{self.artifact_alias}",
+    }
+    await remote_request(self, ArtifactMethod.DISCARD, method="POST", json_data=params)

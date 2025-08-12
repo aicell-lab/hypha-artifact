@@ -3,12 +3,28 @@
 from __future__ import annotations
 
 import json
+import logging
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
 from ..utils import JsonType, remove_none
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
+
+
+class ArtifactMethod(StrEnum):
+    """The available artifact methods."""
+
+    PUT_FILE = "put_file"
+    LIST_FILES = "list_files"
+    GET_FILE = "get_file"
+    PUT_FILE_START_MULTIPART = "put_file_start_multipart"
+    PUT_FILE_COMPLETE_MULTIPART = "put_file_complete_multipart"
+    REMOVE_FILE = "remove_file"
+    EDIT = "edit"
+    DISCARD = "discard"
+    COMMIT = "commit"
 
 
 def extend_params(
@@ -55,41 +71,11 @@ async def remote_request(
         timeout=20,
     )
 
+    if response.status_code != 200:
+        logging.error("Unexpected response status: %s", str(response.content))
+
     response.raise_for_status()
     return response.content
-
-
-async def remote_post(
-    self: "AsyncHyphaArtifact", method_name: str, params: dict[str, Any]
-) -> bytes:
-    """Make a POST request to the artifact service with extended parameters.
-
-    Returns:
-        For put_file requests, returns the pre-signed URL as a string.
-        For other requests, returns the response content.
-    """
-    return await remote_request(
-        self,
-        method_name,
-        method="POST",
-        json_data=params,
-    )
-
-
-async def remote_get(
-    self: "AsyncHyphaArtifact", method_name: str, params: dict[str, Any]
-) -> bytes:
-    """Make a GET request to the artifact service with extended parameters.
-
-    Returns:
-        The response content.
-    """
-    return await remote_request(
-        self,
-        method_name,
-        method="GET",
-        params=params,
-    )
 
 
 async def remote_put_file_url(
@@ -108,13 +94,20 @@ async def remote_put_file_url(
     Returns:
         str: A pre-signed URL for uploading the file.
     """
-    params: dict[str, str | float | bool | None] = {
+    params: dict[str, Any] = {
         "file_path": file_path,
         "download_weight": download_weight,
         "use_proxy": self.use_proxy,
         "use_local_url": self.use_local_url,
     }
-    response_content = await remote_post(self, "put_file", params)
+
+    response_content = await remote_request(
+        self,
+        ArtifactMethod.PUT_FILE,
+        method="POST",
+        json_data=params,
+    )
+
     return response_content.decode().strip('"')
 
 
@@ -144,7 +137,13 @@ async def remote_put_file_start_multipart(
         "use_proxy": self.use_proxy,
         "use_local_url": self.use_local_url,
     }
-    response_content = await remote_post(self, "put_file_start_multipart", params)
+
+    response_content = await remote_request(
+        self,
+        ArtifactMethod.PUT_FILE_START_MULTIPART,
+        method="POST",
+        json_data=params,
+    )
     return json.loads(response_content.decode())
 
 
@@ -163,7 +162,17 @@ async def remote_put_file_complete_multipart(
         "upload_id": upload_id,
         "parts": parts,
     }
-    await remote_post(self, "put_file_complete_multipart", params)
+
+    await remote_request(
+        self,
+        ArtifactMethod.PUT_FILE_COMPLETE_MULTIPART,
+        method="POST",
+        json_data=params,
+    )
+
+
+# TODO: Add create artifact
+# TODO: Add delete artifact
 
 
 async def remote_remove_file(
@@ -178,10 +187,16 @@ async def remote_remove_file(
     Args:
         file_path (str): The path of the file to remove within the artifact.
     """
-    params: dict[str, str] = {
+    params: dict[str, Any] = {
         "file_path": file_path,
     }
-    await remote_post(self, "remove_file", params)
+
+    await remote_request(
+        self,
+        ArtifactMethod.REMOVE_FILE,
+        method="POST",
+        json_data=params,
+    )
 
 
 async def remote_get_file_url(
@@ -204,14 +219,20 @@ async def remote_get_file_url(
     Returns:
         str: A pre-signed URL for downloading the file.
     """
-    params: dict[str, str | str | bool | float | None] = {
+    params: dict[str, Any] = {
         "file_path": file_path,
         "silent": silent,
         "version": version,
         "use_proxy": self.use_proxy,
         "use_local_url": self.use_local_url,
     }
-    response_content = await remote_get(self, "get_file", params)
+
+    response_content = await remote_request(
+        self,
+        ArtifactMethod.GET_FILE,
+        method="GET",
+        params=params,
+    )
     return json.loads(response_content)
 
 
@@ -234,10 +255,16 @@ async def remote_list_contents(
         list[JsonType]: A list of items (files and directories) found at the path.
             Each item is a dictionary with details like 'name', 'type', 'size'.
     """
-    params: dict[str, str | str | int | None] = {
+    params: dict[str, Any] = {
         "dir_path": dir_path,
         "limit": limit,
         "version": version,
     }
-    response_content = await remote_get(self, "list_files", params)
+
+    response_content = await remote_request(
+        self,
+        ArtifactMethod.LIST_FILES,
+        method="GET",
+        params=params,
+    )
     return json.loads(response_content)
