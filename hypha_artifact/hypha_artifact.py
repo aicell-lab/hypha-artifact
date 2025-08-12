@@ -11,7 +11,6 @@ from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
 
 from .utils import OnError
 from .artifact_file import ArtifactHttpFile
-from ._hypha_artifact_base import HyphaArtifactBase
 from .async_hypha_artifact import AsyncHyphaArtifact
 from .sync_utils import run_sync
 from .classes import ArtifactItem
@@ -25,7 +24,7 @@ if not TYPE_CHECKING:
         pass
 
 
-class HyphaArtifact(HyphaArtifactBase):
+class HyphaArtifact:
     """
     HyphaArtifact provides an fsspec-like interface for interacting with Hypha artifact storage.
 
@@ -71,7 +70,7 @@ class HyphaArtifact(HyphaArtifactBase):
         token: str | None = None,
         server_url: str | None = None,
         use_proxy: bool | None = None,
-        use_local_url: bool | None = False,
+        use_local_url: bool | None = None,
         disable_ssl: bool = False,
     ):
         """Initialize a HyphaArtifact instance.

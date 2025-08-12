@@ -11,7 +11,6 @@ from typing import Self, Any
 
 import httpx
 
-from .._hypha_artifact_base import HyphaArtifactBase
 from ._state import edit, commit, discard
 from ._io import (
     cat,
@@ -43,7 +42,7 @@ from ._fs import (
 )
 
 
-class AsyncHyphaArtifact(HyphaArtifactBase):
+class AsyncHyphaArtifact:
     """
     AsyncHyphaArtifact provides an async fsspec-like interface for interacting with Hypha
     artifact storage.
@@ -65,7 +64,7 @@ class AsyncHyphaArtifact(HyphaArtifactBase):
         token: str | None = None,
         server_url: str | None = None,
         use_proxy: bool | None = None,
-        use_local_url: bool | None = False,
+        use_local_url: bool | None = None,
         disable_ssl: bool = False,
     ):
         """Initialize an AsyncHyphaArtifact instance."""

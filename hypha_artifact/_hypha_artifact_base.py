@@ -8,6 +8,7 @@ from typing import Any, Callable, Literal, Self, overload
 from .utils import OnError
 
 
+# TODO: remove or re-inherit
 class HyphaArtifactBase(ABC):
     """Abstract base class for Hypha artifacts."""
 
