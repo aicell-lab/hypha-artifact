@@ -79,10 +79,10 @@ async def cat(
 
     try:
         async with self.open(path, "r") as f:
-            content = await f.read()
+            content: str | bytes = await f.read()
             if isinstance(content, bytes):
                 return content.decode("utf-8")
-            elif isinstance(content, (bytearray, memoryview)):
+            if isinstance(content, (bytearray, memoryview)):
                 return bytes(content).decode("utf-8")
             return str(content)
     except (FileNotFoundError, IOError, httpx.RequestError) as e:
