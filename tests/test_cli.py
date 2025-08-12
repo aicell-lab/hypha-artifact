@@ -16,6 +16,7 @@ import tempfile
 import subprocess
 import json
 from typing import Any
+import logging
 from httpx import HTTPError, HTTPStatusError
 import pytest
 from dotenv import load_dotenv, find_dotenv
@@ -141,14 +142,14 @@ class TestRealFileOperations:
     def test_real_multipart_upload(self, real_artifact: ArtifactCLI):
         """Test real multipart upload using proper API workflow."""
 
-        # Create a smaller test file (4MB) to reduce network load
-        file_size = 4 * 1024 * 1024  # 4MB
-        chunk_size = 1 * 1024 * 1024  # 1MB chunks
+        # Create a smaller test file (20 MB) to reduce network load
+        file_size = 20 * 1024 * 1024  # 20 MB
+        chunk_size = 6 * 1024 * 1024  # 6 MB chunks
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
             # Write test data
             chunk = b"M" * (1024 * 1024)  # 1MB chunks
-            for _ in range(4):
+            for _ in range(20):
                 f.write(chunk)
             temp_file_path = f.name
 
@@ -157,8 +158,8 @@ class TestRealFileOperations:
             # Clean up any existing staged changes first
             try:
                 real_artifact.discard()
-            except Exception:
-                pass  # No staged changes to discard
+            except Exception as e:
+                logging.warning(str(e))
 
             real_artifact.edit(
                 stage=True, version="new", comment="Testing multipart upload"
@@ -187,11 +188,7 @@ class TestRealFileOperations:
             print("✅ Multipart upload completed successfully")
 
         except Exception as e:
-            if "timeout" in str(e).lower() or "connection" in str(e).lower():
-                pytest.skip(f"Network connectivity issue during multipart upload: {e}")
-            else:
-                raise e
-
+            raise e
         finally:
             # Clean up temp file
             if os.path.exists(temp_file_path):
@@ -440,6 +437,8 @@ class TestRealCLICommands:
 
             print("✅ CLI staging workflow completed successfully")
 
+        except Exception as e:
+            raise e
         finally:
             # Clean up temp file
             if os.path.exists(temp_file):
@@ -451,11 +450,11 @@ class TestRealCLICommands:
         """Test real CLI multipart upload with proper staging."""
         # First test if S3 endpoint is reachable
 
-        # Create a smaller test file for multipart upload (4MB)
-        # large_file_size = 4 * 1024 * 1024
+        # Create a smaller test file for multipart upload (20MB)
+        # large_file_size = 20 * 1024 * 1024
         with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
             chunk = b"C" * (1024 * 1024)  # 1MB chunks
-            for _ in range(4):
+            for _ in range(20):
                 f.write(chunk)
             large_file_path = f.name
 
@@ -483,11 +482,12 @@ class TestRealCLICommands:
             multipart_config: dict[str, bool | int] = {
                 "enable": True,
                 "threshold": 2 * 1024 * 1024,  # 2MB threshold
-                "chunk_size": 1 * 1024 * 1024,  # 1MB chunks
+                "chunk_size": 6 * 1024 * 1024,  # 6MB chunks
             }
 
             multipart_config_str = json.dumps(multipart_config)
 
+            # TODO: this fails silently on error?
             # Step 2: Upload with CLI using multipart (smaller thresholds)
             result = subprocess.run(
                 [
@@ -558,7 +558,8 @@ class TestRealCLICommands:
             assert result.returncode == 0, f"CLI info command failed: {result.stderr}"
 
             print("✅ CLI multipart upload completed successfully")
-
+        except Exception as e:
+            raise e
         finally:
             # Clean up temp file
             if os.path.exists(large_file_path):
@@ -596,7 +597,8 @@ class TestRealErrorHandling:
                 )
             except Exception as e:
                 print(f"✅ Correctly handled missing environment variables: {e}")
-
+        except Exception as e:
+            raise e
         finally:
             # Restore environment variables
             if original_server:
