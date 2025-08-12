@@ -395,6 +395,10 @@ async def upload_multipart(
         return
 
     chunk_size = multipart_config.get("chunk_size", 0)
+    five_mb = 5 * 1024 * 1024
+    assert (
+        chunk_size > five_mb
+    ), "Chunk size must be greater than 5MB for multipart upload"
     part_count = math.ceil(file_size / chunk_size)
 
     multipart_info = await remote_put_file_start_multipart(

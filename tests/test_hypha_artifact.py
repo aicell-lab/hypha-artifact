@@ -402,7 +402,8 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             artifact.edit(stage=True)
             artifact.rm(remote_path)
             artifact.commit()
-
+        except Exception as e:
+            raise e
         finally:
             # Clean up local temp file
             os.unlink(temp_file_path)

@@ -477,9 +477,9 @@ async def exists(
         async with self.open(path, "r") as f:
             await f.read(0)
             return True
-    except (FileNotFoundError, IOError, httpx.RequestError):
+    except (FileNotFoundError, IOError, httpx.HTTPStatusError, httpx.RequestError):
         try:
             dir_files = await self.ls(path, detail=False, **kwargs)
             return len(dir_files) > 0
-        except (FileNotFoundError, IOError, httpx.RequestError):
+        except (FileNotFoundError, IOError, httpx.HTTPStatusError, httpx.RequestError):
             return False
