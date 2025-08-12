@@ -205,6 +205,9 @@ class AsyncArtifactHttpFile:
             if "w" in self._mode or "a" in self._mode:
                 response = await self._upload_content()
                 self.etag = response.headers.get("ETag", "").strip('"')
+                assert self.etag, "ETag must be set after upload"
+        except Exception as e:
+            raise e
         finally:
             self._closed = True
             self._buffer.close()
