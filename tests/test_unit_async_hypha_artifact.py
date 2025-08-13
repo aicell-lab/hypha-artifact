@@ -34,8 +34,11 @@ class TestAsyncHyphaArtifactUnit:
         self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture
     ):
         """Test the edit method."""
-        mock_remote_post = mocker.patch(
-            "hypha_artifact.async_hypha_artifact._state.remote_post", new=AsyncMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post = AsyncMock(return_value=mock_response)
+        mock_remote_post = mocker.patch.object(
+            async_artifact._client, "post", new=mock_post
         )
         await async_artifact.edit(stage=True)
         mock_remote_post.assert_called_once()
@@ -45,8 +48,11 @@ class TestAsyncHyphaArtifactUnit:
         self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture
     ):
         """Test the commit method."""
-        mock_remote_post = mocker.patch(
-            "hypha_artifact.async_hypha_artifact._state.remote_post", new=AsyncMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post = AsyncMock(return_value=mock_response)
+        mock_remote_post = mocker.patch.object(
+            async_artifact._client, "post", new=mock_post
         )
         await async_artifact.commit()
         mock_remote_post.assert_called_once()
@@ -76,13 +82,22 @@ class TestAsyncHyphaArtifactUnit:
     @pytest.mark.asyncio
     async def test_rm(self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture):
         """Test the rm method."""
-        mock_remote_post = mocker.patch(
-            "hypha_artifact.async_hypha_artifact._remote.remote_post", new=AsyncMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post = AsyncMock(return_value=mock_response)
+        mock_remote_post = mocker.patch.object(
+            async_artifact._client, "post", new=mock_post
         )
         await async_artifact.rm("test.txt")
         mock_remote_post.assert_called_once_with(
-            async_artifact, "remove_file", {"file_path": "test.txt"}
+            headers={},
+            json={"artifact_id": "test-artifact", "file_path": "test.txt"},
+            url="https://hypha.aicell.io/public/services/artifact-manager/remove_file",
         )
+
+        # url=get_method_url(self, ArtifactMethod.REMOVE_FILE),
+        #     headers=get_headers(self),
+        #     json=params,
 
     @pytest.mark.asyncio
     async def test_exists(self, async_artifact: AsyncHyphaArtifact):
@@ -95,12 +110,16 @@ class TestAsyncHyphaArtifactUnit:
     @pytest.mark.asyncio
     async def test_ls(self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture):
         """Test the ls method."""
-        mock_remote_list_contents = mocker.patch(
-            "hypha_artifact.async_hypha_artifact._fs.remote_list_contents",
-            new=AsyncMock(return_value=[]),
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = "[]"
+        mock_response.json = AsyncMock(return_value=[])
+        mock_get = AsyncMock(return_value=mock_response)
+        mock_remote_post = mocker.patch.object(
+            async_artifact._client, "get", new=mock_get
         )
         await async_artifact.ls("/")
-        mock_remote_list_contents.assert_called_once_with(async_artifact, "/")
+        mock_remote_post.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_info(self, async_artifact: AsyncHyphaArtifact):
