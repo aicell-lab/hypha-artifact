@@ -114,15 +114,24 @@ class ArtifactCLI(HyphaArtifact):
             stage=stage,
         )
 
+    # Hide some methods from CLI
+    def __dir__(self):
+        method_names = super().__dir__()
+        hidden_names = ["open"]
+
+        return [
+            method_name
+            for method_name in method_names
+            if method_name not in hidden_names
+        ]
+
 
 def main():
     """Main CLI entry point."""
-    # TODO: hide open
     # TODO: add --stage option to all cli operations
     # TODO: fix "is folder" errors in get
     # TODO: try CLI methods in general
     # TODO: list children (artifacts)
-    # TODO: automatically multipart if > ~100 MB
     fire.Fire(ArtifactCLI)  # pyright: ignore
 
 
