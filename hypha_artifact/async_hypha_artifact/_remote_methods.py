@@ -112,4 +112,25 @@ class ArtifactMethod(StrEnum):
     """
 
     DISCARD = "discard"
-    """Discards all staged changes for an artifact, reverting to the last committed state."""
+    """Discards all staged changes for an artifact, reverting to the last committed state.
+
+    Parameters:
+        artifact_id: The id of the artifact to discard changes for. Can be a UUID or alias.
+
+    Returns:
+        A dictionary containing the artifact reverted to its last committed state.
+    """
+
+    CREATE = "create"
+    """Creates a new artifact or collection with the specified manifest."""
+
+    DELETE = "delete"
+    """Deletes an artifact, its manifest, and all associated files from both the database and
+    S3 storage.
+
+    Args:
+        artifact_id (str): The id of the artifact to delete. Can be a UUID or alias.
+
+    Returns:
+        A dictionary containing the result of the delete operation.
+    """

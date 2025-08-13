@@ -298,11 +298,11 @@ async def upload_multipart(
 
 def prepare_params(
     self: "AsyncHyphaArtifact",
-    params: dict[str, JsonType],
+    params: dict[str, JsonType] | None = None,
 ) -> dict[str, JsonType]:
     """Extend parameters with artifact_id."""
     cleaned_params: dict[str, JsonType] = {
-        k: v for k, v in params.items() if v is not None
+        k: v for k, v in (params or {}).items() if v is not None
     }
     cleaned_params["artifact_id"] = self.artifact_id
     return cleaned_params
