@@ -52,6 +52,7 @@ async def ls(
 
 
 # TODO: test with directories
+# TODO: shorten
 async def ls(
     self: "AsyncHyphaArtifact",
     path: str,

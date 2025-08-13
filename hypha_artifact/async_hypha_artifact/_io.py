@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 import os
 from pathlib import Path
 from typing import (
@@ -17,16 +18,15 @@ import httpx
 from ..classes import StatusMessage, OnError
 from ..async_artifact_file import AsyncArtifactHttpFile
 
-from ._remote_methods import ArtifactMethod
 from ._utils import (
-    check_errors,
-    get_headers,
     local_walk,
     prepare_params,
-    get_method_url,
     assert_equal_len,
     rel_path_pairs,
     upload_multipart,
+    get_existing_url,
+    get_read_url,
+    get_write_url,
 )
 
 if TYPE_CHECKING:
@@ -112,6 +112,7 @@ async def cat(
         raise e
 
 
+# TODO: shorten
 def fsspec_open(
     self: "AsyncHyphaArtifact",
     urlpath: str,
@@ -137,63 +138,27 @@ def fsspec_open(
     AsyncArtifactHttpFile
         A file-like object
     """
+    params: dict[str, Any] = prepare_params(
+        self,
+        {
+            "file_path": urlpath,
+            "use_proxy": self.use_proxy,
+            "use_local_url": self.use_local_url,
+            "version": version,
+        },
+    )
+
     if urlparse(urlpath).scheme in ["http", "https", "ftp"]:
-
-        async def get_url():
-            return urlpath
-
+        get_url_func = partial(get_existing_url, urlpath)
     elif "r" in mode:
-
-        async def get_url():
-            params: dict[str, Any] = prepare_params(
-                self,
-                {
-                    "file_path": urlpath,
-                    "use_proxy": self.use_proxy,
-                    "use_local_url": self.use_local_url,
-                    "version": version,
-                },
-            )
-
-            response = await self.get_client().get(
-                get_method_url(self, ArtifactMethod.GET_FILE),
-                params=params,
-                headers=get_headers(self),
-                timeout=20,
-            )
-
-            check_errors(response)
-
-            return response.content.decode().strip('"')
-
+        get_url_func = partial(get_read_url, self, params)
     elif "w" in mode or "a" in mode:
-
-        async def get_url():
-            params: dict[str, Any] = prepare_params(
-                self,
-                {
-                    "file_path": urlpath,
-                    "use_proxy": self.use_proxy,
-                    "use_local_url": self.use_local_url,
-                },
-            )
-
-            response = await self.get_client().post(
-                get_method_url(self, ArtifactMethod.PUT_FILE),
-                json=params,
-                headers=get_headers(self),
-                timeout=20,
-            )
-
-            check_errors(response)
-
-            return response.content.decode().strip('"')
-
+        get_url_func = partial(get_write_url, self, params)
     else:
         raise ValueError(f"Unsupported mode: {mode}")
 
     return AsyncArtifactHttpFile(
-        url_func=get_url,
+        url_func=get_url_func,
         mode=mode,
         name=str(urlpath),
         content_type=content_type,

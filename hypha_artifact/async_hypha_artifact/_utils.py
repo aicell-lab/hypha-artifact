@@ -7,10 +7,7 @@ import math
 import os
 import asyncio
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-)
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -22,6 +19,36 @@ if TYPE_CHECKING:
 
 DEFAULT_MULTIPART_THRESHOLD = 100 * 1024 * 1024  # 100 MB
 DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024  # 6 MB
+
+
+async def get_existing_url(urlpath: str) -> str:
+    return urlpath
+
+
+async def get_read_url(artifact: "AsyncHyphaArtifact", params: dict[str, Any]) -> str:
+    response = await artifact.get_client().get(
+        get_method_url(artifact, ArtifactMethod.GET_FILE),
+        params=params,
+        headers=get_headers(artifact),
+        timeout=20,
+    )
+
+    check_errors(response)
+
+    return response.content.decode().strip('"')
+
+
+async def get_write_url(artifact: "AsyncHyphaArtifact", params: dict[str, Any]) -> str:
+    response = await artifact.get_client().post(
+        get_method_url(artifact, ArtifactMethod.PUT_FILE),
+        json=params,
+        headers=get_headers(artifact),
+        timeout=20,
+    )
+
+    check_errors(response)
+
+    return response.content.decode().strip('"')
 
 
 async def walk_dir(
