@@ -84,7 +84,6 @@ class HyphaArtifactBase(ABC):
         self: Self,
         urlpath: str,
         mode: str = "rb",
-        **kwargs: Any,
     ) -> Any:
         """Open a file for reading or writing"""
         raise NotImplementedError
@@ -97,7 +96,6 @@ class HyphaArtifactBase(ABC):
         recursive: bool = False,
         maxdepth: int | None = None,
         on_error: OnError | None = "raise",
-        **kwargs: dict[str, Any],
     ) -> Any:
         """Copy file(s) from path1 to path2 within the artifact"""
         raise NotImplementedError
@@ -111,7 +109,6 @@ class HyphaArtifactBase(ABC):
         callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
-        **kwargs: Any,
     ) -> Any:
         """Copy file(s) from remote (artifact) to local filesystem"""
         raise NotImplementedError
@@ -126,7 +123,6 @@ class HyphaArtifactBase(ABC):
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         multipart_config: dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> Any:
         """Copy file(s) from local filesystem to remote (artifact)"""
         raise NotImplementedError
@@ -137,7 +133,6 @@ class HyphaArtifactBase(ABC):
         path1: str,
         path2: str,
         on_error: OnError | None = None,
-        **kwargs: Any,
     ) -> Any:
         """Alias for copy method"""
         raise NotImplementedError
@@ -165,7 +160,7 @@ class HyphaArtifactBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def exists(self: Self, path: str, **kwargs: Any) -> Any:
+    def exists(self: Self, path: str) -> Any:
         """Check if a file or directory exists"""
         raise NotImplementedError
 
@@ -175,7 +170,6 @@ class HyphaArtifactBase(ABC):
         self: Self,
         path: str,
         detail: Literal[False],
-        **kwargs: Any,
     ) -> Any: ...
 
     @overload
@@ -184,7 +178,6 @@ class HyphaArtifactBase(ABC):
         self: Self,
         path: str,
         detail: None | Literal[True] = True,
-        **kwargs: Any,
     ) -> Any: ...
 
     @abstractmethod
@@ -192,13 +185,12 @@ class HyphaArtifactBase(ABC):
         self: Self,
         path: str,
         detail: None | bool = True,
-        **kwargs: Any,
     ) -> Any:
         """List files and directories in a directory"""
         raise NotImplementedError
 
     @abstractmethod
-    def info(self: Self, path: str, **kwargs: Any) -> Any:
+    def info(self: Self, path: str) -> Any:
         """Get information about a file or directory"""
         raise NotImplementedError
 
@@ -213,7 +205,7 @@ class HyphaArtifactBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def listdir(self: Self, path: str, **kwargs: Any) -> Any:
+    def listdir(self: Self, path: str) -> Any:
         """List files in a directory"""
         raise NotImplementedError
 
@@ -226,7 +218,6 @@ class HyphaArtifactBase(ABC):
         withdirs: bool = False,
         *,
         detail: Literal[True],
-        **kwargs: dict[str, Any],
     ) -> Any: ...
 
     @overload
@@ -237,7 +228,6 @@ class HyphaArtifactBase(ABC):
         maxdepth: int | None = None,
         withdirs: bool = False,
         detail: Literal[False] = False,
-        **kwargs: dict[str, Any],
     ) -> Any: ...
 
     @abstractmethod
@@ -247,7 +237,6 @@ class HyphaArtifactBase(ABC):
         maxdepth: int | None = None,
         withdirs: bool = False,
         detail: bool = False,
-        **kwargs: dict[str, Any],
     ) -> Any:
         """Find all files (and optional directories) under a path"""
         raise NotImplementedError
@@ -257,7 +246,6 @@ class HyphaArtifactBase(ABC):
         self: Self,
         path: str,
         create_parents: bool = True,
-        **kwargs: Any,
     ) -> Any:
         """Create a directory"""
         raise NotImplementedError
@@ -267,7 +255,6 @@ class HyphaArtifactBase(ABC):
         self: Self,
         path: str,
         exist_ok: bool = True,
-        **kwargs: Any,
     ) -> Any:
         """Create a directory and any parent directories"""
         raise NotImplementedError
@@ -298,6 +285,6 @@ class HyphaArtifactBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def touch(self: Self, path: str, truncate: bool = True, **kwargs: Any) -> Any:
+    def touch(self: Self, path: str, truncate: bool = True) -> Any:
         """Create an empty file or update the timestamp of an existing file"""
         raise NotImplementedError

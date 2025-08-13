@@ -64,7 +64,6 @@ class ArtifactCLI(HyphaArtifact):
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         multipart_config: str | dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> None:
         multipart_config_dict = ensure_dict(multipart_config)
 
@@ -76,7 +75,6 @@ class ArtifactCLI(HyphaArtifact):
             maxdepth=maxdepth,
             on_error=on_error,
             multipart_config=multipart_config_dict,
-            **kwargs,
         )
 
     def edit(

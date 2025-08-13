@@ -151,27 +151,24 @@ class HyphaArtifact:
         self: Self,
         urlpath: str,
         mode: str = "rb",
-        **kwargs: Any,  # pylint: disable=unused-argument
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing"""
-        async_file = self._async_artifact.open(urlpath, mode, **kwargs)
+        async_file = self._async_artifact.open(urlpath, mode)
         url = run_sync(async_file.get_url())
 
         return ArtifactHttpFile(
             url=url,
             mode=mode,
             name=async_file.name,
-            **kwargs,
         )
 
     def copy(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path1: str,
         path2: str,
         recursive: bool = False,
         maxdepth: int | None = None,
         on_error: OnError | None = "raise",
-        **kwargs: dict[str, Any],
     ) -> None:
         """Copy file(s) from path1 to path2 within the artifact"""
         return run_sync(
@@ -181,7 +178,6 @@ class HyphaArtifact:
                 recursive=recursive,
                 maxdepth=maxdepth,
                 on_error=on_error,
-                **kwargs,
             )
         )
 
@@ -193,7 +189,6 @@ class HyphaArtifact:
         callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
-        **kwargs: Any,
     ) -> None:
         """Copy file(s) from remote (artifact) to local filesystem"""
         return run_sync(
@@ -204,7 +199,6 @@ class HyphaArtifact:
                 callback=callback,
                 maxdepth=maxdepth,
                 on_error=on_error,
-                **kwargs,
             )
         )
 
@@ -217,7 +211,6 @@ class HyphaArtifact:
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         multipart_config: dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> None:
         """Copy file(s) from local filesystem to remote (artifact)"""
 
@@ -230,7 +223,6 @@ class HyphaArtifact:
                 maxdepth=maxdepth,
                 on_error=on_error,
                 multipart_config=multipart_config,
-                **kwargs,
             )
         )
 
@@ -239,10 +231,9 @@ class HyphaArtifact:
         path1: str,
         path2: str,
         on_error: OnError | None = None,
-        **kwargs: Any,
     ) -> None:
         """Alias for copy method"""
-        return run_sync(self._async_artifact.cp(path1, path2, on_error, **kwargs))
+        return run_sync(self._async_artifact.cp(path1, path2, on_error))
 
     def rm(
         self: Self,
@@ -263,42 +254,35 @@ class HyphaArtifact:
         """Delete a file or directory from the artifact"""
         return run_sync(self._async_artifact.delete(path, recursive, maxdepth))
 
-    def exists(
-        self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
-    ) -> bool:
+    def exists(self: Self, path: str) -> bool:
         """Check if a file or directory exists"""
-        return run_sync(self._async_artifact.exists(path, **kwargs))
+        return run_sync(self._async_artifact.exists(path))
 
     @overload
     def ls(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path: str,
         detail: Literal[False],
-        **kwargs: Any,
     ) -> list[str]: ...
 
     @overload
     def ls(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path: str,
         detail: None | Literal[True] = True,
-        **kwargs: Any,
     ) -> list[ArtifactItem]: ...
 
     def ls(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path: str,
         detail: None | bool = True,
-        **kwargs: Any,
     ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory"""
-        return run_sync(self._async_artifact.ls(path, detail, **kwargs))
+        return run_sync(self._async_artifact.ls(path, detail))
 
-    def info(
-        self: Self, path: str, **kwargs: Any  # pylint: disable=unused-argument
-    ) -> ArtifactItem:
+    def info(self: Self, path: str) -> ArtifactItem:
         """Get information about a file or directory"""
-        return run_sync(self._async_artifact.info(path, **kwargs))
+        return run_sync(self._async_artifact.info(path))
 
     def isdir(self: Self, path: str) -> bool:
         """Check if a path is a directory"""
@@ -308,65 +292,58 @@ class HyphaArtifact:
         """Check if a path is a file"""
         return run_sync(self._async_artifact.isfile(path))
 
-    def listdir(
-        self: Self, path: str, **kwargs: Any
-    ) -> list[str]:  # pylint: disable=unused-argument
+    def listdir(self: Self, path: str) -> list[str]:
         """List files in a directory"""
-        return run_sync(self._async_artifact.listdir(path, **kwargs))
+        return run_sync(self._async_artifact.listdir(path))
 
     @overload
     def find(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path: str,
         maxdepth: int | None = None,
         withdirs: bool = False,
         *,
         detail: Literal[True],
-        **kwargs: dict[str, Any],
     ) -> dict[str, ArtifactItem]: ...
 
     @overload
     def find(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path: str,
         maxdepth: int | None = None,
         withdirs: bool = False,
         detail: Literal[False] = False,
-        **kwargs: dict[str, Any],
     ) -> list[str]: ...
 
     def find(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path: str,
         maxdepth: int | None = None,
         withdirs: bool = False,
         detail: bool = False,
-        **kwargs: dict[str, Any],
     ) -> list[str] | dict[str, ArtifactItem]:
         """Find all files (and optional directories) under a path"""
         return run_sync(
             self._async_artifact.find(
-                path, maxdepth=maxdepth, withdirs=withdirs, detail=detail, **kwargs
+                path, maxdepth=maxdepth, withdirs=withdirs, detail=detail
             )
         )
 
     def mkdir(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path: str,
-        create_parents: bool = True,  # pylint: disable=unused-argument
-        **kwargs: Any,  # pylint: disable=unused-argument
+        create_parents: bool = True,
     ) -> None:
         """Create a directory"""
-        return run_sync(self._async_artifact.mkdir(path, create_parents, **kwargs))
+        return run_sync(self._async_artifact.mkdir(path, create_parents))
 
     def makedirs(
-        self: Self,  # pylint: disable=unused-argument
+        self: Self,
         path: str,
         exist_ok: bool = True,
-        **kwargs: Any,
     ) -> None:
         """Create a directory and any parent directories"""
-        return run_sync(self._async_artifact.makedirs(path, exist_ok, **kwargs))
+        return run_sync(self._async_artifact.makedirs(path, exist_ok))
 
     def rm_file(self: Self, path: str) -> None:
         """Remove a file"""
@@ -388,6 +365,6 @@ class HyphaArtifact:
         """Get the size of multiple files"""
         return run_sync(self._async_artifact.sizes(paths))
 
-    def touch(self: Self, path: str, truncate: bool = True, **kwargs: Any) -> None:
+    def touch(self: Self, path: str, truncate: bool = True) -> None:
         """Create an empty file or update the timestamp of an existing file"""
-        return run_sync(self._async_artifact.touch(path, truncate=truncate, **kwargs))
+        return run_sync(self._async_artifact.touch(path, truncate=truncate))

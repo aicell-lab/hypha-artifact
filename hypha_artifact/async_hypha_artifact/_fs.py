@@ -9,6 +9,7 @@ from typing import (
     overload,
 )
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -17,10 +18,11 @@ import httpx
 from ..classes import ArtifactItem
 
 from ._remote import (
-    remote_list_contents,
     remote_remove_file,
+    ArtifactMethod,
 )
 from ._utils import walk_dir
+from ..utils import prepare_params
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -31,7 +33,6 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     detail: Literal[False],
-    **kwargs: Any,
 ) -> list[str]: ...
 
 
@@ -40,7 +41,6 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     detail: Literal[True],
-    **kwargs: Any,
 ) -> list[ArtifactItem]: ...
 
 
@@ -49,7 +49,6 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     detail: None | bool = True,
-    **kwargs: Any,
 ) -> list[ArtifactItem]: ...
 
 
@@ -58,10 +57,23 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     detail: None | bool = True,
-    **kwargs: Any,
 ) -> list[str] | list[ArtifactItem]:
     """List contents of path"""
-    contents = await remote_list_contents(self, path)
+    params: dict[str, Any] = prepare_params(
+        {
+            "dir_path": path,
+        },
+        artifact_id=self.artifact_id,
+    )
+
+    response = await self.get_client().get(
+        f"{self.artifact_url}/{ArtifactMethod.LIST_FILES}",
+        params=params,
+        headers={"Authorization": f"Bearer {self.token}"} if self.token else {},
+        timeout=20,
+    )
+
+    contents = json.loads(response.content)
 
     if detail:
         return [ArtifactItem(**item) for item in contents if isinstance(item, dict)]
@@ -72,7 +84,6 @@ async def ls(
 async def info(
     self: "AsyncHyphaArtifact",
     path: str,
-    **kwargs: Any,
 ) -> ArtifactItem:
     """Get information about a file or directory
 
@@ -88,13 +99,13 @@ async def info(
     """
     parent_path = str(Path(path).parent)
 
-    out = await self.ls(parent_path, detail=True, **kwargs)
+    out = await self.ls(parent_path, detail=True)
     out = [o for o in out if str(o["name"]).rstrip("/") == Path(path).name]
 
     if out:
         return out[0]
 
-    out = await self.ls(path, detail=True, **kwargs)
+    out = await self.ls(path, detail=True)
     path = str(Path(path))
     out1 = [o for o in out if str(o["name"]).rstrip("/") == path]
     if len(out1) == 1:
@@ -148,7 +159,6 @@ async def isfile(self: "AsyncHyphaArtifact", path: str) -> bool:
 async def listdir(
     self: "AsyncHyphaArtifact",
     path: str,
-    **kwargs: Any,
 ) -> list[str]:
     """List files in a directory
 
@@ -156,8 +166,6 @@ async def listdir(
     ----------
     path: str
         Path to list
-    **kwargs: dict[str, Any]
-        Additional arguments passed to the ls method
 
     Returns
     -------
@@ -175,7 +183,6 @@ async def find(
     withdirs: bool = False,
     *,
     detail: Literal[True],
-    **kwargs: dict[str, Any],
 ) -> dict[str, ArtifactItem]: ...
 
 
@@ -186,7 +193,6 @@ async def find(
     maxdepth: int | None = None,
     withdirs: bool = False,
     detail: Literal[False] = False,
-    **kwargs: dict[str, Any],
 ) -> list[str]: ...
 
 
@@ -196,7 +202,6 @@ async def find(
     maxdepth: int | None = None,
     withdirs: bool = False,
     detail: bool = False,
-    **kwargs: dict[str, Any],
 ) -> list[str] | dict[str, ArtifactItem]:
     """Find all files (and optional directories) under a path
 
@@ -377,7 +382,6 @@ async def touch(
     self: "AsyncHyphaArtifact",
     path: str,
     truncate: bool = True,
-    **kwargs: Any,
 ) -> None:
     """Create a file if it does not exist, or update its last modified time
 
@@ -390,7 +394,7 @@ async def touch(
         if False, update timestamp and leave file unchanged
     """
     if truncate or not await self.exists(path):
-        async with self.open(path, "wb", **kwargs):
+        async with self.open(path, "wb"):
             pass
 
     # TODO: handle not truncate option
@@ -400,7 +404,6 @@ async def mkdir(
     self: "AsyncHyphaArtifact",
     path: str,
     create_parents: bool = True,
-    **kwargs: Any,
 ) -> None:
     """Create a directory
 
@@ -435,7 +438,6 @@ async def makedirs(
     self: "AsyncHyphaArtifact",
     path: str,
     exist_ok: bool = True,
-    **kwargs: Any,
 ) -> None:
     """Recursively make directories
 
@@ -459,7 +461,6 @@ async def makedirs(
 async def exists(
     self: "AsyncHyphaArtifact",
     path: str,
-    **kwargs: Any,
 ) -> bool:
     """Check if a file or directory exists
 
@@ -479,7 +480,7 @@ async def exists(
             return True
     except (FileNotFoundError, IOError, httpx.HTTPStatusError, httpx.RequestError):
         try:
-            dir_files = await self.ls(path, detail=False, **kwargs)
+            dir_files = await self.ls(path, detail=False)
             return len(dir_files) > 0
         except (FileNotFoundError, IOError, httpx.HTTPStatusError, httpx.RequestError):
             return False
