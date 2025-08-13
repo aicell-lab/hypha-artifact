@@ -17,12 +17,8 @@ import httpx
 
 from ..classes import ArtifactItem
 
-from ._remote import (
-    remote_remove_file,
-    ArtifactMethod,
-)
-from ._utils import walk_dir
-from ..utils import prepare_params
+from ._remote_methods import ArtifactMethod
+from ._utils import walk_dir, prepare_params, get_method_url, get_headers, check_errors
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -60,25 +56,29 @@ async def ls(
 ) -> list[str] | list[ArtifactItem]:
     """List contents of path"""
     params: dict[str, Any] = prepare_params(
+        self,
         {
             "dir_path": path,
         },
-        artifact_id=self.artifact_id,
     )
 
+    url = get_method_url(self, ArtifactMethod.LIST_FILES)
+
     response = await self.get_client().get(
-        f"{self.artifact_url}/{ArtifactMethod.LIST_FILES}",
+        url,
         params=params,
-        headers={"Authorization": f"Bearer {self.token}"} if self.token else {},
+        headers=get_headers(self),
         timeout=20,
     )
 
-    contents = json.loads(response.content)
+    check_errors(response)
+
+    artifact_items: list[ArtifactItem] = json.loads(response.content)
 
     if detail:
-        return [ArtifactItem(**item) for item in contents if isinstance(item, dict)]
+        return artifact_items
 
-    return [item["name"] for item in contents if isinstance(item, dict)]
+    return [item["name"] for item in artifact_items]
 
 
 async def info(
@@ -317,12 +317,27 @@ async def rm(
     datetime or None
         Creation time of the file, if available
     """
+    paths_to_remove: list[str] = []
     if recursive and await self.isdir(path):
         files = await self.find(path, maxdepth=maxdepth, withdirs=False, detail=False)
         for file_path in files:
-            await remote_remove_file(self, file_path)
+            paths_to_remove.append(file_path)
     else:
-        await remote_remove_file(self, path)
+        paths_to_remove.append(path)
+
+    for file_path in paths_to_remove:
+        params: dict[str, Any] = prepare_params(
+            self,
+            {
+                "file_path": file_path,
+            },
+        )
+
+        await self.get_client().post(
+            url=get_method_url(self, ArtifactMethod.REMOVE_FILE),
+            headers=get_headers(self),
+            json=params,
+        )
 
 
 async def delete(

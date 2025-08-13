@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ._utils import prepare_params
+from ._utils import get_headers, get_method_url, prepare_params, check_errors
 from ._remote_methods import ArtifactMethod
 
 if TYPE_CHECKING:
@@ -48,12 +48,15 @@ async def edit(
         },
     )
 
-    url = f"{self.artifact_url}/{ArtifactMethod.EDIT}"
+    url = get_method_url(self, ArtifactMethod.EDIT)
 
-    await self.get_client().post(
+    response = await self.get_client().post(
         url,
+        headers=get_headers(self),
         json=params,
     )
+
+    check_errors(response)
 
 
 async def commit(
@@ -79,10 +82,13 @@ async def commit(
         },
     )
 
-    await self.get_client().post(
-        f"{self.artifact_url}/{ArtifactMethod.COMMIT}",
+    response = await self.get_client().post(
+        get_method_url(self, ArtifactMethod.COMMIT),
+        headers=get_headers(self),
         json=params,
     )
+
+    check_errors(response)
 
 
 async def discard(
@@ -96,7 +102,10 @@ async def discard(
         },
     )
 
-    await self.get_client().post(
-        f"{self.artifact_url}/{ArtifactMethod.DISCARD}",
+    response = await self.get_client().post(
+        get_method_url(self, ArtifactMethod.DISCARD),
+        headers=get_headers(self),
         json=params,
     )
+
+    check_errors(response)

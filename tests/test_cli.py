@@ -115,7 +115,7 @@ class TestRealFileOperations:
         print("Artifact is now in staging mode with new version intent")
 
         # Step 2: Get presigned URL and upload file
-        with real_artifact.open("/api-staging-test.txt", "w", encoding="utf-8") as f:
+        with real_artifact.open("/api-staging-test.txt", "w") as f:
             f.write(test_content)
 
         # Step 3: Commit the changes

@@ -1,7 +1,9 @@
 """Represents a file or directory in the artifact storage."""
 
-from dataclasses import dataclass
 from typing import Any, TypedDict, Literal
+
+OnError = Literal["raise", "ignore"]
+JsonType = str | int | float | bool | None | dict[str, Any] | list[Any]
 
 
 class ArtifactItem(TypedDict):
@@ -13,14 +15,6 @@ class ArtifactItem(TypedDict):
     type: Literal["file", "directory"]
     size: int
     last_modified: float | None
-
-
-@dataclass
-class TransferPaths:
-    """Helper class to store source and destination paths."""
-
-    src: str
-    dst: str
 
 
 class StatusMessage:

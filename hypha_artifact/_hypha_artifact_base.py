@@ -5,7 +5,7 @@ Provides the abstract base class for Hypha artifacts.
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Literal, Self, overload
 
-from .utils import OnError
+from .classes import OnError
 
 
 # TODO: remove or re-inherit

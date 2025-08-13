@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import asyncio
@@ -9,23 +10,18 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Literal,
 )
 
 import httpx
 
-from hypha_artifact.async_hypha_artifact._remote import (
-    remote_put_file_start_multipart,
-    remote_put_file_complete_multipart,
-)
-
-from ..classes import StatusMessage, TransferPaths
-from ..utils import OnError
+from hypha_artifact.async_hypha_artifact._remote_methods import ArtifactMethod
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
-    from ..classes import ArtifactItem
+    from ..classes import ArtifactItem, JsonType
+
+DEFAULT_MULTIPART_THRESHOLD = 100 * 1024 * 1024  # 100 MB
+DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024  # 6 MB
 
 
 async def walk_dir(
@@ -61,25 +57,6 @@ async def walk_dir(
     return results
 
 
-async def get_single_file(
-    self: "AsyncHyphaArtifact",
-    src_path: str,
-    dst_path: str,
-) -> None:
-    """Copy a single file from remote to local."""
-    local_dir = os.path.dirname(dst_path)
-    if local_dir:
-        os.makedirs(local_dir, exist_ok=True)
-
-    async with self.open(src_path, "rb") as remote_file:
-        content = await remote_file.read()
-
-    content_bytes = content.encode("utf-8") if isinstance(content, str) else content
-
-    with open(dst_path, "wb") as local_file:
-        local_file.write(content_bytes)
-
-
 async def put_single_file(
     self: "AsyncHyphaArtifact",
     src_path: str,
@@ -93,49 +70,7 @@ async def put_single_file(
         await remote_file.write(content)
 
 
-async def transfer_single_file(
-    self: "AsyncHyphaArtifact",
-    src_path: str,
-    dst_path: str,
-    callback: None | Callable[[dict[str, Any]], None] = None,
-    on_error: OnError = "raise",
-    current_file_index: int = 0,
-    total_files: int = 1,
-    transfer_type: Literal["PUT", "GET"] = "PUT",
-    multipart_config: dict[str, Any] | None = None,
-) -> None:
-    """Transfer a single file with status updates."""
-    method_name = "upload" if transfer_type == "PUT" else "download"
-    status_message = StatusMessage(method_name, total_files)
-
-    if callback:
-        callback(status_message.in_progress(src_path, current_file_index))
-
-    try:
-        if transfer_type == "PUT":
-            if multipart_config:
-                await upload_multipart(
-                    self,
-                    Path(src_path),
-                    dst_path,
-                    multipart_config,
-                )
-            else:
-                await put_single_file(self, src_path=src_path, dst_path=dst_path)
-
-        elif transfer_type == "GET":
-            await get_single_file(self, dst_path=dst_path, src_path=src_path)
-
-        if callback:
-            callback(status_message.success(src_path))
-    except (FileNotFoundError, IOError, httpx.RequestError) as e:
-        if callback:
-            callback(status_message.error(src_path, str(e)))
-        if on_error == "raise":
-            raise e
-
-
-def local_find(
+def local_walk(
     src_path: str,
     maxdepth: int | None = None,
 ) -> list[str]:
@@ -152,147 +87,31 @@ def local_find(
     return files
 
 
-def get_transfer_paths(
-    lpath: str,
-    rpath: str,
-    transfer_type: Literal["PUT", "GET"],
-) -> TransferPaths:
-    """Get source and destination paths based on transfer type."""
-    if transfer_type == "GET":
-        return TransferPaths(src=rpath, dst=lpath)
-
-    return TransferPaths(src=lpath, dst=rpath)
-
-
-async def prepare_recursive_transfer(
-    self: "AsyncHyphaArtifact",
-    paths: TransferPaths,
-    transfer_type: Literal["PUT", "GET"],
-    maxdepth: int | None = None,
+def rel_path_pairs(
+    files: list[str], src_path: str, dst_path: str
 ) -> list[tuple[str, str]]:
-    """Prepare a list of file transfers for recursive operations."""
-    files: list[str] = []
     file_pairs: list[tuple[str, str]] = []
-
-    if transfer_type == "PUT":
-        files = local_find(paths.src, maxdepth=maxdepth)
-
-    if transfer_type == "GET":
-        os.makedirs(paths.dst, exist_ok=True)
-        files = await self.find(paths.src, maxdepth=maxdepth, withdirs=False)
-
     for f in files:
-        rel = Path(f).relative_to(paths.src)
-        file_pairs.append((f, str(Path(paths.dst) / rel)))
+        rel = Path(f).relative_to(src_path)
+        file_pairs.append((f, str(dst_path / rel)))
 
     return file_pairs
 
 
-async def prepare_transfer(
-    self: "AsyncHyphaArtifact",
-    lpath: str,
-    rpath: str,
-    recursive: bool,
-    transfer_type: Literal["PUT", "GET"],
-    maxdepth: int | None = None,
-) -> list[tuple[str, str]]:
-    """Prepare a list of file transfers."""
-    paths: TransferPaths = get_transfer_paths(
-        lpath=lpath, rpath=rpath, transfer_type=transfer_type
-    )
-
-    if recursive:
-        return await prepare_recursive_transfer(
-            self,
-            paths=paths,
-            maxdepth=maxdepth,
-            transfer_type=transfer_type,
-        )
-
-    return [(paths.src, paths.dst)]
-
-
-async def _prepare_all_transfers(
-    self: "AsyncHyphaArtifact",
+def assert_equal_len(
     rpath: str | list[str],
     lpath: str | list[str],
-    recursive: bool,
-    transfer_type: Literal["PUT", "GET"],
-    maxdepth: int | None = None,
-) -> list[tuple[str, str]]:
-    """Prepare all file transfers, handling both single and multiple paths."""
-    if isinstance(rpath, list) and isinstance(lpath, list):
-        if len(rpath) != len(lpath):
-            raise ValueError("rpath and lpath must be lists of the same length")
-        all_files: list[tuple[str, str]] = []
-        for rp, lp in zip(rpath, lpath):
-            all_files.extend(
-                await prepare_transfer(
-                    self,
-                    rpath=rp,
-                    lpath=lp,
-                    recursive=recursive,
-                    maxdepth=maxdepth,
-                    transfer_type=transfer_type,
-                )
-            )
-        return all_files
-    elif isinstance(rpath, str) and isinstance(lpath, str):
-        return await prepare_transfer(
-            self,
-            rpath=rpath,
-            lpath=lpath,
-            recursive=recursive,
-            maxdepth=maxdepth,
-            transfer_type=transfer_type,
-        )
-    else:
-        raise TypeError(
-            "rpath and lpath must be either both strings or both lists of strings"
-        )
+):
+    if isinstance(rpath, str):
+        assert isinstance(lpath, str)
+        rpath = [rpath]
+        lpath = [lpath]
 
+    assert isinstance(lpath, list)
+    assert isinstance(rpath, list)
+    assert len(rpath) == len(lpath)
 
-async def _execute_transfers(
-    self: "AsyncHyphaArtifact",
-    all_files: list[tuple[str, str]],
-    callback: None | Callable[[dict[str, Any]], None],
-    on_error: OnError,
-    transfer_type: Literal["PUT", "GET"],
-    multipart_config: dict[str, Any] | None = None,
-) -> None:
-    """Execute all file transfers."""
-    for i, (src, dst) in enumerate(all_files):
-        await transfer_single_file(
-            self,
-            src_path=src,
-            dst_path=dst,
-            callback=callback,
-            on_error=on_error,
-            current_file_index=i,
-            total_files=len(all_files),
-            transfer_type=transfer_type,
-            multipart_config=multipart_config,
-        )
-
-
-async def transfer(
-    self: "AsyncHyphaArtifact",
-    rpath: str | list[str],
-    lpath: str | list[str],
-    recursive: bool = False,
-    callback: None | Callable[[dict[str, Any]], None] = None,
-    maxdepth: int | None = None,
-    on_error: OnError = "raise",
-    transfer_type: Literal["PUT", "GET"] = "PUT",
-    multipart_config: dict[str, Any] | None = None,
-) -> None:
-    """Copy file(s) between remote and local."""
-    all_files = await _prepare_all_transfers(
-        self, rpath, lpath, recursive, transfer_type, maxdepth
-    )
-    await _execute_transfers(
-        self, all_files, callback, on_error, transfer_type, multipart_config
-    )
+    return rpath, lpath
 
 
 async def copy_single_file(self: "AsyncHyphaArtifact", src: str, dst: str) -> None:
@@ -372,12 +191,13 @@ async def upload_multipart_with_semaphore(
 
 def should_use_multipart(file_size: int, multipart_config: dict[str, Any]) -> bool:
     """Determine if multipart upload should be used."""
-    if not file_size > multipart_config.get("chunk_size", 0):
+    if not file_size > multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE):
         return False
 
     if multipart_config.get("enable"):
         return True
-    return file_size >= multipart_config.get("threshold", 0)
+
+    return file_size >= multipart_config.get("threshold", DEFAULT_MULTIPART_THRESHOLD)
 
 
 # TODO: Refactor, merge with normal transfer
@@ -394,16 +214,35 @@ async def upload_multipart(
     if not should_use_multipart(file_size, multipart_config):
         return
 
-    chunk_size = multipart_config.get("chunk_size", 0)
+    chunk_size = multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE)
     five_mb = 5 * 1024 * 1024
     assert (
         chunk_size > five_mb
     ), "Chunk size must be greater than 5MB for multipart upload"
     part_count = math.ceil(file_size / chunk_size)
 
-    multipart_info = await remote_put_file_start_multipart(
-        self, remote_path, part_count, download_weight=download_weight
+    params: dict[str, Any] = prepare_params(
+        self,
+        {
+            "file_path": remote_path,
+            "part_count": part_count,
+            "download_weight": download_weight,
+            "use_proxy": self.use_proxy,
+            "use_local_url": self.use_local_url,
+        },
     )
+
+    url = get_method_url(self, ArtifactMethod.PUT_FILE_START_MULTIPART)
+
+    response = await self.get_client().post(
+        url,
+        headers=get_headers(self),
+        json=params,
+    )
+
+    check_errors(response)
+
+    multipart_info = json.loads(response.content.decode())
 
     upload_id = multipart_info["upload_id"]
     parts_info = multipart_info["parts"]
@@ -414,4 +253,54 @@ async def upload_multipart(
         self, parts_info, chunks, max_parallel_uploads
     )
 
-    await remote_put_file_complete_multipart(self, upload_id, completed_parts)
+    params2: dict[str, Any] = prepare_params(
+        self,
+        {
+            "upload_id": upload_id,
+            "parts": completed_parts,
+        },
+    )
+
+    url2 = get_method_url(self, ArtifactMethod.PUT_FILE_COMPLETE_MULTIPART)
+
+    response = await self.get_client().post(
+        url2,
+        json=params2,
+        headers=get_headers(self),
+    )
+
+    check_errors(response)
+
+
+def prepare_params(
+    self: "AsyncHyphaArtifact",
+    params: dict[str, JsonType],
+) -> dict[str, JsonType]:
+    """Extend parameters with artifact_id."""
+    cleaned_params: dict[str, JsonType] = {
+        k: v for k, v in params.items() if v is not None
+    }
+    cleaned_params["artifact_id"] = self.artifact_id
+    return cleaned_params
+
+
+def get_method_url(self: "AsyncHyphaArtifact", method: ArtifactMethod) -> str:
+    """Get the URL for a specific artifact method."""
+    return f"{self.artifact_url}/{method}"
+
+
+def get_headers(self: "AsyncHyphaArtifact") -> dict[str, str]:
+    """Get headers for HTTP requests.
+
+    Returns:
+        dict[str, str]: Headers to include in the request.
+    """
+    return {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
+
+def check_errors(response: httpx.Response) -> None:
+    """Handle errors in HTTP responses."""
+    if response.status_code != 200:
+        raise ValueError(f"Unexpected error: {response.text}")
+
+    response.raise_for_status()

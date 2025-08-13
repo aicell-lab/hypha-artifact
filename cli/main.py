@@ -1,13 +1,26 @@
 """Hypha Artifact Command Line Interface"""
 
 from collections.abc import Callable
+import json
 import os
 import sys
 from typing import Any
 import fire  # pyright: ignore
 from dotenv import load_dotenv
 from hypha_artifact.hypha_artifact import HyphaArtifact
-from hypha_artifact.utils import OnError, ensure_dict
+from hypha_artifact.classes import OnError
+
+
+def ensure_dict(obj: str | dict[str, Any] | None) -> dict[str, Any] | None:
+    """Ensures the given object is a dictionary."""
+    if isinstance(obj, dict):
+        return obj
+
+    if isinstance(obj, str):
+        return json.loads(obj)
+
+    return None
+
 
 load_dotenv()
 

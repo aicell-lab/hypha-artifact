@@ -9,7 +9,7 @@ and manipulating files stored in Hypha artifacts.
 from datetime import datetime
 from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
 
-from .utils import OnError
+from .classes import OnError
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
 from .sync_utils import run_sync
