@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ._remote import remote_request, ArtifactMethod
+from ._utils import prepare_params
+from ._remote_methods import ArtifactMethod
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -34,21 +35,24 @@ async def edit(
         comment (str | None): A comment for this version or edit.
         stage (bool): If True, edits are made to a staging version.
     """
-    params: dict[str, Any] = {
-        "manifest": manifest,
-        "type": type,
-        "config": config,
-        "secrets": secrets,
-        "version": version,
-        "comment": comment,
-        "stage": stage,
-    }
-
-    await remote_request(
+    params: dict[str, Any] = prepare_params(
         self,
-        ArtifactMethod.EDIT,
-        method="POST",
-        json_data=params,
+        {
+            "manifest": manifest,
+            "type": type,
+            "config": config,
+            "secrets": secrets,
+            "version": version,
+            "comment": comment,
+            "stage": stage,
+        },
+    )
+
+    url = f"{self.artifact_url}/{ArtifactMethod.EDIT}"
+
+    await self.get_client().post(
+        url,
+        json=params,
     )
 
 
@@ -67,16 +71,17 @@ async def commit(
             If None, a new version is typically created. Cannot be "stage".
         comment (str | None): A comment describing the commit.
     """
-    params: dict[str, Any] = {
-        "version": version,
-        "comment": comment,
-    }
-
-    await remote_request(
+    params: dict[str, Any] = prepare_params(
         self,
-        ArtifactMethod.COMMIT,
-        method="POST",
-        json_data=params,
+        {
+            "version": version,
+            "comment": comment,
+        },
+    )
+
+    await self.get_client().post(
+        f"{self.artifact_url}/{ArtifactMethod.COMMIT}",
+        json=params,
     )
 
 
@@ -84,7 +89,14 @@ async def discard(
     self: "AsyncHyphaArtifact",
 ) -> None:
     """Discards all staged changes for an artifact, reverting to the last committed state."""
-    params: dict[str, Any] = {
-        "artifact_id": f"{self.workspace}/{self.artifact_alias}",
-    }
-    await remote_request(self, ArtifactMethod.DISCARD, method="POST", json_data=params)
+    params: dict[str, Any] = prepare_params(
+        self,
+        {
+            "artifact_id": f"{self.workspace}/{self.artifact_alias}",
+        },
+    )
+
+    await self.get_client().post(
+        f"{self.artifact_url}/{ArtifactMethod.DISCARD}",
+        json=params,
+    )

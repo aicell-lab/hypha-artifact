@@ -32,7 +32,7 @@ class ArtifactMethod(StrEnum):
             If None, uses the latest committed version. Can be "stage".
 
     Returns:
-        list[JsonType]: A list of items (files and directories) found at the path.
+        list[dict]: A list of items (files and directories) found at the path.
             Each item is a dictionary with details like 'name', 'type', 'size'.
     """
 
