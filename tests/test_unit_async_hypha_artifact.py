@@ -72,12 +72,10 @@ class TestAsyncHyphaArtifactUnit:
         self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture
     ):
         """Test the copy method."""
-        mock_copy_single_file = mocker.patch(
-            "hypha_artifact.async_hypha_artifact._io.copy_single_file",
-            new=AsyncMock(),
-        )
+        async_artifact.open = MagicMock()
+        async_artifact.open.return_value.__aenter__.return_value.read = AsyncMock()
         await async_artifact.copy("a.txt", "b.txt")
-        mock_copy_single_file.assert_called_once_with(async_artifact, "a.txt", "b.txt")
+        async_artifact.open.assert_called_with("b.txt", "wb")
 
     @pytest.mark.asyncio
     async def test_rm(self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture):
@@ -105,7 +103,7 @@ class TestAsyncHyphaArtifactUnit:
         async_artifact.open = MagicMock()
         async_artifact.open.return_value.__aenter__.return_value.read = AsyncMock()
         await async_artifact.exists("test.txt")
-        async_artifact.open.assert_called_with("test.txt", "r")
+        async_artifact.open.assert_called_with("test.txt", "r", version=None)
 
     @pytest.mark.asyncio
     async def test_ls(self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture):
@@ -131,7 +129,7 @@ class TestAsyncHyphaArtifactUnit:
             ]
         )
         result = await async_artifact.info("test.txt")
-        async_artifact.ls.assert_called_once_with(".", detail=True)
+        async_artifact.ls.assert_called_once_with(".", detail=True, version=None)
         assert result == ArtifactItem(
             name="test.txt", type="file", size=123, last_modified=None
         )
@@ -153,18 +151,18 @@ class TestAsyncHyphaArtifactUnit:
         """Test the isdir method."""
         async_artifact.info = AsyncMock(return_value={"type": "directory"})
         await async_artifact.isdir("test")
-        async_artifact.info.assert_called_once_with("test")
+        async_artifact.info.assert_called_once_with("test", version=None)
 
     @pytest.mark.asyncio
     async def test_isfile(self, async_artifact: AsyncHyphaArtifact):
         """Test the isfile method."""
         async_artifact.info = AsyncMock(return_value={"type": "file"})
         await async_artifact.isfile("test.txt")
-        async_artifact.info.assert_called_once_with("test.txt")
+        async_artifact.info.assert_called_once_with("test.txt", version=None)
 
     @pytest.mark.asyncio
     async def test_find(self, async_artifact: AsyncHyphaArtifact):
         """Test the find method."""
         async_artifact.ls = AsyncMock(return_value=[])
         await async_artifact.find("/")
-        async_artifact.ls.assert_called_once_with("/")
+        async_artifact.ls.assert_called_once_with("/", version=None)

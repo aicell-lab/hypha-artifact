@@ -30,12 +30,13 @@ async def walk_dir(
     maxdepth: int | None,
     withdirs: bool,
     current_depth: int,
+    version: str | None = None,
 ) -> dict[str, ArtifactItem]:
     """Recursively walk a directory."""
     results: dict[str, ArtifactItem] = {}
 
     try:
-        items = await self.ls(current_path)
+        items = await self.ls(current_path, version=version)
     except (FileNotFoundError, IOError, httpx.RequestError):
         return {}
 
@@ -50,7 +51,12 @@ async def walk_dir(
         if item_type == "directory" and (maxdepth is None or current_depth < maxdepth):
             subdir_path = Path(current_path) / str(item_name)
             subdirectory_results = await walk_dir(
-                self, str(subdir_path), maxdepth, withdirs, current_depth + 1
+                self,
+                str(subdir_path),
+                maxdepth,
+                withdirs,
+                current_depth + 1,
+                version=version,
             )
             results.update(subdirectory_results)
 
@@ -112,15 +118,6 @@ def assert_equal_len(
     assert len(rpath) == len(lpath)
 
     return rpath, lpath
-
-
-async def copy_single_file(self: "AsyncHyphaArtifact", src: str, dst: str) -> None:
-    """Copy a single file within the artifact."""
-    async with self.open(src, "rb") as src_file:
-        content = await src_file.read()
-
-    async with self.open(dst, "wb") as dst_file:
-        await dst_file.write(content)
 
 
 async def upload_part(

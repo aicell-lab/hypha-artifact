@@ -20,7 +20,6 @@ from ..async_artifact_file import AsyncArtifactHttpFile
 from ._remote_methods import ArtifactMethod
 from ._utils import (
     check_errors,
-    copy_single_file,
     get_headers,
     local_walk,
     prepare_params,
@@ -40,6 +39,7 @@ async def cat(
     path: list[str],
     recursive: bool = False,
     on_error: OnError = "raise",
+    version: str | None = None,
 ) -> dict[str, str | None]: ...
 
 
@@ -49,6 +49,7 @@ async def cat(
     path: str,
     recursive: bool = False,
     on_error: OnError = "raise",
+    version: str | None = None,
 ) -> str | None: ...
 
 
@@ -57,6 +58,7 @@ async def cat(
     path: str | list[str],
     recursive: bool = False,
     on_error: OnError = "raise",
+    version: str | None = None,
 ) -> dict[str, str | None] | str | None:
     """Get file(s) content as string(s)
 
@@ -68,6 +70,10 @@ async def cat(
         If True and path is a directory, get all files content
     on_error: "raise" or "ignore"
         What to do if a file is not found
+    version: str | None = None
+        The version of the artifact to get content from.
+        By default, it uses the latest version.
+        If you want to use a staged version, you can set it to "stage".
 
     Returns
     -------
@@ -78,14 +84,18 @@ async def cat(
     if isinstance(path, list):
         results: dict[str, str | None] = {}
         for p in path:
-            results[p] = await self.cat(p, recursive=recursive, on_error=on_error)
+            results[p] = await self.cat(
+                p, recursive=recursive, on_error=on_error, version=version
+            )
         return results
 
     if recursive and await self.isdir(path):
         results = {}
         files = await self.find(path, withdirs=False)
         for file_path in files:
-            results[file_path] = await self.cat(file_path, on_error=on_error)
+            results[file_path] = await self.cat(
+                file_path, on_error=on_error, version=version
+            )
         return results
 
     try:
@@ -107,6 +117,7 @@ def fsspec_open(
     urlpath: str,
     mode: str = "rb",
     content_type: str = "application/octet-stream",
+    version: str | None = None,
 ) -> AsyncArtifactHttpFile:
     """Open a file for reading or writing
 
@@ -116,6 +127,10 @@ def fsspec_open(
         Path to the file within the artifact
     mode: str
         File mode, similar to 'r', 'rb', 'w', 'wb', 'a', 'ab'
+    version: str | None = None
+        The version of the artifact to read from or write to.
+        By default, it uses the latest version.
+        If you want to use a staged version, you can set it to "stage".
 
     Returns
     -------
@@ -136,6 +151,7 @@ def fsspec_open(
                     "file_path": urlpath,
                     "use_proxy": self.use_proxy,
                     "use_local_url": self.use_local_url,
+                    "version": version,
                 },
             )
 
@@ -192,6 +208,7 @@ async def copy(
     recursive: bool = False,
     maxdepth: int | None = None,
     on_error: OnError | None = "raise",
+    version: str | None = None,
 ) -> None:
     """Copy file(s) from path1 to path2 within the artifact
 
@@ -207,19 +224,29 @@ async def copy(
         Maximum recursion depth when recursive=True
     on_error: "raise" or "ignore"
         What to do if a file is not found
+    version: str | None = None
+        The version of the artifact to copy from.
+        By default, it uses the latest version.
+        If you want to use a staged version, you can set it to "stage".
     """
     if recursive and await self.isdir(path1):
-        files = await self.find(path1, maxdepth=maxdepth, withdirs=False)
-        for src_path in files:
-            rel_path = Path(src_path).relative_to(path1)
-            dst_path = Path(path2) / rel_path
-            try:
-                await copy_single_file(self, src_path, str(dst_path))
-            except (FileNotFoundError, IOError, httpx.RequestError) as e:
-                if on_error == "raise":
-                    raise e
+        files = await self.find(
+            path1, maxdepth=maxdepth, withdirs=False, version=version
+        )
+        src_dst_paths = rel_path_pairs(files, src_path=path1, dst_path=path2)
     else:
-        await copy_single_file(self, path1, path2)
+        src_dst_paths = [(path1, path2)]
+
+    try:
+        for src_path, dst_path in src_dst_paths:
+            async with self.open(src_path, "rb", version=version) as src_file:
+                content = await src_file.read()
+
+            async with self.open(dst_path, "wb") as dst_file:
+                await dst_file.write(content)
+    except (FileNotFoundError, IOError, httpx.RequestError) as e:
+        if on_error == "raise":
+            raise e
 
 
 async def get(
@@ -230,6 +257,7 @@ async def get(
     callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
+    version: str | None = None,
 ) -> None:
     """Copy file(s) from remote (artifact) to local filesystem."""
     if not lpath:
@@ -240,7 +268,9 @@ async def get(
     for rp, lp in zip(rpaths, lpaths):
         if recursive:
             os.makedirs(lp, exist_ok=True)
-            files = await self.find(rp, maxdepth=maxdepth, withdirs=False)
+            files = await self.find(
+                rp, maxdepth=maxdepth, withdirs=False, version=version
+            )
             file_pairs = rel_path_pairs(files, src_path=rp, dst_path=lp)
             all_file_pairs.extend(file_pairs)
         else:
@@ -257,7 +287,7 @@ async def get(
             if local_dir:
                 os.makedirs(local_dir, exist_ok=True)
 
-            async with self.open(remote_path, "rb") as remote_file:
+            async with self.open(remote_path, "rb", version=version) as remote_file:
                 content = await remote_file.read()
 
             content_bytes = (
@@ -336,7 +366,9 @@ async def cp(
     path1: str,
     path2: str,
     on_error: OnError | None = None,
-    **kwargs: Any,
+    recursive: bool = False,
+    maxdepth: int | None = None,
+    version: str | None = None,
 ) -> None:
     """Alias for copy method
 
@@ -355,14 +387,19 @@ async def cp(
     -------
     None
     """
-    recursive = kwargs.pop("recursive", False)
-    maxdepth = kwargs.pop("maxdepth", None)
     return await self.copy(
-        path1, path2, recursive=recursive, maxdepth=maxdepth, on_error=on_error
+        path1,
+        path2,
+        recursive=recursive,
+        maxdepth=maxdepth,
+        on_error=on_error,
+        version=version,
     )
 
 
-async def head(self: "AsyncHyphaArtifact", path: str, size: int = 1024) -> bytes:
+async def head(
+    self: "AsyncHyphaArtifact", path: str, size: int = 1024, version: str | None = None
+) -> bytes:
     """Get the first bytes of a file
 
     Parameters
@@ -371,17 +408,20 @@ async def head(self: "AsyncHyphaArtifact", path: str, size: int = 1024) -> bytes
         Path to the file
     size: int
         Number of bytes to read
+    version: str | None = None
+        The version of the artifact to get content from.
+        By default, it uses the latest version.
+        If you want to use a staged version, you can set it to "stage".
 
     Returns
     -------
     bytes
         First bytes of the file
     """
-    async with self.open(path, "rb") as f:
+    async with self.open(path, "rb", version=version) as f:
         result = await f.read(size)
         if isinstance(result, bytes):
             return result
-        elif isinstance(result, str):
+        if isinstance(result, str):
             return result.encode()
-        else:
-            return bytes(result)
+        return bytes(result)

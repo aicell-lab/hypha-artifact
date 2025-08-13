@@ -131,11 +131,16 @@ class HyphaArtifact:
         path: list[str],
         recursive: bool = False,
         on_error: OnError = "raise",
+        version: str | None = None,
     ) -> dict[str, str | None]: ...
 
     @overload
     def cat(
-        self: Self, path: str, recursive: bool = False, on_error: OnError = "raise"
+        self: Self,
+        path: str,
+        recursive: bool = False,
+        on_error: OnError = "raise",
+        version: str | None = None,
     ) -> str | None: ...
 
     def cat(
@@ -143,17 +148,21 @@ class HyphaArtifact:
         path: str | list[str],
         recursive: bool = False,
         on_error: OnError = "raise",
+        version: str | None = None,
     ) -> dict[str, str | None] | str | None:
         """Get file(s) content as string(s)"""
-        return run_sync(self._async_artifact.cat(path, recursive, on_error))
+        return run_sync(
+            self._async_artifact.cat(path, recursive, on_error, version=version)
+        )
 
     def open(
         self: Self,
         urlpath: str,
         mode: str = "rb",
+        version: str | None = None,
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing"""
-        async_file = self._async_artifact.open(urlpath, mode)
+        async_file = self._async_artifact.open(urlpath, mode, version=version)
         url = run_sync(async_file.get_url())
 
         return ArtifactHttpFile(
@@ -169,6 +178,7 @@ class HyphaArtifact:
         recursive: bool = False,
         maxdepth: int | None = None,
         on_error: OnError | None = "raise",
+        version: str | None = None,
     ) -> None:
         """Copy file(s) from path1 to path2 within the artifact"""
         return run_sync(
@@ -178,6 +188,7 @@ class HyphaArtifact:
                 recursive=recursive,
                 maxdepth=maxdepth,
                 on_error=on_error,
+                version=version,
             )
         )
 
@@ -189,6 +200,7 @@ class HyphaArtifact:
         callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
+        version: str | None = None,
     ) -> None:
         """Copy file(s) from remote (artifact) to local filesystem"""
         return run_sync(
@@ -199,6 +211,7 @@ class HyphaArtifact:
                 callback=callback,
                 maxdepth=maxdepth,
                 on_error=on_error,
+                version=version,
             )
         )
 
@@ -231,9 +244,12 @@ class HyphaArtifact:
         path1: str,
         path2: str,
         on_error: OnError | None = None,
+        version: str | None = None,
     ) -> None:
         """Alias for copy method"""
-        return run_sync(self._async_artifact.cp(path1, path2, on_error))
+        return run_sync(
+            self._async_artifact.cp(path1, path2, on_error, version=version)
+        )
 
     def rm(
         self: Self,
@@ -244,9 +260,9 @@ class HyphaArtifact:
         """Remove file or directory"""
         return run_sync(self._async_artifact.rm(path, recursive, maxdepth))
 
-    def created(self: Self, path: str) -> datetime | None:
+    def created(self: Self, path: str, version: str | None = None) -> datetime | None:
         """Get the creation time of a file"""
-        return run_sync(self._async_artifact.created(path))
+        return run_sync(self._async_artifact.created(path, version=version))
 
     def delete(
         self: Self, path: str, recursive: bool = False, maxdepth: int | None = None
@@ -254,15 +270,13 @@ class HyphaArtifact:
         """Delete a file or directory from the artifact"""
         return run_sync(self._async_artifact.delete(path, recursive, maxdepth))
 
-    def exists(self: Self, path: str) -> bool:
+    def exists(self: Self, path: str, version: str | None = None) -> bool:
         """Check if a file or directory exists"""
-        return run_sync(self._async_artifact.exists(path))
+        return run_sync(self._async_artifact.exists(path, version=version))
 
     @overload
     def ls(
-        self: Self,
-        path: str,
-        detail: Literal[False],
+        self: Self, path: str, detail: Literal[False], version: str | None = None
     ) -> list[str]: ...
 
     @overload
@@ -270,31 +284,30 @@ class HyphaArtifact:
         self: Self,
         path: str,
         detail: None | Literal[True] = True,
+        version: str | None = None,
     ) -> list[ArtifactItem]: ...
 
     def ls(
-        self: Self,
-        path: str,
-        detail: None | bool = True,
+        self: Self, path: str, detail: None | bool = True, version: str | None = None
     ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory"""
-        return run_sync(self._async_artifact.ls(path, detail))
+        return run_sync(self._async_artifact.ls(path, detail, version=version))
 
-    def info(self: Self, path: str) -> ArtifactItem:
+    def info(self: Self, path: str, version: str | None = None) -> ArtifactItem:
         """Get information about a file or directory"""
-        return run_sync(self._async_artifact.info(path))
+        return run_sync(self._async_artifact.info(path, version=version))
 
-    def isdir(self: Self, path: str) -> bool:
+    def isdir(self: Self, path: str, version: str | None = None) -> bool:
         """Check if a path is a directory"""
-        return run_sync(self._async_artifact.isdir(path))
+        return run_sync(self._async_artifact.isdir(path, version=version))
 
-    def isfile(self: Self, path: str) -> bool:
+    def isfile(self: Self, path: str, version: str | None = None) -> bool:
         """Check if a path is a file"""
-        return run_sync(self._async_artifact.isfile(path))
+        return run_sync(self._async_artifact.isfile(path, version=version))
 
-    def listdir(self: Self, path: str) -> list[str]:
+    def listdir(self: Self, path: str, version: str | None = None) -> list[str]:
         """List files in a directory"""
-        return run_sync(self._async_artifact.listdir(path))
+        return run_sync(self._async_artifact.listdir(path, version=version))
 
     @overload
     def find(
@@ -302,6 +315,7 @@ class HyphaArtifact:
         path: str,
         maxdepth: int | None = None,
         withdirs: bool = False,
+        version: str | None = None,
         *,
         detail: Literal[True],
     ) -> dict[str, ArtifactItem]: ...
@@ -312,6 +326,7 @@ class HyphaArtifact:
         path: str,
         maxdepth: int | None = None,
         withdirs: bool = False,
+        version: str | None = None,
         detail: Literal[False] = False,
     ) -> list[str]: ...
 
@@ -320,12 +335,17 @@ class HyphaArtifact:
         path: str,
         maxdepth: int | None = None,
         withdirs: bool = False,
+        version: str | None = None,
         detail: bool = False,
     ) -> list[str] | dict[str, ArtifactItem]:
         """Find all files (and optional directories) under a path"""
         return run_sync(
             self._async_artifact.find(
-                path, maxdepth=maxdepth, withdirs=withdirs, detail=detail
+                path,
+                maxdepth=maxdepth,
+                withdirs=withdirs,
+                detail=detail,
+                version=version,
             )
         )
 
@@ -353,17 +373,19 @@ class HyphaArtifact:
         """Remove an empty directory"""
         return run_sync(self._async_artifact.rmdir(path))
 
-    def head(self: Self, path: str, size: int = 1024) -> bytes:
+    def head(
+        self: Self, path: str, size: int = 1024, version: str | None = None
+    ) -> bytes:
         """Get the first bytes of a file"""
-        return run_sync(self._async_artifact.head(path, size))
+        return run_sync(self._async_artifact.head(path, size, version=version))
 
-    def size(self: Self, path: str) -> int:
+    def size(self: Self, path: str, version: str | None = None) -> int:
         """Get the size of a file in bytes"""
-        return run_sync(self._async_artifact.size(path))
+        return run_sync(self._async_artifact.size(path, version=version))
 
-    def sizes(self: Self, paths: list[str]) -> list[int]:
+    def sizes(self: Self, paths: list[str], version: str | None = None) -> list[int]:
         """Get the size of multiple files"""
-        return run_sync(self._async_artifact.sizes(paths))
+        return run_sync(self._async_artifact.sizes(paths, version=version))
 
     def touch(self: Self, path: str, truncate: bool = True) -> None:
         """Create an empty file or update the timestamp of an existing file"""

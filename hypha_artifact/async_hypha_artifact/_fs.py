@@ -29,6 +29,7 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     detail: Literal[False],
+    version: str | None = None,
 ) -> list[str]: ...
 
 
@@ -37,6 +38,7 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     detail: Literal[True],
+    version: str | None = None,
 ) -> list[ArtifactItem]: ...
 
 
@@ -45,6 +47,7 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     detail: None | bool = True,
+    version: str | None = None,
 ) -> list[ArtifactItem]: ...
 
 
@@ -53,12 +56,31 @@ async def ls(
     self: "AsyncHyphaArtifact",
     path: str,
     detail: None | bool = True,
+    version: str | None = None,
 ) -> list[str] | list[ArtifactItem]:
-    """List contents of path"""
+    """List contents of path
+
+    Parameters
+    ----------
+    path: str
+        Path to list contents of
+    detail: bool | None
+        Whether to include detailed information about each item
+    version: str | None
+        The version of the artifact to list contents from.
+        By default, it lists from the latest version.
+        If you want to list from a staged version, you can set it to "stage".
+
+    Returns
+    -------
+    list[str] | list[ArtifactItem]
+        List of file names or detailed artifact items
+    """
     params: dict[str, Any] = prepare_params(
         self,
         {
             "dir_path": path,
+            "version": version,
         },
     )
 
@@ -84,6 +106,7 @@ async def ls(
 async def info(
     self: "AsyncHyphaArtifact",
     path: str,
+    version: str | None = None,
 ) -> ArtifactItem:
     """Get information about a file or directory
 
@@ -91,6 +114,10 @@ async def info(
     ----------
     path: str
         Path to get information about
+    version:
+        The version of the artifact to get the information from.
+        By default, it reads from the latest version.
+        If you want to read from a staged version, you can set it to "stage".
 
     Returns
     -------
@@ -99,13 +126,13 @@ async def info(
     """
     parent_path = str(Path(path).parent)
 
-    out = await self.ls(parent_path, detail=True)
+    out = await self.ls(parent_path, detail=True, version=version)
     out = [o for o in out if str(o["name"]).rstrip("/") == Path(path).name]
 
     if out:
         return out[0]
 
-    out = await self.ls(path, detail=True)
+    out = await self.ls(path, detail=True, version=version)
     path = str(Path(path))
     out1 = [o for o in out if str(o["name"]).rstrip("/") == path]
     if len(out1) == 1:
@@ -116,13 +143,19 @@ async def info(
         raise FileNotFoundError(path)
 
 
-async def isdir(self: "AsyncHyphaArtifact", path: str) -> bool:
+async def isdir(
+    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+) -> bool:
     """Check if a path is a directory
 
     Parameters
     ----------
     path: str
         Path to check
+    version: str | None = None
+        The version of the artifact to check against.
+        By default, it checks the latest version.
+        If you want to check a staged version, you can set it to "stage".
 
     Returns
     -------
@@ -130,19 +163,25 @@ async def isdir(self: "AsyncHyphaArtifact", path: str) -> bool:
         True if the path is a directory, False otherwise
     """
     try:
-        path_info = await self.info(path)
+        path_info = await self.info(path, version=version)
         return path_info["type"] == "directory"
     except (FileNotFoundError, IOError):
         return False
 
 
-async def isfile(self: "AsyncHyphaArtifact", path: str) -> bool:
+async def isfile(
+    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+) -> bool:
     """Check if a path is a file
 
     Parameters
     ----------
     path: str
         Path to check
+    version: str | None = None
+        The version of the artifact to check against.
+        By default, it checks the latest version.
+        If you want to check a staged version, you can set it to "stage".
 
     Returns
     -------
@@ -150,15 +189,14 @@ async def isfile(self: "AsyncHyphaArtifact", path: str) -> bool:
         True if the path is a file, False otherwise
     """
     try:
-        path_info = await self.info(path)
+        path_info = await self.info(path, version=version)
         return path_info["type"] == "file"
     except (FileNotFoundError, IOError):
         return False
 
 
 async def listdir(
-    self: "AsyncHyphaArtifact",
-    path: str,
+    self: "AsyncHyphaArtifact", path: str, version: str | None = None
 ) -> list[str]:
     """List files in a directory
 
@@ -166,13 +204,17 @@ async def listdir(
     ----------
     path: str
         Path to list
+    version: str | None = None
+        The version of the artifact to get the information from.
+        By default, it reads from the latest version.
+        If you want to read from a staged version, you can set it to "stage".
 
     Returns
     -------
     list of str
         List of file names in the directory
     """
-    return await self.ls(path, detail=False)
+    return await self.ls(path, detail=False, version=version)
 
 
 @overload
@@ -181,6 +223,7 @@ async def find(
     path: str,
     maxdepth: int | None = None,
     withdirs: bool = False,
+    version: str | None = None,
     *,
     detail: Literal[True],
 ) -> dict[str, ArtifactItem]: ...
@@ -192,6 +235,7 @@ async def find(
     path: str,
     maxdepth: int | None = None,
     withdirs: bool = False,
+    version: str | None = None,
     detail: Literal[False] = False,
 ) -> list[str]: ...
 
@@ -201,6 +245,7 @@ async def find(
     path: str,
     maxdepth: int | None = None,
     withdirs: bool = False,
+    version: str | None = None,
     detail: bool = False,
 ) -> list[str] | dict[str, ArtifactItem]:
     """Find all files (and optional directories) under a path
@@ -216,6 +261,10 @@ async def find(
     detail: bool
         If True, return a dict of {path: info_dict}
         If False, return a list of paths
+    version: str | None
+        The version of the artifact to search in.
+        By default, it searches in the latest version.
+        If you want to search in a staged version, you can set it to "stage".
 
     Returns
     -------
@@ -223,7 +272,7 @@ async def find(
         List of paths or dict of {path: info_dict}
     """
 
-    all_files = await walk_dir(self, path, maxdepth, withdirs, 1)
+    all_files = await walk_dir(self, path, maxdepth, withdirs, 1, version=version)
 
     if detail:
         return all_files
@@ -232,7 +281,9 @@ async def find(
 
 
 # TODO: currently returns last modified time, not creation time
-async def created(self: "AsyncHyphaArtifact", path: str) -> datetime | None:
+async def created(
+    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+) -> datetime | None:
     """Get the creation time of a file
 
     In the Hypha artifact system, we might not have direct access to creation time,
@@ -242,13 +293,17 @@ async def created(self: "AsyncHyphaArtifact", path: str) -> datetime | None:
     ----------
     path: str
         Path to the file
+    version: str | None = None
+        The version of the artifact to check against.
+        By default, it checks the latest version.
+        If you want to check a staged version, you can set it to "stage".
 
     Returns
     -------
     datetime or None
         Creation time of the file, if available
     """
-    path_info = await self.info(path)
+    path_info = await self.info(path, version=version)
 
     last_modified = path_info["last_modified"]
 
@@ -259,32 +314,44 @@ async def created(self: "AsyncHyphaArtifact", path: str) -> datetime | None:
     return None
 
 
-async def size(self: "AsyncHyphaArtifact", path: str) -> int:
+async def size(
+    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+) -> int:
     """Get the size of a file in bytes
 
     Parameters
     ----------
     path: str
         Path to the file
+    version: str | None = None
+        The version of the artifact to check against.
+        By default, it checks the latest version.
+        If you want to check a staged version, you can set it to "stage".
 
     Returns
     -------
     int
         Size of the file in bytes
     """
-    path_info = await self.info(path)
+    path_info = await self.info(path, version=version)
     if path_info["type"] == "directory":
         return 0
     return int(path_info["size"])
 
 
-async def sizes(self: "AsyncHyphaArtifact", paths: list[str]) -> list[int]:
+async def sizes(
+    self: "AsyncHyphaArtifact", paths: list[str], version: str | None = None
+) -> list[int]:
     """Get the size of multiple files
 
     Parameters
     ----------
     paths: list of str
         List of paths to get sizes for
+    version: str | None = None
+        The version of the artifact to check against.
+        By default, it checks the latest version.
+        If you want to check a staged version, you can set it to "stage".
 
     Returns
     -------
@@ -372,6 +439,7 @@ async def rm_file(self: "AsyncHyphaArtifact", path: str) -> None:
     await self.rm(path)
 
 
+# TODO: fix
 async def rmdir(self: "AsyncHyphaArtifact", path: str) -> None:
     """Remove an empty directory
 
@@ -474,8 +542,7 @@ async def makedirs(
 
 
 async def exists(
-    self: "AsyncHyphaArtifact",
-    path: str,
+    self: "AsyncHyphaArtifact", path: str, version: str | None = None
 ) -> bool:
     """Check if a file or directory exists
 
@@ -490,12 +557,12 @@ async def exists(
         True if the path exists, False otherwise
     """
     try:
-        async with self.open(path, "r") as f:
+        async with self.open(path, "r", version=version) as f:
             await f.read(0)
             return True
     except (FileNotFoundError, IOError, httpx.HTTPStatusError, httpx.RequestError):
         try:
-            dir_files = await self.ls(path, detail=False)
+            dir_files = await self.ls(path, detail=False, version=version)
             return len(dir_files) > 0
         except (FileNotFoundError, IOError, httpx.HTTPStatusError, httpx.RequestError):
             return False
