@@ -359,7 +359,7 @@ async def sizes(
     list of int
         List of file sizes in bytes
     """
-    return [await self.size(path) for path in paths]
+    return [await self.size(path, version=version) for path in paths]
 
 
 async def rm(
@@ -406,27 +406,6 @@ async def rm(
             headers=get_headers(self),
             json=params,
         )
-
-
-async def delete(
-    self: "AsyncHyphaArtifact",
-    path: str,
-    recursive: bool = False,
-    maxdepth: int | None = None,
-) -> None:
-    """Delete a file or directory from the artifact
-
-    Args:
-        self (Self): The instance of the class.
-        path (str): The path to the file or directory to delete.
-        recursive (bool, optional): Whether to delete directories recursively.
-            Defaults to False.
-        maxdepth (int | None, optional): The maximum depth to delete. Defaults to None.
-
-    Returns:
-        None
-    """
-    return await self.rm(path, recursive=recursive, maxdepth=maxdepth)
 
 
 async def rm_file(self: "AsyncHyphaArtifact", path: str) -> None:

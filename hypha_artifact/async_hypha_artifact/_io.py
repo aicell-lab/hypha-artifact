@@ -91,7 +91,7 @@ async def cat(
 
     if recursive and await self.isdir(path):
         results = {}
-        files = await self.find(path, withdirs=False)
+        files = await self.find(path, withdirs=False, version=version)
         for file_path in files:
             results[file_path] = await self.cat(
                 file_path, on_error=on_error, version=version
@@ -99,7 +99,7 @@ async def cat(
         return results
 
     try:
-        async with self.open(path, "r") as f:
+        async with self.open(path, "r", version=version) as f:
             content: str | bytes = await f.read()
             if isinstance(content, bytes):
                 return content.decode("utf-8")
