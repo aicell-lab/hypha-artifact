@@ -1,36 +1,34 @@
-"""
-HyphaArtifact module implements an fsspec-compatible interface for Hypha artifacts.
+"""HyphaArtifact module implements an fsspec-compatible interface for Hypha artifacts.
 
-This module provides a file-system like interface to interact with remote Hypha artifacts
-using the fsspec specification, allowing for operations like reading, writing, listing,
-and manipulating files stored in Hypha artifacts.
+This module provides a file-system like interface to interact with remote Hypha
+artifacts using the fsspec specification, allowing for operations like reading,
+writing, listing, and manipulating files stored in Hypha artifacts.
 """
 
+import contextlib
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, Literal, Self, overload, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal, Self, overload
 
-from .classes import OnError
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
+from .classes import ArtifactItem, OnError
 from .sync_utils import run_sync
-from .classes import ArtifactItem
 
 if not TYPE_CHECKING:
     try:
         # Try to import the pyodide-specific run_sync
         from pyodide.ffi import run_sync
     except ImportError:
-        # Fallback to the default implementation if pyodide is not available
-        pass
+        contextlib.suppress(ImportError)
 
 
 class HyphaArtifact:
-    """
-    HyphaArtifact provides an fsspec-like interface for interacting with Hypha artifact storage.
+    """Provides an fsspec-like interface for interacting with Hypha artifact storage.
 
     This class allows users to manage files and directories within a Hypha artifact,
-    including uploading, downloading, editing metadata, listing contents, and managing permissions.
-    It abstracts the underlying HTTP API and
+    including uploading, downloading, editing metadata, listing contents, and
+    managing permissions. It abstracts the underlying HTTP API and
     provides a file-system-like interface compatible with fsspec.
 
     Attributes
@@ -61,24 +59,39 @@ class HyphaArtifact:
     ...     f.write("new content")
     >>> # After making changes, you need to commit them
     >>> artifact.commit(comment="Updated data.csv")
+
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self: Self,
         artifact_id: str,
         workspace: str | None = None,
         token: str | None = None,
         server_url: str | None = None,
+        *,
         use_proxy: bool | None = None,
         use_local_url: bool | None = None,
         disable_ssl: bool = False,
-    ):
+    ) -> None:
         """Initialize a HyphaArtifact instance.
 
         Parameters
         ----------
         artifact_id: str
             The identifier of the Hypha artifact to interact with
+        workspace: str | None
+            The workspace identifier associated with the artifact
+        token: str | None
+            The authentication token for accessing the artifact service
+        server_url: str | None
+            The base URL for the Hypha server
+        use_proxy: bool | None
+            Whether to use a proxy for HTTP requests
+        use_local_url: bool | None
+            Whether to use a local URL for HTTP requests
+        disable_ssl: bool
+            Whether to disable SSL verification
+
         """
         self._async_artifact = AsyncHyphaArtifact(
             artifact_id,
@@ -90,19 +103,44 @@ class HyphaArtifact:
             disable_ssl=disable_ssl,
         )
 
-    def create(
+    def create(  # noqa: PLR0913
         self: Self,
         manifest: str | dict[str, Any] | None = None,
         parent_id: str | None = None,
-        type: str | None = None,
+        type: str | None = None,  # noqa: A002
         config: dict[str, Any] | None = None,
         permissions: dict[str, Any] | None = None,
         version: str | None = None,
         stage: str | None = None,
         comment: str | None = None,
         secrets: dict[str, str] | None = None,
+        *,
         overwrite: bool | None = None,
     ) -> None:
+        """Create a new artifact.
+
+        Args:
+            self (Self): The HyphaArtifact instance.
+            manifest (str | dict[str, Any] | None, optional): The artifact manifest.
+                Defaults to None.
+            parent_id (str | None, optional): The parent artifact ID. Defaults to None.
+            type (str | None, optional): The artifact type. Defaults to None.
+            permissions (dict[str, Any] | None, optional): The artifact permissions.
+                Defaults to None.
+            version (str | None, optional): The artifact version. Defaults to None.
+            stage (str | None, optional): The artifact stage. Defaults to None.
+            comment (str | None, optional): The commit comment. Defaults to None.
+            secrets (dict[str, str] | None, optional): The artifact secrets.
+                Defaults to None.
+            overwrite (bool | None, optional): Whether to overwrite the artifact if it
+                exists. Defaults to None.
+            config: dict[str, Any] | None
+                The artifact configuration. Defaults to None.
+
+        Returns:
+            _type_: _description_
+
+        """
         return run_sync(
             self._async_artifact.create(
                 manifest=manifest,
@@ -115,11 +153,12 @@ class HyphaArtifact:
                 comment=comment,
                 secrets=secrets,
                 overwrite=overwrite,
-            )
+            ),
         )
 
     def delete(
         self: Self,
+        *,
         delete_files: bool | None = None,
         recursive: bool | None = None,
         version: str | None = None,
@@ -130,17 +169,18 @@ class HyphaArtifact:
                 delete_files=delete_files,
                 recursive=recursive,
                 version=version,
-            )
+            ),
         )
 
-    def edit(
+    def edit(  # noqa: PLR0913
         self: Self,
         manifest: dict[str, Any] | None = None,
-        type: str | None = None,  # pylint: disable=redefined-builtin
+        type: str | None = None,  # noqa: A002
         config: dict[str, Any] | None = None,
         secrets: dict[str, str] | None = None,
         version: str | None = None,
         comment: str | None = None,
+        *,
         stage: bool = False,
     ) -> None:
         """Edits the artifact's metadata and saves it."""
@@ -153,7 +193,7 @@ class HyphaArtifact:
                 version=version,
                 comment=comment,
                 stage=stage,
-            )
+            ),
         )
 
     def commit(
@@ -161,17 +201,18 @@ class HyphaArtifact:
         version: str | None = None,
         comment: str | None = None,
     ) -> None:
-        """Commits the staged changes to the artifact."""
+        """Commit the staged changes to the artifact."""
         return run_sync(self._async_artifact.commit(version, comment))
 
     def discard(self: Self) -> None:
-        """Discards all staged changes for an artifact, reverting to the last committed state."""
+        """Discard all staged changes for an artifact."""
         return run_sync(self._async_artifact.discard())
 
     @overload
     def cat(
         self: Self,
         path: list[str],
+        *,
         recursive: bool = False,
         on_error: OnError = "raise",
         version: str | None = None,
@@ -181,6 +222,7 @@ class HyphaArtifact:
     def cat(
         self: Self,
         path: str,
+        *,
         recursive: bool = False,
         on_error: OnError = "raise",
         version: str | None = None,
@@ -189,13 +231,14 @@ class HyphaArtifact:
     def cat(
         self: Self,
         path: str | list[str],
-        recursive: bool = False,
         on_error: OnError = "raise",
         version: str | None = None,
+        *,
+        recursive: bool = False,
     ) -> dict[str, str | None] | str | None:
-        """Get file(s) content as string(s)"""
+        """Get file(s) content as string(s)."""
         return run_sync(
-            self._async_artifact.cat(path, recursive, on_error, version=version)
+            self._async_artifact.cat(path, recursive, on_error, version=version),
         )
 
     def open(
@@ -204,7 +247,7 @@ class HyphaArtifact:
         mode: str = "rb",
         version: str | None = None,
     ) -> ArtifactHttpFile:
-        """Open a file for reading or writing"""
+        """Open a file for reading or writing."""
         async_file = self._async_artifact.open(urlpath, mode, version=version)
         url = run_sync(async_file.get_url())
 
@@ -214,16 +257,17 @@ class HyphaArtifact:
             name=async_file.name,
         )
 
-    def copy(
+    def copy(  # noqa: PLR0913
         self: Self,
         path1: str,
         path2: str,
-        recursive: bool = False,
         maxdepth: int | None = None,
         on_error: OnError | None = "raise",
         version: str | None = None,
+        *,
+        recursive: bool = False,
     ) -> None:
-        """Copy file(s) from path1 to path2 within the artifact"""
+        """Copy file(s) from path1 to path2 within the artifact."""
         return run_sync(
             self._async_artifact.copy(
                 path1=path1,
@@ -232,20 +276,21 @@ class HyphaArtifact:
                 maxdepth=maxdepth,
                 on_error=on_error,
                 version=version,
-            )
+            ),
         )
 
-    def get(
+    def get(  # noqa: PLR0913
         self: Self,
         rpath: str | list[str],
         lpath: str | list[str],
-        recursive: bool = False,
         callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         version: str | None = None,
+        *,
+        recursive: bool = False,
     ) -> None:
-        """Copy file(s) from remote (artifact) to local filesystem"""
+        """Copy file(s) from remote (artifact) to local filesystem."""
         return run_sync(
             self._async_artifact.get(
                 rpath=rpath,
@@ -255,21 +300,21 @@ class HyphaArtifact:
                 maxdepth=maxdepth,
                 on_error=on_error,
                 version=version,
-            )
+            ),
         )
 
-    def put(
+    def put(  # noqa: PLR0913
         self: Self,
         lpath: str | list[str],
         rpath: str | list[str],
-        recursive: bool = False,
         callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         multipart_config: dict[str, Any] | None = None,
+        *,
+        recursive: bool = False,
     ) -> None:
-        """Copy file(s) from local filesystem to remote (artifact)"""
-
+        """Copy file(s) from local filesystem to remote (artifact)."""
         return run_sync(
             self._async_artifact.put(
                 lpath=lpath,
@@ -279,7 +324,7 @@ class HyphaArtifact:
                 maxdepth=maxdepth,
                 on_error=on_error,
                 multipart_config=multipart_config,
-            )
+            ),
         )
 
     def cp(
@@ -289,61 +334,71 @@ class HyphaArtifact:
         on_error: OnError | None = None,
         version: str | None = None,
     ) -> None:
-        """Alias for copy method"""
+        """Alias for copy method."""
         return run_sync(
-            self._async_artifact.cp(path1, path2, on_error, version=version)
+            self._async_artifact.cp(path1, path2, on_error, version=version),
         )
 
     def rm(
         self: Self,
         path: str,
-        recursive: bool = False,
         maxdepth: int | None = None,
+        *,
+        recursive: bool = False,
     ) -> None:
-        """Remove file or directory"""
+        """Remove file or directory."""
         return run_sync(self._async_artifact.rm(path, recursive, maxdepth))
 
     def created(self: Self, path: str, version: str | None = None) -> datetime | None:
-        """Get the creation time of a file"""
+        """Get the creation time of a file."""
         return run_sync(self._async_artifact.created(path, version=version))
 
     def exists(self: Self, path: str, version: str | None = None) -> bool:
-        """Check if a file or directory exists"""
+        """Check if a file or directory exists."""
         return run_sync(self._async_artifact.exists(path, version=version))
 
     @overload
     def ls(
-        self: Self, path: str, detail: Literal[False], version: str | None = None
+        self: Self,
+        path: str,
+        version: str | None = None,
+        *,
+        detail: Literal[False],
     ) -> list[str]: ...
 
     @overload
     def ls(
         self: Self,
         path: str,
-        detail: None | Literal[True] = True,
         version: str | None = None,
+        *,
+        detail: None | Literal[True] = True,
     ) -> list[ArtifactItem]: ...
 
     def ls(
-        self: Self, path: str, detail: None | bool = True, version: str | None = None
+        self: Self,
+        path: str,
+        version: str | None = None,
+        *,
+        detail: None | bool = True,
     ) -> list[str] | list[ArtifactItem]:
-        """List files and directories in a directory"""
+        """List files and directories in a directory."""
         return run_sync(self._async_artifact.ls(path, detail, version=version))
 
     def info(self: Self, path: str, version: str | None = None) -> ArtifactItem:
-        """Get information about a file or directory"""
+        """Get information about a file or directory."""
         return run_sync(self._async_artifact.info(path, version=version))
 
     def isdir(self: Self, path: str, version: str | None = None) -> bool:
-        """Check if a path is a directory"""
+        """Check if a path is a directory."""
         return run_sync(self._async_artifact.isdir(path, version=version))
 
     def isfile(self: Self, path: str, version: str | None = None) -> bool:
-        """Check if a path is a file"""
+        """Check if a path is a file."""
         return run_sync(self._async_artifact.isfile(path, version=version))
 
     def listdir(self: Self, path: str, version: str | None = None) -> list[str]:
-        """List files in a directory"""
+        """List files in a directory."""
         return run_sync(self._async_artifact.listdir(path, version=version))
 
     @overload
@@ -351,9 +406,9 @@ class HyphaArtifact:
         self: Self,
         path: str,
         maxdepth: int | None = None,
-        withdirs: bool = False,
         version: str | None = None,
         *,
+        withdirs: bool = False,
         detail: Literal[True],
     ) -> dict[str, ArtifactItem]: ...
 
@@ -362,8 +417,9 @@ class HyphaArtifact:
         self: Self,
         path: str,
         maxdepth: int | None = None,
-        withdirs: bool = False,
         version: str | None = None,
+        *,
+        withdirs: bool = False,
         detail: Literal[False] = False,
     ) -> list[str]: ...
 
@@ -371,11 +427,12 @@ class HyphaArtifact:
         self: Self,
         path: str,
         maxdepth: int | None = None,
-        withdirs: bool = False,
         version: str | None = None,
+        *,
+        withdirs: bool = False,
         detail: bool = False,
     ) -> list[str] | dict[str, ArtifactItem]:
-        """Find all files (and optional directories) under a path"""
+        """Find all files (and optional directories) under a path."""
         return run_sync(
             self._async_artifact.find(
                 path,
@@ -383,47 +440,52 @@ class HyphaArtifact:
                 withdirs=withdirs,
                 detail=detail,
                 version=version,
-            )
+            ),
         )
 
     def mkdir(
         self: Self,
         path: str,
+        *,
         create_parents: bool = True,
     ) -> None:
-        """Create a directory"""
+        """Create a directory."""
         return run_sync(self._async_artifact.mkdir(path, create_parents))
 
     def makedirs(
         self: Self,
         path: str,
+        *,
         exist_ok: bool = True,
     ) -> None:
-        """Create a directory and any parent directories"""
+        """Create a directory and any parent directories."""
         return run_sync(self._async_artifact.makedirs(path, exist_ok))
 
     def rm_file(self: Self, path: str) -> None:
-        """Remove a file"""
+        """Remove a file."""
         return run_sync(self._async_artifact.rm_file(path))
 
     def rmdir(self: Self, path: str) -> None:
-        """Remove an empty directory"""
+        """Remove an empty directory."""
         return run_sync(self._async_artifact.rmdir(path))
 
     def head(
-        self: Self, path: str, size: int = 1024, version: str | None = None
+        self: Self,
+        path: str,
+        size: int = 1024,
+        version: str | None = None,
     ) -> bytes:
-        """Get the first bytes of a file"""
+        """Get the first bytes of a file."""
         return run_sync(self._async_artifact.head(path, size, version=version))
 
     def size(self: Self, path: str, version: str | None = None) -> int:
-        """Get the size of a file in bytes"""
+        """Get the size of a file in bytes."""
         return run_sync(self._async_artifact.size(path, version=version))
 
     def sizes(self: Self, paths: list[str], version: str | None = None) -> list[int]:
-        """Get the size of multiple files"""
+        """Get the size of multiple files."""
         return run_sync(self._async_artifact.sizes(paths, version=version))
 
-    def touch(self: Self, path: str, truncate: bool = True) -> None:
-        """Create an empty file or update the timestamp of an existing file"""
+    def touch(self: Self, path: str, *, truncate: bool = True) -> None:
+        """Create an empty file or update the timestamp of an existing file."""
         return run_sync(self._async_artifact.touch(path, truncate=truncate))
