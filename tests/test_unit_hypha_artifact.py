@@ -3,8 +3,10 @@
 """Unit tests for the HyphaArtifact module."""
 
 from unittest.mock import MagicMock
+
 import pytest
 from pytest_mock import MockerFixture
+
 from hypha_artifact import HyphaArtifact
 
 
@@ -13,10 +15,12 @@ def get_artifact(mocker: MockerFixture) -> HyphaArtifact:
     """Create a test artifact with a mocked async artifact."""
     mocker.patch("hypha_artifact.hypha_artifact.run_sync")
     mock_async_artifact = mocker.patch(
-        "hypha_artifact.hypha_artifact.AsyncHyphaArtifact"
+        "hypha_artifact.hypha_artifact.AsyncHyphaArtifact",
     )
     artifact = HyphaArtifact(
-        "test-artifact", "test-workspace", server_url="https://hypha.aicell.io"
+        "test-artifact",
+        "test-workspace",
+        server_url="https://hypha.aicell.io",
     )
     artifact._async_artifact = mock_async_artifact.return_value
     return artifact
@@ -50,7 +54,10 @@ class TestHyphaArtifactUnit:
         artifact.cat("test.txt")
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.cat.assert_called_once_with(
-            "test.txt", False, "raise", version=None
+            path="test.txt",
+            on_error="raise",
+            version=None,
+            recursive=False,
         )
 
     def test_open(self, artifact: HyphaArtifact):
@@ -58,7 +65,9 @@ class TestHyphaArtifactUnit:
         artifact.open("test.txt", "w")
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.open.assert_called_once_with(
-            "test.txt", "w", version=None
+            "test.txt",
+            "w",
+            version=None,
         )
 
     def test_copy(self, artifact: HyphaArtifact):
@@ -78,21 +87,26 @@ class TestHyphaArtifactUnit:
         """Test the rm method."""
         artifact.rm("test.txt")
         assert isinstance(artifact._async_artifact, MagicMock)
-        artifact._async_artifact.rm.assert_called_once_with("test.txt", False, None)
+        artifact._async_artifact.rm.assert_called_once_with(
+            "test.txt",
+            None,
+            recursive=False,
+        )
 
     def test_exists(self, artifact: HyphaArtifact):
         """Test the exists method."""
         artifact.exists("test.txt")
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.exists.assert_called_once_with(
-            "test.txt", version=None
+            "test.txt",
+            version=None,
         )
 
     def test_ls(self, artifact: HyphaArtifact):
         """Test the ls method."""
         artifact.ls("/")
         assert isinstance(artifact._async_artifact, MagicMock)
-        artifact._async_artifact.ls.assert_called_once_with("/", True, version=None)
+        artifact._async_artifact.ls.assert_called_once_with("/", None, detail=True)
 
     def test_info(self, artifact: HyphaArtifact):
         """Test the info method."""
@@ -111,7 +125,8 @@ class TestHyphaArtifactUnit:
         artifact.isfile("test.txt")
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.isfile.assert_called_once_with(
-            "test.txt", version=None
+            "test.txt",
+            version=None,
         )
 
     def test_find(self, artifact: HyphaArtifact):
@@ -119,5 +134,9 @@ class TestHyphaArtifactUnit:
         artifact.find("/")
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.find.assert_called_once_with(
-            "/", maxdepth=None, withdirs=False, detail=False, version=None
+            "/",
+            maxdepth=None,
+            withdirs=False,
+            detail=False,
+            version=None,
         )

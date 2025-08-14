@@ -3,9 +3,11 @@
 """Unit tests for the AsyncHyphaArtifact module."""
 
 
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from pytest_mock import MockerFixture
+
 from hypha_artifact import AsyncHyphaArtifact
 from hypha_artifact.classes import ArtifactItem
 
@@ -20,7 +22,9 @@ def get_async_artifact(mocker: MockerFixture) -> AsyncHyphaArtifact:
         return_value=mock_client,
     )
     artifact = AsyncHyphaArtifact(
-        "test-artifact", "test-workspace", server_url="https://hypha.aicell.io"
+        "test-artifact",
+        "test-workspace",
+        server_url="https://hypha.aicell.io",
     )
     artifact._client = mock_client
     return artifact
@@ -31,28 +35,36 @@ class TestAsyncHyphaArtifactUnit:
 
     @pytest.mark.asyncio
     async def test_edit(
-        self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        mocker: MockerFixture,
     ):
         """Test the edit method."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_post = AsyncMock(return_value=mock_response)
         mock_remote_post = mocker.patch.object(
-            async_artifact._client, "post", new=mock_post
+            async_artifact._client,
+            "post",
+            new=mock_post,
         )
         await async_artifact.edit(stage=True)
         mock_remote_post.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_commit(
-        self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        mocker: MockerFixture,
     ):
         """Test the commit method."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_post = AsyncMock(return_value=mock_response)
         mock_remote_post = mocker.patch.object(
-            async_artifact._client, "post", new=mock_post
+            async_artifact._client,
+            "post",
+            new=mock_post,
         )
         await async_artifact.commit()
         mock_remote_post.assert_called_once()
@@ -62,14 +74,16 @@ class TestAsyncHyphaArtifactUnit:
         """Test the cat method."""
         async_artifact.open = MagicMock()
         async_artifact.open.return_value.__aenter__.return_value.read = AsyncMock(
-            return_value="test"
+            return_value="test",
         )
         await async_artifact.cat("test.txt")
         async_artifact.open.assert_called_once_with("test.txt", "r", version=None)
 
     @pytest.mark.asyncio
     async def test_copy(
-        self, async_artifact: AsyncHyphaArtifact, mocker: MockerFixture
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        mocker: MockerFixture,
     ):
         """Test the copy method."""
         async_artifact.open = MagicMock()
@@ -84,7 +98,9 @@ class TestAsyncHyphaArtifactUnit:
         mock_response.status_code = 200
         mock_post = AsyncMock(return_value=mock_response)
         mock_remote_post = mocker.patch.object(
-            async_artifact._client, "post", new=mock_post
+            async_artifact._client,
+            "post",
+            new=mock_post,
         )
         await async_artifact.rm("test.txt")
         mock_remote_post.assert_called_once_with(
@@ -114,7 +130,9 @@ class TestAsyncHyphaArtifactUnit:
         mock_response.json = AsyncMock(return_value=[])
         mock_get = AsyncMock(return_value=mock_response)
         mock_remote_post = mocker.patch.object(
-            async_artifact._client, "get", new=mock_get
+            async_artifact._client,
+            "get",
+            new=mock_get,
         )
         await async_artifact.ls("/")
         mock_remote_post.assert_called_once()
@@ -125,13 +143,18 @@ class TestAsyncHyphaArtifactUnit:
         # Mock the ls method that info actually calls
         async_artifact.ls = AsyncMock(
             return_value=[
-                ArtifactItem(name="test.txt", type="file", size=123, last_modified=None)
-            ]
+                ArtifactItem(
+                    name="test.txt", type="file", size=123, last_modified=None
+                ),
+            ],
         )
         result = await async_artifact.info("test.txt")
         async_artifact.ls.assert_called_once_with(".", detail=True, version=None)
         assert result == ArtifactItem(
-            name="test.txt", type="file", size=123, last_modified=None
+            name="test.txt",
+            type="file",
+            size=123,
+            last_modified=None,
         )
 
     @pytest.mark.asyncio

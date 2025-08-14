@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -27,8 +27,9 @@ if TYPE_CHECKING:
 async def ls(
     self: AsyncHyphaArtifact,
     path: str,
-    detail: Literal[False],
     version: str | None = None,
+    *,
+    detail: Literal[False],
 ) -> list[str]: ...
 
 
@@ -36,8 +37,9 @@ async def ls(
 async def ls(
     self: AsyncHyphaArtifact,
     path: str,
-    detail: Literal[True],
     version: str | None = None,
+    *,
+    detail: Literal[True],
 ) -> list[ArtifactItem]: ...
 
 
@@ -45,23 +47,27 @@ async def ls(
 async def ls(
     self: AsyncHyphaArtifact,
     path: str,
-    detail: None | bool = True,
     version: str | None = None,
+    *,
+    detail: None | bool = True,
 ) -> list[ArtifactItem]: ...
 
 
-# TODO: test with directories
-# TODO: shorten
+# TODO @hugokallander: test with directories
+# TODO @hugokallander: shorten
 async def ls(
     self: AsyncHyphaArtifact,
     path: str,
-    detail: None | bool = True,
     version: str | None = None,
+    *,
+    detail: None | bool = True,
 ) -> list[str] | list[ArtifactItem]:
     """List contents of path.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The HyphaArtifact instance to use
     path: str
         Path to list contents of
     detail: bool | None
@@ -113,6 +119,8 @@ async def info(
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The HyphaArtifact instance to use
     path: str
         Path to get information about
     version:
@@ -128,19 +136,28 @@ async def info(
     """
     parent_path = str(Path(path).parent)
 
-    out = await self.ls(parent_path, detail=True, version=version)
-    out = [o for o in out if str(o["name"]).rstrip("/") == Path(path).name]
+    files_here = await self.ls(parent_path, detail=True, version=version)
+    matching_files_here = [
+        file_here
+        for file_here in files_here
+        if str(file_here["name"]).rstrip("/") == Path(path).name
+    ]
 
-    if out:
-        return out[0]
+    if matching_files_here:
+        return matching_files_here[0]
 
-    out = await self.ls(path, detail=True, version=version)
+    files_in_sub = await self.ls(path, detail=True, version=version)
     path = str(Path(path))
-    out1 = [o for o in out if str(o["name"]).rstrip("/") == path]
-    if len(out1) == 1:
-        return out1[0]
-    if len(out1) > 1 or out:
+    matching_files_in_sub = [
+        file_in_sub
+        for file_in_sub in files_in_sub
+        if str(file_in_sub["name"]).rstrip("/") == path
+    ]
+    if len(matching_files_in_sub) == 1:
+        return matching_files_in_sub[0]
+    if len(matching_files_in_sub) > 1 or files_in_sub:
         return {"name": path, "type": "directory", "size": 0, "last_modified": None}
+
     raise FileNotFoundError(path)
 
 
@@ -149,10 +166,12 @@ async def isdir(
     path: str,
     version: str | None = None,
 ) -> bool:
-    """Check if a path is a directory
+    """Check if a path is a directory.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The HyphaArtifact instance to use
     path: str
         Path to check
     version: str | None = None
@@ -178,10 +197,12 @@ async def isfile(
     path: str,
     version: str | None = None,
 ) -> bool:
-    """Check if a path is a file
+    """Check if a path is a file.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The HyphaArtifact instance to use
     path: str
         Path to check
     version: str | None = None
@@ -207,10 +228,12 @@ async def listdir(
     path: str,
     version: str | None = None,
 ) -> list[str]:
-    """List files in a directory
+    """List files in a directory.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The HyphaArtifact instance to use
     path: str
         Path to list
     version: str | None = None
@@ -232,9 +255,9 @@ async def find(
     self: AsyncHyphaArtifact,
     path: str,
     maxdepth: int | None = None,
-    withdirs: bool = False,
     version: str | None = None,
     *,
+    withdirs: bool = False,
     detail: Literal[True],
 ) -> dict[str, ArtifactItem]: ...
 
@@ -244,8 +267,9 @@ async def find(
     self: AsyncHyphaArtifact,
     path: str,
     maxdepth: int | None = None,
-    withdirs: bool = False,
     version: str | None = None,
+    *,
+    withdirs: bool = False,
     detail: Literal[False] = False,
 ) -> list[str]: ...
 
@@ -254,14 +278,17 @@ async def find(
     self: AsyncHyphaArtifact,
     path: str,
     maxdepth: int | None = None,
-    withdirs: bool = False,
     version: str | None = None,
+    *,
+    withdirs: bool = False,
     detail: bool = False,
 ) -> list[str] | dict[str, ArtifactItem]:
-    """Find all files (and optional directories) under a path
+    """Find all files (and optional directories) under a path.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     path: str
         Base path to search from
     maxdepth: int or None
@@ -282,7 +309,7 @@ async def find(
         List of paths or dict of {path: info_dict}
 
     """
-    all_files = await walk_dir(self, path, maxdepth, withdirs, 1, version=version)
+    all_files = await walk_dir(self, path, maxdepth, 1, version, withdirs=withdirs)
 
     if detail:
         return all_files
@@ -290,12 +317,12 @@ async def find(
     return sorted(all_files.keys())
 
 
-# TODO: currently returns last modified time, not creation time
+# TODO @hugokallander: currently returns last modified time, not creation time
 async def created(
     self: AsyncHyphaArtifact,
     path: str,
     version: str | None = None,
-) -> datetime | None:
+) -> datetime.datetime | None:
     """Get the creation time of a file.
 
     In the Hypha artifact system, we might not have direct access to creation time,
@@ -303,6 +330,8 @@ async def created(
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     path: str
         Path to the file
     version: str | None = None
@@ -321,8 +350,10 @@ async def created(
     last_modified = path_info["last_modified"]
 
     if last_modified:
-        datetime_modified = datetime.fromtimestamp(last_modified)
-        return datetime_modified
+        return datetime.datetime.fromtimestamp(
+            last_modified,
+            tz=datetime.UTC,
+        )
 
     return None
 
@@ -332,10 +363,12 @@ async def size(
     path: str,
     version: str | None = None,
 ) -> int:
-    """Get the size of a file in bytes
+    """Get the size of a file in bytes.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     path: str
         Path to the file
     version: str | None = None
@@ -360,10 +393,12 @@ async def sizes(
     paths: list[str],
     version: str | None = None,
 ) -> list[int]:
-    """Get the size of multiple files
+    """Get the size of multiple files.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     paths: list of str
         List of paths to get sizes for
     version: str | None = None
@@ -383,17 +418,21 @@ async def sizes(
 async def rm(
     self: AsyncHyphaArtifact,
     path: str,
-    recursive: bool = False,
     maxdepth: int | None = None,
+    *,
+    recursive: bool = False,
 ) -> None:
-    """Remove file or directory
+    """Remove file or directory.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     path: str
         Path to the file or directory to remove
     recursive: bool
-        Defaults to False. If True and path is a directory, remove all its contents recursively
+        Defaults to False. If True and path is a directory,
+        remove all its contents recursively
     maxdepth: int or None
         Maximum recursion depth when recursive=True
 
@@ -405,9 +444,12 @@ async def rm(
     """
     paths_to_remove: list[str] = []
     if recursive and await self.isdir(path):
-        files = await self.find(path, maxdepth=maxdepth, withdirs=False, detail=False)
-        for file_path in files:
-            paths_to_remove.append(file_path)
+        paths_to_remove = await self.find(
+            path,
+            maxdepth=maxdepth,
+            withdirs=False,
+            detail=False,
+        )
     else:
         paths_to_remove.append(path)
 
@@ -431,6 +473,8 @@ async def rm_file(self: AsyncHyphaArtifact, path: str) -> None:
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     path: str
         Path to remove
 
@@ -438,38 +482,43 @@ async def rm_file(self: AsyncHyphaArtifact, path: str) -> None:
     await self.rm(path)
 
 
-# TODO: fix
+# TODO @hugokallander: fix
 async def rmdir(self: AsyncHyphaArtifact, path: str) -> None:
     """Remove an empty directory.
 
-    In the Hypha artifact system, directories are implicit, so this would
-    only make sense if the directory is empty. Since empty directories
-    don't really exist explicitly, this is essentially a validation check
-    that no files exist under this path.
-
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     path: str
         Path to remove
 
     """
     if not await self.isdir(path):
-        raise FileNotFoundError(f"Directory not found: {path}")
+        error_msg = f"Directory not found: {path}"
+        raise FileNotFoundError(error_msg)
 
     files = await self.ls(path)
-    if files:
-        raise OSError(f"Directory not empty: {path}")
+    has_keep = any(f["name"] == ".keep" for f in files)
+    if len(files) > 0 or (has_keep and len(files) > 1):
+        error_msg = f"Directory not empty: {path}"
+        raise OSError(error_msg)
+
+    await self.rm(str(Path(path) / ".keep"))
 
 
 async def touch(
     self: AsyncHyphaArtifact,
     path: str,
+    *,
     truncate: bool = True,
 ) -> None:
-    """Create a file if it does not exist, or update its last modified time
+    """Create a file if it does not exist, or update its last modified time.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     path: str
         Path to the file
     truncate: bool
@@ -481,27 +530,30 @@ async def touch(
         async with self.open(path, "wb"):
             pass
 
-    # TODO: handle not truncate option
+    # TODO @hugokallander: handle not truncate option
 
 
 async def mkdir(
     self: AsyncHyphaArtifact,
     path: str,
+    *,
     create_parents: bool = True,
 ) -> None:
-    """Create a directory
+    """Create a directory.
 
     Creates a .keep file in the directory to ensure it exists.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance to use
     path: str
         Path to create
     create_parents: bool
         If True, create parent directories if they don't exist
 
     """
-    if path in ["", "/"]:
+    if Path(path) == Path():
         return
 
     parent_path = str(Path(path).parent)
@@ -509,12 +561,14 @@ async def mkdir(
 
     if parent_path and not await self.exists(parent_path):
         if not create_parents:
-            raise FileNotFoundError(f"Parent directory does not exist: {parent_path}")
+            error_msg = f"Parent directory does not exist: {parent_path}"
+            raise FileNotFoundError(error_msg)
 
         await self.mkdir(parent_path, create_parents=True)
 
     if parent_path and await self.isfile(parent_path):
-        raise NotADirectoryError(f"Parent path is not a directory: {parent_path}")
+        error_msg = f"Parent path is not a directory: {parent_path}"
+        raise NotADirectoryError(error_msg)
 
     await self.touch(str(Path(child_path) / ".keep"))
 
@@ -522,9 +576,10 @@ async def mkdir(
 async def makedirs(
     self: AsyncHyphaArtifact,
     path: str,
+    *,
     exist_ok: bool = True,
 ) -> None:
-    """Recursively make directories
+    """Recursively make directories.
 
     Creates directory at path and any intervening required directories.
     Raises exception if, for instance, the path already exists but is a
@@ -532,6 +587,8 @@ async def makedirs(
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The HyphaArtifact instance to use
     path: str
         Path to create
     exist_ok: bool
@@ -539,7 +596,8 @@ async def makedirs(
 
     """
     if not exist_ok and await self.exists(path):
-        raise FileExistsError(f"Directory already exists: {path}")
+        error_msg = f"Directory already exists: {path}"
+        raise FileExistsError(error_msg)
 
     await self.mkdir(path, create_parents=True)
 
@@ -549,12 +607,16 @@ async def exists(
     path: str,
     version: str | None = None,
 ) -> bool:
-    """Check if a file or directory exists
+    """Check if a file or directory exists.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The HyphaArtifact instance to use
     path: str
         Path to check
+    version: str | None
+        The version of the artifact to check against. If None, uses the latest version.
 
     Returns
     -------

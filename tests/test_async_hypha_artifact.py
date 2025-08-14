@@ -1,28 +1,34 @@
-"""
-Integration tests for the AsyncHyphaArtifact module.
+"""Integration tests for the AsyncHyphaArtifact module.
 
 This module contains integration tests for the AsyncHyphaArtifact class,
 testing real async file operations such as creation, reading, copying, and deletion
 against an actual Hypha artifact service.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
 import pytest
 import pytest_asyncio
-from conftest import ArtifactTestMixin
+
 from hypha_artifact import AsyncHyphaArtifact
+from tests.conftest import ArtifactTestMixin
 
 
 @pytest_asyncio.fixture(scope="function", name="async_artifact")
 async def get_async_artifact(
-    artifact_name: str, artifact_setup_teardown: tuple[str, str]
+    artifact_name: str,
+    artifact_setup_teardown: tuple[str, str],
 ) -> Any:
     """Create a test artifact with a real async connection to Hypha."""
     token, workspace = artifact_setup_teardown
     artifact = AsyncHyphaArtifact(
-        artifact_name, workspace, token, server_url="https://hypha.aicell.io"
+        artifact_name,
+        workspace,
+        token,
+        server_url="https://hypha.aicell.io",
     )
     yield artifact
     await artifact.aclose()
@@ -33,14 +39,18 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_artifact_initialization(
-        self, async_artifact: AsyncHyphaArtifact, artifact_name: str
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        artifact_name: str,
     ) -> None:
         """Test that the artifact is initialized correctly with real credentials."""
         self._check_artifact_initialization(async_artifact, artifact_name)
 
     @pytest.mark.asyncio
     async def test_create_file(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
     ) -> None:
         """Test creating a file in the artifact using real async operations."""
         test_file_path = "async_test_file.txt"
@@ -66,7 +76,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             # First, list files with detail=True (default)
             files = await async_artifact.ls("/")
             self._validate_file_listing(files)
-            print(f"Files in artifact: {files}")
+            logging.info(f"Files in artifact: {files}")
 
             # Test listing with detail=False
             file_names = await async_artifact.ls("/", detail=False)
@@ -74,7 +84,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_read_file_content(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
     ) -> None:
         """Test reading content from a file in the artifact using real async operations."""
         test_file_path = "async_test_file.txt"
@@ -93,7 +105,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_copy_file(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
     ) -> None:
         """Test copying a file within the artifact using real async operations."""
         source_path = "async_source_file.txt"
@@ -108,7 +122,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
                 await async_artifact.commit()
 
             assert await async_artifact.exists(
-                source_path
+                source_path,
             ), f"Source file {source_path} should exist before copying"
 
             # Copy the file
@@ -116,7 +130,10 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             await async_artifact.copy(source_path, copy_path)
             await async_artifact.commit()
             await self._async_validate_copy_operation(
-                async_artifact, source_path, copy_path, test_content
+                async_artifact,
+                source_path,
+                copy_path,
+                test_content,
             )
 
     @pytest.mark.asyncio
@@ -132,13 +149,17 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Test for existing file
             await self._async_validate_file_existence(
-                async_artifact, test_file_path, True
+                async_artifact,
+                test_file_path,
+                True,
             )
 
             # Test for non-existent file
             non_existent_path = "this_async_file_does_not_exist.txt"
             await self._async_validate_file_existence(
-                async_artifact, non_existent_path, False
+                async_artifact,
+                non_existent_path,
+                False,
             )
 
     @pytest.mark.asyncio
@@ -156,7 +177,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Verify file exists before removal
             await self._async_validate_file_existence(
-                async_artifact, removal_test_file, True
+                async_artifact,
+                removal_test_file,
+                True,
             )
 
             # Remove the file
@@ -166,12 +189,16 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Verify file no longer exists
             await self._async_validate_file_existence(
-                async_artifact, removal_test_file, False
+                async_artifact,
+                removal_test_file,
+                False,
             )
 
     @pytest.mark.asyncio
     async def test_workflow(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
     ) -> None:
         """Integration test for a complete async file workflow: create, read, copy, remove."""
         async with async_artifact:
@@ -201,13 +228,17 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             await async_artifact.rm(copied_file)
             await async_artifact.commit()
             await self._async_validate_file_existence(
-                async_artifact, copied_file, False
+                async_artifact,
+                copied_file,
+                False,
             )
             assert await async_artifact.exists(original_file)
 
     @pytest.mark.asyncio
     async def test_partial_file_read(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
     ) -> None:
         """Test reading only part of a file using the size parameter in async read."""
         test_file_path = "async_partial_read_test.txt"
@@ -229,7 +260,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_context_manager(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
     ) -> None:
         """Test that the async context manager works correctly."""
         test_file_path = "async_context_test.txt"
@@ -253,7 +286,10 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     # Async helper methods for validation
     async def _async_validate_file_existence(
-        self, artifact: Any, file_path: str, should_exist: bool
+        self,
+        artifact: Any,
+        file_path: str,
+        should_exist: bool,
     ) -> None:
         """Helper to validate file existence asynchronously."""
         exists = await artifact.exists(file_path)
@@ -263,15 +299,19 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             assert exists is False, f"File {file_path} should not exist"
 
     async def _async_validate_copy_operation(
-        self, artifact: Any, source_path: str, copy_path: str, expected_content: str
+        self,
+        artifact: Any,
+        source_path: str,
+        copy_path: str,
+        expected_content: str,
     ) -> None:
         """Validate that copy operation worked correctly asynchronously."""
         # Verify both files exist
         assert await artifact.exists(
-            source_path
+            source_path,
         ), f"Source file {source_path} should exist after copying"
         assert await artifact.exists(
-            copy_path
+            copy_path,
         ), f"Copied file {copy_path} should exist after copying"
 
         # Verify content is the same
@@ -283,10 +323,12 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_get_file(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str, tmp_path: Path
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
+        tmp_path: Path,
     ) -> None:
         """Test copying a file from remote (artifact) to local filesystem."""
-
         remote_file = "async_get_test_file.txt"
         local_file = tmp_path / "local_get_test_file.txt"
 
@@ -302,16 +344,18 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Verify local file exists and has correct content
             assert local_file.exists(), f"Local file {local_file} should exist"
-            with open(local_file, "r", encoding="utf-8") as f:
+            with open(local_file, encoding="utf-8") as f:
                 local_content = f.read()
             self._validate_file_content(local_content, test_content)
 
     @pytest.mark.asyncio
     async def test_put_file(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str, tmp_path: Path
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
+        tmp_path: Path,
     ) -> None:
         """Test copying a file from local filesystem to remote (artifact)."""
-
         local_file = tmp_path / "local_put_test_file.txt"
         remote_file = "async_put_test_file.txt"
 
@@ -327,17 +371,19 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Verify remote file exists and has correct content
             assert await async_artifact.exists(
-                remote_file
+                remote_file,
             ), f"Remote file {remote_file} should exist"
             remote_content = await async_artifact.cat(remote_file)
             self._validate_file_content(remote_content, test_content)
 
     @pytest.mark.asyncio
     async def test_get_directory_recursive(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str, tmp_path: Path
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
+        tmp_path: Path,
     ) -> None:
         """Test copying a directory recursively from remote to local."""
-
         remote_dir = "async_get_dir"
         remote_file1 = f"{remote_dir}/file1.txt"
         remote_file2 = f"{remote_dir}/subdir/file2.txt"
@@ -362,9 +408,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             assert local_file1.exists(), f"Local file {local_file1} should exist"
             assert local_file2.exists(), f"Local file {local_file2} should exist"
 
-            with open(local_file1, "r", encoding="utf-8") as f:
+            with open(local_file1, encoding="utf-8") as f:
                 content1 = f.read()
-            with open(local_file2, "r", encoding="utf-8") as f:
+            with open(local_file2, encoding="utf-8") as f:
                 content2 = f.read()
 
             self._validate_file_content(content1, test_content + "_1")
@@ -372,10 +418,12 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_put_directory_recursive(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str, tmp_path: Path
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
+        tmp_path: Path,
     ) -> None:
         """Test copying a directory recursively from local to remote."""
-
         local_dir = tmp_path / "local_put_dir"
         local_subdir = local_dir / "subdir"
         local_file1 = local_dir / "file1.txt"
@@ -400,10 +448,10 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             remote_file2 = f"{remote_dir}/subdir/file2.txt"
 
             assert await async_artifact.exists(
-                remote_file1
+                remote_file1,
             ), f"Remote file {remote_file1} should exist"
             assert await async_artifact.exists(
-                remote_file2
+                remote_file2,
             ), f"Remote file {remote_file2} should exist"
 
             content1 = await async_artifact.cat(remote_file1)
@@ -414,7 +462,10 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
     @pytest.mark.asyncio
     async def test_get_multiple_files(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str, tmp_path: Path
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
+        tmp_path: Path,
     ) -> None:
         """Test copying multiple files from remote to local using lists."""
         remote_files = ["async_get_multi1.txt", "async_get_multi2.txt"]
@@ -437,15 +488,18 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             # Verify local files exist and have correct content
             for i, local_file in enumerate(local_files):
                 assert os.path.exists(
-                    local_file
+                    local_file,
                 ), f"Local file {local_file} should exist"
-                with open(local_file, "r", encoding="utf-8") as f:
+                with open(local_file, encoding="utf-8") as f:
                     content = f.read()
                 self._validate_file_content(content, test_content + f"_{i+1}")
 
     @pytest.mark.asyncio
     async def test_put_multiple_files(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str, tmp_path: Path
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
+        tmp_path: Path,
     ) -> None:
         """Test copying multiple files from local to remote using lists."""
         local_files = [
@@ -468,17 +522,19 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             # Verify remote files exist and have correct content
             for i, remote_file in enumerate(remote_files):
                 assert await async_artifact.exists(
-                    remote_file
+                    remote_file,
                 ), f"Remote file {remote_file} should exist"
                 content = await async_artifact.cat(remote_file)
                 self._validate_file_content(content, test_content + f"_{i+1}")
 
     @pytest.mark.asyncio
     async def test_progress_callback(
-        self, async_artifact: AsyncHyphaArtifact, test_content: str, tmp_path: Path
+        self,
+        async_artifact: AsyncHyphaArtifact,
+        test_content: str,
+        tmp_path: Path,
     ) -> None:
         """Test that progress callback is called during get and put operations."""
-
         # Track callback calls
         callback_calls: list[dict[str, Any]] = []
 
@@ -531,5 +587,5 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
 
             # Verify the file was uploaded
             assert await async_artifact.exists(
-                test_file2
+                test_file2,
             ), f"Remote file {test_file2} should exist"

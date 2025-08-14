@@ -52,7 +52,7 @@ class HyphaArtifact:
     >>> artifact.ls("/")
     ['data.csv', 'images/']
     >>> with artifact.open("data.csv", "r") as f:
-    ...     print(f.read())
+    ...     logging.info(f.read())
     >>> # To write to an artifact, you first need to stage the changes
     >>> artifact.edit(stage=True)
     >>> with artifact.open("data.csv", "w") as f:
@@ -109,7 +109,6 @@ class HyphaArtifact:
         parent_id: str | None = None,
         type: str | None = None,  # noqa: A002
         config: dict[str, Any] | None = None,
-        permissions: dict[str, Any] | None = None,
         version: str | None = None,
         stage: str | None = None,
         comment: str | None = None,
@@ -125,8 +124,6 @@ class HyphaArtifact:
                 Defaults to None.
             parent_id (str | None, optional): The parent artifact ID. Defaults to None.
             type (str | None, optional): The artifact type. Defaults to None.
-            permissions (dict[str, Any] | None, optional): The artifact permissions.
-                Defaults to None.
             version (str | None, optional): The artifact version. Defaults to None.
             stage (str | None, optional): The artifact stage. Defaults to None.
             comment (str | None, optional): The commit comment. Defaults to None.
@@ -147,7 +144,6 @@ class HyphaArtifact:
                 parent_id=parent_id,
                 type=type,
                 config=config,
-                permissions=permissions,
                 version=version,
                 stage=stage,
                 comment=comment,
@@ -238,7 +234,12 @@ class HyphaArtifact:
     ) -> dict[str, str | None] | str | None:
         """Get file(s) content as string(s)."""
         return run_sync(
-            self._async_artifact.cat(path, recursive, on_error, version=version),
+            self._async_artifact.cat(
+                path=path,
+                on_error=on_error,
+                version=version,
+                recursive=recursive,
+            ),
         )
 
     def open(
@@ -347,7 +348,7 @@ class HyphaArtifact:
         recursive: bool = False,
     ) -> None:
         """Remove file or directory."""
-        return run_sync(self._async_artifact.rm(path, recursive, maxdepth))
+        return run_sync(self._async_artifact.rm(path, maxdepth, recursive=recursive))
 
     def created(self: Self, path: str, version: str | None = None) -> datetime | None:
         """Get the creation time of a file."""
@@ -383,7 +384,7 @@ class HyphaArtifact:
         detail: None | bool = True,
     ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory."""
-        return run_sync(self._async_artifact.ls(path, detail, version=version))
+        return run_sync(self._async_artifact.ls(path, version, detail=detail))
 
     def info(self: Self, path: str, version: str | None = None) -> ArtifactItem:
         """Get information about a file or directory."""
@@ -450,7 +451,7 @@ class HyphaArtifact:
         create_parents: bool = True,
     ) -> None:
         """Create a directory."""
-        return run_sync(self._async_artifact.mkdir(path, create_parents))
+        return run_sync(self._async_artifact.mkdir(path, create_parents=create_parents))
 
     def makedirs(
         self: Self,
@@ -459,7 +460,7 @@ class HyphaArtifact:
         exist_ok: bool = True,
     ) -> None:
         """Create a directory and any parent directories."""
-        return run_sync(self._async_artifact.makedirs(path, exist_ok))
+        return run_sync(self._async_artifact.makedirs(path, exist_ok=exist_ok))
 
     def rm_file(self: Self, path: str) -> None:
         """Remove a file."""

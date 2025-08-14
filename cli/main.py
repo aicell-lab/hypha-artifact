@@ -1,18 +1,30 @@
-"""Hypha Artifact Command Line Interface"""
+"""Hypha Artifact Command Line Interface."""
 
-from collections.abc import Callable
 import json
+import logging
 import os
 import sys
+from collections.abc import Callable
 from typing import Any
-import fire  # pyright: ignore
+
+import fire
 from dotenv import load_dotenv
-from hypha_artifact.hypha_artifact import HyphaArtifact
+
 from hypha_artifact.classes import OnError
+from hypha_artifact.hypha_artifact import HyphaArtifact
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_dict(obj: str | dict[str, Any] | None) -> dict[str, Any] | None:
-    """Ensures the given object is a dictionary."""
+    """Ensure the given object is a dictionary.
+
+    Parameters
+    ----------
+    obj: str | dict[str, Any] | None
+        The object to check
+
+    """
     if isinstance(obj, dict):
         return obj
 
@@ -37,7 +49,8 @@ def get_connection_params() -> dict[str, str]:
     for env_name in env_names:
         value = os.getenv(env_name)
         if not value:
-            print(f"❌ Missing {env_name} environment variable", file=sys.stderr)
+            info_msg = f"Missing {env_name} environment variable"
+            logger.error(info_msg)
             sys.exit(1)
         connection_params[env_name] = value
 
@@ -53,7 +66,7 @@ class ArtifactCLI(HyphaArtifact):
         workspace: str | None = None,
         token: str | None = None,
         server_url: str | None = None,
-    ):
+    ) -> None:
         """Initialize the CLI with HyphaArtifact parameters."""
         if not server_url or not workspace:
             connection_params = get_connection_params()
@@ -61,23 +74,41 @@ class ArtifactCLI(HyphaArtifact):
             token = connection_params["HYPHA_TOKEN"]
             workspace = connection_params["HYPHA_WORKSPACE"]
 
-        if server_url.endswith("/"):
-            server_url = server_url[:-1]
+        server_url = server_url.removesuffix("/")
 
         super().__init__(
-            artifact_id, workspace=workspace, token=token, server_url=server_url
+            artifact_id,
+            workspace=workspace,
+            token=token,
+            server_url=server_url,
         )
 
     def put(
         self,
         lpath: str | list[str],
         rpath: str | list[str],
-        recursive: bool = False,
         callback: None | Callable[[dict[str, Any]], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         multipart_config: str | dict[str, Any] | None = None,
+        *,
+        recursive: bool = False,
     ) -> None:
+        """Upload files to the remote artifact.
+
+        Args:
+            lpath (str | list[str]): Local path(s) to upload
+            rpath (str | list[str]): Remote path(s) to upload to
+            callback (None | Callable[[dict[str, Any]], None], optional): Callback
+                function to call on upload progress. Defaults to None.
+            maxdepth (int | None, optional): Maximum depth to upload. Defaults to None.
+            on_error (OnError, optional): Error handling strategy. Defaults to "raise".
+            multipart_config (str | dict[str, Any] | None, optional): Multipart upload
+                configuration. Defaults to None.
+            recursive (bool, optional): Whether to upload directories recursively.
+                Defaults to False.
+
+        """
         multipart_config_dict = ensure_dict(multipart_config)
 
         super().put(
@@ -93,13 +124,34 @@ class ArtifactCLI(HyphaArtifact):
     def edit(
         self,
         manifest: str | dict[str, Any] | None = None,
-        type: str | None = None,  # pylint: disable=redefined-builtin
+        type: str | None = None,  # noqa: A002
         config: str | dict[str, Any] | None = None,
         secrets: str | dict[str, str] | None = None,
         version: str | None = None,
         comment: str | None = None,
+        *,
         stage: bool = False,
     ) -> None:
+        """Edit an existing artifact's manifest.
+
+        Args:
+            manifest (str | dict[str, Any] | None, optional): The updated manifest.
+                Defaults to None.
+            type (str | None, optional): The type of the artifact. Defaults to None.
+            config (str | dict[str, Any] | None, optional):
+                A dictionary containing additional configuration options for the
+                artifact. Defaults to None.
+            secrets (str | dict[str, str] | None, optional): A dictionary containing
+                secrets to be stored with the artifact. Defaults to None.
+            version (str | None, optional): Strict Validation Applied: Must be None,
+                "new", or an existing version name from the artifact's versions array.
+                Defaults to None.
+            comment (str | None, optional): A comment to describe the changes made to
+                the artifact. Defaults to None.
+            stage (bool, optional): If True, the artifact will be edited in staging
+                mode regardless of the version parameter. Defaults to False.
+
+        """
         manifest_dict = ensure_dict(manifest)
         config_dict = ensure_dict(config)
         secrets_dict = ensure_dict(secrets)
@@ -115,7 +167,13 @@ class ArtifactCLI(HyphaArtifact):
         )
 
     # Hide some methods from CLI
-    def __dir__(self):
+    def __dir__(self) -> list[str]:
+        """Get a list of public methods in the CLI.
+
+        Returns:
+            list[str]: A list of public method names.
+
+        """
         method_names = super().__dir__()
         hidden_names = ["open"]
 
@@ -126,13 +184,12 @@ class ArtifactCLI(HyphaArtifact):
         ]
 
 
-def main():
-    """Main CLI entry point."""
-    # TODO: add --stage option to all cli operations
-    # TODO: fix "is folder" errors in get
-    # TODO: try CLI methods in general
-    # TODO: list children (artifacts)
-    fire.Fire(ArtifactCLI)  # pyright: ignore
+def main() -> None:
+    """Run main CLI entry point."""
+    # TODO @hugokallander: fix "is folder" errors in get
+    # TODO @hugokallander: try CLI methods in general
+    # TODO @hugokallander: list children (artifacts)
+    fire.Fire(ArtifactCLI)
 
 
 if __name__ == "__main__":

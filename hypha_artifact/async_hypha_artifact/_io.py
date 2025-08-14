@@ -3,67 +3,72 @@
 from __future__ import annotations
 
 from functools import partial
-import os
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     overload,
 )
 from urllib.parse import urlparse
 
 import httpx
 
-from ..classes import StatusMessage, OnError
-from ..async_artifact_file import AsyncArtifactHttpFile
+from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
+from hypha_artifact.classes import OnError, StatusMessage
 
 from ._utils import (
-    local_walk,
-    prepare_params,
-    assert_equal_len,
-    rel_path_pairs,
-    upload_multipart,
+    ensure_equal_len,
     get_existing_url,
     get_read_url,
     get_write_url,
+    local_walk,
+    prepare_params,
+    rel_path_pairs,
+    upload_multipart,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from . import AsyncHyphaArtifact
 
 
 @overload
 async def cat(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: list[str],
-    recursive: bool = False,
     on_error: OnError = "raise",
     version: str | None = None,
+    *,
+    recursive: bool = False,
 ) -> dict[str, str | None]: ...
 
 
 @overload
 async def cat(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
-    recursive: bool = False,
     on_error: OnError = "raise",
     version: str | None = None,
+    *,
+    recursive: bool = False,
 ) -> str | None: ...
 
 
 async def cat(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str | list[str],
-    recursive: bool = False,
     on_error: OnError = "raise",
     version: str | None = None,
+    *,
+    recursive: bool = False,
 ) -> dict[str, str | None] | str | None:
-    """Get file(s) content as string(s)
+    """Get file(s) content as string(s).
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance
     path: str or list of str
         File path(s) to get content from
     recursive: bool
@@ -78,14 +83,18 @@ async def cat(
     Returns
     -------
     str or dict or None
-        File contents as string if path is a string, dict of {path: content} if path is a list,
-        or None if the file is not found and on_error is "ignore"
+        File contents as string if path is a string, dict of {path: content} if path is
+        a list, or None if the file is not found and on_error is "ignore"
+
     """
     if isinstance(path, list):
         results: dict[str, str | None] = {}
         for p in path:
             results[p] = await self.cat(
-                p, recursive=recursive, on_error=on_error, version=version
+                p,
+                recursive=recursive,
+                on_error=on_error,
+                version=version,
             )
         return results
 
@@ -94,7 +103,9 @@ async def cat(
         files = await self.find(path, withdirs=False, version=version)
         for file_path in files:
             results[file_path] = await self.cat(
-                file_path, on_error=on_error, version=version
+                file_path,
+                on_error=on_error,
+                version=version,
             )
         return results
 
@@ -106,24 +117,26 @@ async def cat(
             if isinstance(content, (bytearray, memoryview)):
                 return bytes(content).decode("utf-8")
             return str(content)
-    except (FileNotFoundError, IOError, httpx.RequestError) as e:
+    except (OSError, FileNotFoundError, httpx.RequestError) as e:
         if on_error == "ignore":
             return None
-        raise e
+        raise OSError from e
 
 
-# TODO: shorten
+# TODO @hugokallander: shorten
 def fsspec_open(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     urlpath: str,
     mode: str = "rb",
     content_type: str = "application/octet-stream",
     version: str | None = None,
 ) -> AsyncArtifactHttpFile:
-    """Open a file for reading or writing
+    """Open a file for reading or writing.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance
     urlpath: str
         Path to the file within the artifact
     mode: str
@@ -132,11 +145,14 @@ def fsspec_open(
         The version of the artifact to read from or write to.
         By default, it uses the latest version.
         If you want to use a staged version, you can set it to "stage".
+    content_type: str
+        The content type of the file.
 
     Returns
     -------
     AsyncArtifactHttpFile
         A file-like object
+
     """
     params: dict[str, Any] = prepare_params(
         self,
@@ -155,7 +171,8 @@ def fsspec_open(
     elif "w" in mode or "a" in mode:
         get_url_func = partial(get_write_url, self, params)
     else:
-        raise ValueError(f"Unsupported mode: {mode}")
+        exception_msg = f"Unsupported mode: {mode}"
+        raise ValueError(exception_msg)
 
     return AsyncArtifactHttpFile(
         url_func=get_url_func,
@@ -167,18 +184,21 @@ def fsspec_open(
 
 
 async def copy(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path1: str,
     path2: str,
-    recursive: bool = False,
     maxdepth: int | None = None,
     on_error: OnError | None = "raise",
     version: str | None = None,
+    *,
+    recursive: bool = False,
 ) -> None:
-    """Copy file(s) from path1 to path2 within the artifact
+    """Copy file(s) from path1 to path2 within the artifact.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        The AsyncHyphaArtifact instance
     path1: str
         Source path
     path2: str
@@ -193,10 +213,14 @@ async def copy(
         The version of the artifact to copy from.
         By default, it uses the latest version.
         If you want to use a staged version, you can set it to "stage".
+
     """
     if recursive and await self.isdir(path1):
         files = await self.find(
-            path1, maxdepth=maxdepth, withdirs=False, version=version
+            path1,
+            maxdepth=maxdepth,
+            withdirs=False,
+            version=version,
         )
         src_dst_paths = rel_path_pairs(files, src_path=path1, dst_path=path2)
     else:
@@ -209,32 +233,36 @@ async def copy(
 
             async with self.open(dst_path, "wb") as dst_file:
                 await dst_file.write(content)
-    except (FileNotFoundError, IOError, httpx.RequestError) as e:
+    except (OSError, FileNotFoundError, httpx.RequestError) as e:
         if on_error == "raise":
-            raise e
+            raise OSError from e
 
 
 async def get(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     rpath: str | list[str],
     lpath: str | list[str] | None = None,
-    recursive: bool = False,
     callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
     version: str | None = None,
+    *,
+    recursive: bool = False,
 ) -> None:
     """Copy file(s) from remote (artifact) to local filesystem."""
     if not lpath:
         lpath = rpath
-    rpaths, lpaths = assert_equal_len(rpath, lpath)
+    rpaths, lpaths = ensure_equal_len(rpath, lpath)
 
     all_file_pairs: list[tuple[str, str]] = []
-    for rp, lp in zip(rpaths, lpaths):
+    for rp, lp in zip(rpaths, lpaths, strict=False):
         if recursive:
-            os.makedirs(lp, exist_ok=True)
+            Path(lp).mkdir(exist_ok=True, parents=True)
             files = await self.find(
-                rp, maxdepth=maxdepth, withdirs=False, version=version
+                rp,
+                maxdepth=maxdepth,
+                withdirs=False,
+                version=version,
             )
             file_pairs = rel_path_pairs(files, src_path=rp, dst_path=lp)
             all_file_pairs.extend(file_pairs)
@@ -248,9 +276,9 @@ async def get(
             callback(status_message.in_progress(remote_path, current_file_index))
 
         try:
-            local_dir = os.path.dirname(local_path)
+            local_dir = Path(local_path).parent
             if local_dir:
-                os.makedirs(local_dir, exist_ok=True)
+                local_dir.mkdir(exist_ok=True, parents=True)
 
             async with self.open(remote_path, "rb", version=version) as remote_file:
                 content = await remote_file.read()
@@ -259,35 +287,36 @@ async def get(
                 content.encode("utf-8") if isinstance(content, str) else content
             )
 
-            with open(local_path, "wb") as local_file:
+            with Path(local_path).open("wb") as local_file:
                 local_file.write(content_bytes)
-        except (FileNotFoundError, IOError, httpx.RequestError) as e:
+        except (OSError, FileNotFoundError, httpx.RequestError) as e:
             if callback:
                 callback(status_message.error(remote_path, str(e)))
             if on_error == "raise":
-                raise e
+                raise OSError from e
 
         if callback:
             callback(status_message.success(remote_path))
 
 
 async def put(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     lpath: str | list[str],
     rpath: str | list[str] | None = None,
-    recursive: bool = False,
     callback: None | Callable[[dict[str, Any]], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
+    *,
+    recursive: bool = False,
     multipart_config: dict[str, Any] | None = None,
 ) -> None:
     """Copy file(s) from local filesystem to remote (artifact)."""
     if not rpath:
         rpath = lpath
-    rpaths, lpaths = assert_equal_len(rpath, lpath)
+    rpaths, lpaths = ensure_equal_len(rpath, lpath)
 
     all_file_pairs: list[tuple[str, str]] = []
-    for rp, lp in zip(rpaths, lpaths):
+    for rp, lp in zip(rpaths, lpaths, strict=False):
         if recursive:
             files = local_walk(lp, maxdepth=maxdepth)
             file_pairs = rel_path_pairs(files, src_path=lp, dst_path=rp)
@@ -310,47 +339,55 @@ async def put(
                     multipart_config,
                 )
             else:
-                with open(local_path, "rb") as local_file:
+                with Path(local_path).open("rb") as local_file:
                     content = local_file.read()
 
                 async with self.open(remote_path, "wb") as remote_file:
                     await remote_file.write(content)
 
-        except (FileNotFoundError, IOError, httpx.RequestError) as e:
+        except (OSError, FileNotFoundError, httpx.RequestError) as e:
             if callback:
                 callback(status_message.error(local_path, str(e)))
             if on_error == "raise":
-                raise e
+                raise OSError from e
 
         if callback:
             callback(status_message.success(local_path))
 
 
 async def cp(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path1: str,
     path2: str,
     on_error: OnError | None = None,
-    recursive: bool = False,
     maxdepth: int | None = None,
     version: str | None = None,
+    *,
+    recursive: bool = False,
 ) -> None:
-    """Alias for copy method
+    """Alias for copy method.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        Instance of the AsyncHyphaArtifact class
     path1: str
         Source path
     path2: str
         Destination path
     on_error: "raise" or "ignore", optional
         What to do if a file is not found
-    **kwargs:
-        Additional arguments passed to copy method
+    maxdepth: int | None, optional
+        Maximum depth to traverse for files
+    recursive: bool = False, optional
+        Whether to copy files recursively
+    version: str | None = None, optional
+        The version of the artifact to copy from.
 
     Returns
     -------
     None
+
     """
     return await self.copy(
         path1,
@@ -363,12 +400,17 @@ async def cp(
 
 
 async def head(
-    self: "AsyncHyphaArtifact", path: str, size: int = 1024, version: str | None = None
+    self: AsyncHyphaArtifact,
+    path: str,
+    size: int = 1024,
+    version: str | None = None,
 ) -> bytes:
-    """Get the first bytes of a file
+    """Get the first bytes of a file.
 
     Parameters
     ----------
+    self: AsyncHyphaArtifact
+        Instance of the AsyncHyphaArtifact class
     path: str
         Path to the file
     size: int
@@ -382,6 +424,7 @@ async def head(
     -------
     bytes
         First bytes of the file
+
     """
     async with self.open(path, "rb", version=version) as f:
         result = await f.read(size)

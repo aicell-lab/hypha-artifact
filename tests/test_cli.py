@@ -1,7 +1,6 @@
 # pylint: disable=protected-access
 # pyright: reportPrivateUsage=false
-"""
-Real integration tests for the Hypha Artifact CLI.
+"""Real integration tests for the Hypha Artifact CLI.
 
 These tests use actual Hypha connections and real file operations.
 Requires valid credentials in .env file.
@@ -9,21 +8,22 @@ Requires valid credentials in .env file.
 
 # TODO: move non-CLI specific tests to a separate file
 
+import json
+import logging
 import os
-from pathlib import Path
+import subprocess
 import sys
 import tempfile
-import subprocess
-import json
+from pathlib import Path
 from typing import Any
-import logging
-from httpx import HTTPError, HTTPStatusError
+
 import pytest
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
+from httpx import HTTPError, HTTPStatusError
 
 from cli.main import (
-    get_connection_params,
     ArtifactCLI,
+    get_connection_params,
 )
 
 # Load environment variables
@@ -35,7 +35,10 @@ def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -
     """Create a test artifact with a real connection to Hypha."""
     token, workspace = artifact_setup_teardown
     return ArtifactCLI(
-        artifact_name, workspace, token, server_url="https://hypha.aicell.io"
+        artifact_name,
+        workspace,
+        token,
+        server_url="https://hypha.aicell.io",
     )
 
 
@@ -52,10 +55,10 @@ class TestRealEnvironment:
         assert workspace, "HYPHA_WORKSPACE environment variable is required"
         assert token, "HYPHA_TOKEN environment variable is required"
 
-        print("✅ Environment variables loaded successfully")
-        print(f"   Server: {server_url}")
-        print(f"   Workspace: {workspace}")
-        print(f"   Token: {'*' * 10 + token[-4:] if token else 'None'}")
+        logging.info("✅ Environment variables loaded successfully")
+        logging.info(f"   Server: {server_url}")
+        logging.info(f"   Workspace: {workspace}")
+        logging.info(f"   Token: {'*' * 10 + token[-4:] if token else 'None'}")
 
     def test_real_connection_params(self):
         """Test real connection parameter retrieval."""
@@ -65,7 +68,7 @@ class TestRealEnvironment:
         assert connection_params["HYPHA_WORKSPACE"], "Workspace should not be empty"
         assert connection_params["HYPHA_TOKEN"], "Token should not be empty"
 
-        print("✅ Connection parameters retrieved successfully")
+        logging.info("✅ Connection parameters retrieved successfully")
 
     def test_real_artifact_creation(self):
         """Test real artifact creation."""
@@ -75,7 +78,7 @@ class TestRealEnvironment:
         assert hasattr(artifact, "ls")
         assert hasattr(artifact, "put")
 
-        print("✅ Artifact connection created successfully")
+        logging.info("✅ Artifact connection created successfully")
 
 
 class TestRealFileOperations:
@@ -84,7 +87,7 @@ class TestRealFileOperations:
     def test_real_ls_command(self, real_artifact: ArtifactCLI):
         """Test real ls command."""
         items = real_artifact.ls("/")
-        print(f"✅ Found {len(items)} items in artifact root")
+        logging.info(f"✅ Found {len(items)} items in artifact root")
         assert isinstance(items, list)
 
     def test_real_staging_workflow(self, real_artifact: ArtifactCLI):
@@ -93,26 +96,30 @@ class TestRealFileOperations:
         test_content = "This is a test file for API staging workflow\n"
 
         # Step 1: Put artifact in staging mode
-        print("Before staging - checking current artifact state...")
+        logging.info("Before staging - checking current artifact state...")
         try:
             current_files = real_artifact.ls("/")
-            print(f"Current files in artifact: {[f['name'] for f in current_files]}")
+            logging.info(
+                f"Current files in artifact: {[f['name'] for f in current_files]}"
+            )
         except Exception as e:
-            print(f"Could not list current files: {e}")
+            logging.info(f"Could not list current files: {e}")
 
         # Clean up any existing staged changes first
-        print("Discarding any existing staged changes...")
+        logging.info("Discarding any existing staged changes...")
         try:
             real_artifact.discard()
-            print("Successfully discarded existing staged changes")
+            logging.info("Successfully discarded existing staged changes")
         except Exception as e:
-            print(f"No staged changes to discard (expected): {e}")
+            logging.info(f"No staged changes to discard (expected): {e}")
 
-        print("Putting artifact in staging mode with new version intent...")
+        logging.info("Putting artifact in staging mode with new version intent...")
         real_artifact.edit(
-            stage=True, version="new", comment="Testing proper staging workflow"
+            stage=True,
+            version="new",
+            comment="Testing proper staging workflow",
         )
-        print("Artifact is now in staging mode with new version intent")
+        logging.info("Artifact is now in staging mode with new version intent")
 
         # Step 2: Get presigned URL and upload file
         with real_artifact.open("/api-staging-test.txt", "w") as f:
@@ -123,13 +130,13 @@ class TestRealFileOperations:
             real_artifact.commit(comment="Committed API staging test")
         except HTTPStatusError as e:
             # Get more detailed error information
-            print(f"Commit error: {e}")
-            print(f"Response status: {e.response.status_code}")
-            print(f"Response content: {e.response.text}")
+            logging.info(f"Commit error: {e}")
+            logging.info(f"Response status: {e.response.status_code}")
+            logging.info(f"Response content: {e.response.text}")
             raise e
         except HTTPError as e:
             # Handle other HTTP errors
-            print(f"Commit error: {e}")
+            logging.info(f"Commit error: {e}")
             raise e
 
         # Step 4: Verify file exists after commit
@@ -137,11 +144,10 @@ class TestRealFileOperations:
         content = real_artifact.cat("/api-staging-test.txt")
         assert content == test_content
 
-        print("✅ API staging workflow completed successfully")
+        logging.info("✅ API staging workflow completed successfully")
 
     def test_real_multipart_upload(self, real_artifact: ArtifactCLI):
         """Test real multipart upload using proper API workflow."""
-
         # Create a smaller test file (20 MB) to reduce network load
         file_size = 20 * 1024 * 1024  # 20 MB
         chunk_size = 6 * 1024 * 1024  # 6 MB chunks
@@ -162,7 +168,9 @@ class TestRealFileOperations:
                 logging.warning(str(e))
 
             real_artifact.edit(
-                stage=True, version="new", comment="Testing multipart upload"
+                stage=True,
+                version="new",
+                comment="Testing multipart upload",
             )
 
             multipart_config: dict[str, bool | int] = {
@@ -185,7 +193,7 @@ class TestRealFileOperations:
             info = real_artifact.info("/multipart-test.bin")
             assert info["size"] == file_size
 
-            print("✅ Multipart upload completed successfully")
+            logging.info("✅ Multipart upload completed successfully")
 
         except Exception as e:
             raise e
@@ -196,7 +204,6 @@ class TestRealFileOperations:
 
     def test_real_directory_upload(self, real_artifact: ArtifactCLI):
         """Test real directory upload using proper API workflow."""
-
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
@@ -214,7 +221,9 @@ class TestRealFileOperations:
                 pass  # No staged changes to discard
 
             real_artifact.edit(
-                stage=True, version="new", comment="Testing directory upload"
+                stage=True,
+                version="new",
+                comment="Testing directory upload",
             )
 
             real_artifact.put(
@@ -239,7 +248,7 @@ class TestRealFileOperations:
                 == "Content of file 3"
             )
 
-            print("✅ Directory upload completed successfully")
+            logging.info("✅ Directory upload completed successfully")
 
     def test_real_file_operations(self, real_artifact: ArtifactCLI):
         """Test real file operations using proper API workflow."""
@@ -286,12 +295,12 @@ class TestRealFileOperations:
         real_artifact.commit()
         assert not real_artifact.exists("/ops-test-copy.txt")
 
-        print("✅ File operations completed successfully")
+        logging.info("✅ File operations completed successfully")
 
     def test_real_find_command(self, real_artifact: ArtifactCLI):
         """Test real find command."""
         files = real_artifact.find("/")
-        print(f"✅ Found {len(files)} files in artifact")
+        logging.info(f"✅ Found {len(files)} files in artifact")
         assert isinstance(files, list)
 
 
@@ -309,7 +318,10 @@ class TestRealCLICommands:
         return env
 
     def test_real_cli_ls(
-        self, cli_env: dict[str, str], artifact_name: str, real_artifact: ArtifactCLI
+        self,
+        cli_env: dict[str, str],
+        artifact_name: str,
+        real_artifact: ArtifactCLI,
     ):
         """Test real CLI ls command."""
         result = subprocess.run(
@@ -328,10 +340,13 @@ class TestRealCLICommands:
         )
 
         assert result.returncode == 0, f"CLI ls command failed: {result.stderr}"
-        print("✅ CLI ls command executed successfully")
+        logging.info("✅ CLI ls command executed successfully")
 
     def test_real_cli_staging_workflow(
-        self, cli_env: dict[str, str], artifact_name: str, real_artifact: ArtifactCLI
+        self,
+        cli_env: dict[str, str],
+        artifact_name: str,
+        real_artifact: ArtifactCLI,
     ):
         """Test real CLI staging workflow using edit and commit commands."""
         # Create a test file to upload
@@ -435,7 +450,7 @@ class TestRealCLICommands:
             assert result.returncode == 0, f"CLI cat command failed: {result.stderr}"
             assert "CLI staging workflow test content" in result.stdout
 
-            print("✅ CLI staging workflow completed successfully")
+            logging.info("✅ CLI staging workflow completed successfully")
 
         except Exception as e:
             raise e
@@ -445,7 +460,10 @@ class TestRealCLICommands:
                 os.unlink(temp_file)
 
     def test_real_cli_multipart_upload(
-        self, cli_env: dict[str, str], artifact_name: str, real_artifact: ArtifactCLI
+        self,
+        cli_env: dict[str, str],
+        artifact_name: str,
+        real_artifact: ArtifactCLI,
     ):
         """Test real CLI multipart upload with proper staging."""
         # First test if S3 endpoint is reachable
@@ -515,7 +533,7 @@ class TestRealCLICommands:
                     or "connection" in error_output.lower()
                 ):
                     pytest.skip(
-                        f"Network connectivity issue during CLI multipart upload: {error_output}"
+                        f"Network connectivity issue during CLI multipart upload: {error_output}",
                     )
                 else:
                     assert False, f"CLI multipart upload failed: {error_output}"
@@ -557,7 +575,7 @@ class TestRealCLICommands:
 
             assert result.returncode == 0, f"CLI info command failed: {result.stderr}"
 
-            print("✅ CLI multipart upload completed successfully")
+            logging.info("✅ CLI multipart upload completed successfully")
         except Exception as e:
             raise e
         finally:
@@ -592,11 +610,11 @@ class TestRealErrorHandling:
                     False
                 ), "Should have raised an error for missing environment variables"
             except SystemExit:
-                print(
-                    "✅ Correctly handled missing environment variables with SystemExit"
+                logging.info(
+                    "✅ Correctly handled missing environment variables with SystemExit",
                 )
             except Exception as e:
-                print(f"✅ Correctly handled missing environment variables: {e}")
+                logging.info(f"✅ Correctly handled missing environment variables: {e}")
         except Exception as e:
             raise e
         finally:
@@ -615,13 +633,13 @@ class TestRealErrorHandling:
             # Try to list files - should fail gracefully
             try:
                 items = artifact.ls("/")
-                print(
-                    f"⚠️  Unexpectedly found {len(items)} items in nonexistent artifact"
+                logging.info(
+                    f"⚠️  Unexpectedly found {len(items)} items in nonexistent artifact",
                 )
             except Exception as e:
-                print(f"✅ Correctly handled nonexistent artifact: {e}")
+                logging.info(f"✅ Correctly handled nonexistent artifact: {e}")
         except Exception as e:
-            print(f"✅ Correctly handled nonexistent artifact creation: {e}")
+            logging.info(f"✅ Correctly handled nonexistent artifact creation: {e}")
 
     def test_invalid_paths(self):
         """Test handling of invalid paths."""
@@ -632,13 +650,13 @@ class TestRealErrorHandling:
             artifact.cat("/nonexistent-file.txt")
             assert False, "Should have raised an error for nonexistent file"
         except Exception as e:
-            print(f"✅ Correctly handled nonexistent file: {e}")
+            logging.info(f"✅ Correctly handled nonexistent file: {e}")
 
         try:
             artifact.info("/nonexistent-file.txt")
             assert False, "Should have raised an error for nonexistent file"
         except Exception as e:
-            print(f"✅ Correctly handled nonexistent file info: {e}")
+            logging.info(f"✅ Correctly handled nonexistent file info: {e}")
 
 
 if __name__ == "__main__":

@@ -1,20 +1,23 @@
-"""
-Minimal integration tests for sync HyphaArtifact folder edge cases.
+"""Minimal integration tests for sync HyphaArtifact folder edge cases.
 
 Focus on methods that may behave differently or fail when the path is a directory.
 """
 
+from typing import Any, cast
+
 import pytest
-from typing import Any
+
 from hypha_artifact import HyphaArtifact
-from typing import cast
 
 
 @pytest.fixture(scope="module", name="artifact")
 def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -> Any:
     token, workspace = artifact_setup_teardown
     return HyphaArtifact(
-        artifact_name, workspace, token, server_url="https://hypha.aicell.io"
+        artifact_name,
+        workspace,
+        token,
+        server_url="https://hypha.aicell.io",
     )
 
 
@@ -55,6 +58,6 @@ class TestSyncFolderEdgeCases:
         # cat on a directory should work with recursive=True
         result = artifact.cat(folder, recursive=True)
         assert isinstance(result, dict)
-        result_map = cast(dict[str, str | None], result)
+        result_map = cast("dict[str, str | None]", result)
         assert file_path in result_map
         assert result_map[file_path] == content

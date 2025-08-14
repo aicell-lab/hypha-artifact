@@ -1,5 +1,4 @@
-"""
-Integration tests for artifact state methods and versioned retrievals.
+"""Integration tests for artifact state methods and versioned retrievals.
 
 Covers:
 - Async create() and delete() called without parameters.
@@ -9,6 +8,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
+
 import pytest
 import pytest_asyncio
 
