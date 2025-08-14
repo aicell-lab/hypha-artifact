@@ -293,9 +293,11 @@ async def create(
             "description": "Artifact created using package hypha-artifact.",
         }
 
-    params = prepare_params(
-        self,
-        {
+    # For CREATE, the server API does not accept an 'artifact_id' parameter.
+    # Build params without using prepare_params to avoid injecting it.
+    params: dict[str, Any] = {
+        k: v
+        for k, v in {
             "alias": self.artifact_alias,
             "parent_id": parent_id,
             "type": type,
@@ -307,8 +309,9 @@ async def create(
             "comment": comment,
             "secrets": secrets,
             "overwrite": overwrite,
-        },
-    )
+        }.items()
+        if v is not None
+    }
 
     response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.CREATE),
@@ -324,7 +327,7 @@ async def delete(
     delete_files: bool | None = None,
     recursive: bool | None = None,
     version: str | None = None,
-):
+) -> None:
     """
     Deletes an artifact, its manifest, and all associated files from both the database and
     S3 storage.
@@ -371,7 +374,7 @@ async def delete(
         },
     )
 
-    response = await self.get_client().put(
+    response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.DELETE),
         headers=get_headers(self),
         json=params,

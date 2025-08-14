@@ -90,6 +90,49 @@ class HyphaArtifact:
             disable_ssl=disable_ssl,
         )
 
+    def create(
+        self: Self,
+        manifest: str | dict[str, Any] | None = None,
+        parent_id: str | None = None,
+        type: str | None = None,
+        config: dict[str, Any] | None = None,
+        permissions: dict[str, Any] | None = None,
+        version: str | None = None,
+        stage: str | None = None,
+        comment: str | None = None,
+        secrets: dict[str, str] | None = None,
+        overwrite: bool | None = None,
+    ) -> None:
+        return run_sync(
+            self._async_artifact.create(
+                manifest=manifest,
+                parent_id=parent_id,
+                type=type,
+                config=config,
+                permissions=permissions,
+                version=version,
+                stage=stage,
+                comment=comment,
+                secrets=secrets,
+                overwrite=overwrite,
+            )
+        )
+
+    def delete(
+        self: Self,
+        delete_files: bool | None = None,
+        recursive: bool | None = None,
+        version: str | None = None,
+    ) -> None:
+        """Delete the artifact."""
+        return run_sync(
+            self._async_artifact.delete(
+                delete_files=delete_files,
+                recursive=recursive,
+                version=version,
+            )
+        )
+
     def edit(
         self: Self,
         manifest: dict[str, Any] | None = None,
@@ -263,12 +306,6 @@ class HyphaArtifact:
     def created(self: Self, path: str, version: str | None = None) -> datetime | None:
         """Get the creation time of a file"""
         return run_sync(self._async_artifact.created(path, version=version))
-
-    def delete(
-        self: Self, path: str, recursive: bool = False, maxdepth: int | None = None
-    ) -> None:
-        """Delete a file or directory from the artifact"""
-        return run_sync(self._async_artifact.delete(path, recursive, maxdepth))
 
     def exists(self: Self, path: str, version: str | None = None) -> bool:
         """Check if a file or directory exists"""

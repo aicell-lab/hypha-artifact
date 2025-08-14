@@ -11,7 +11,7 @@ from typing import Self, Any
 
 import httpx
 
-from ._state import edit, commit, discard
+from ._state import edit, commit, discard, create, delete
 from ._io import (
     cat,
     fsspec_open,
@@ -33,7 +33,6 @@ from ._fs import (
     size,
     sizes,
     rm,
-    delete,
     rm_file,
     mkdir,
     makedirs,
@@ -126,6 +125,8 @@ class AsyncHyphaArtifact:
             self._client = httpx.AsyncClient(verify=bool(self.ssl))
         return self._client
 
+    create = create
+    delete = delete
     edit = edit
     commit = commit
     cat = cat
