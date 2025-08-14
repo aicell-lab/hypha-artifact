@@ -62,7 +62,7 @@ class HyphaArtifact:
 
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self: Self,
         artifact_id: str,
         workspace: str | None = None,
@@ -103,7 +103,7 @@ class HyphaArtifact:
             disable_ssl=disable_ssl,
         )
 
-    def create(  # noqa: PLR0913
+    def create(
         self: Self,
         manifest: str | dict[str, Any] | None = None,
         parent_id: str | None = None,
@@ -172,7 +172,7 @@ class HyphaArtifact:
             ),
         )
 
-    def edit(  # noqa: PLR0913
+    def edit(
         self: Self,
         manifest: dict[str, Any] | None = None,
         type: str | None = None,  # noqa: A002
@@ -257,7 +257,7 @@ class HyphaArtifact:
             name=async_file.name,
         )
 
-    def copy(  # noqa: PLR0913
+    def copy(
         self: Self,
         path1: str,
         path2: str,
@@ -279,7 +279,7 @@ class HyphaArtifact:
             ),
         )
 
-    def get(  # noqa: PLR0913
+    def get(
         self: Self,
         rpath: str | list[str],
         lpath: str | list[str],
@@ -303,7 +303,7 @@ class HyphaArtifact:
             ),
         )
 
-    def put(  # noqa: PLR0913
+    def put(
         self: Self,
         lpath: str | list[str],
         rpath: str | list[str],

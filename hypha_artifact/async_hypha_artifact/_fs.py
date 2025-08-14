@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
+from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -9,24 +12,20 @@ from typing import (
     overload,
 )
 
-import json
-from datetime import datetime
-from pathlib import Path
-
 import httpx
 
-from ..classes import ArtifactItem
-
 from ._remote_methods import ArtifactMethod
-from ._utils import walk_dir, prepare_params, get_method_url, get_headers, check_errors
+from ._utils import check_errors, get_headers, get_method_url, prepare_params, walk_dir
 
 if TYPE_CHECKING:
+    from hypha_artifact.classes import ArtifactItem
+
     from . import AsyncHyphaArtifact
 
 
 @overload
 async def ls(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     detail: Literal[False],
     version: str | None = None,
@@ -35,7 +34,7 @@ async def ls(
 
 @overload
 async def ls(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     detail: Literal[True],
     version: str | None = None,
@@ -44,7 +43,7 @@ async def ls(
 
 @overload
 async def ls(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     detail: None | bool = True,
     version: str | None = None,
@@ -54,12 +53,12 @@ async def ls(
 # TODO: test with directories
 # TODO: shorten
 async def ls(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     detail: None | bool = True,
     version: str | None = None,
 ) -> list[str] | list[ArtifactItem]:
-    """List contents of path
+    """List contents of path.
 
     Parameters
     ----------
@@ -76,6 +75,7 @@ async def ls(
     -------
     list[str] | list[ArtifactItem]
         List of file names or detailed artifact items
+
     """
     params: dict[str, Any] = prepare_params(
         self,
@@ -105,11 +105,11 @@ async def ls(
 
 
 async def info(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     version: str | None = None,
 ) -> ArtifactItem:
-    """Get information about a file or directory
+    """Get information about a file or directory.
 
     Parameters
     ----------
@@ -124,6 +124,7 @@ async def info(
     -------
     dict
         Dictionary with file information
+
     """
     parent_path = str(Path(path).parent)
 
@@ -138,14 +139,15 @@ async def info(
     out1 = [o for o in out if str(o["name"]).rstrip("/") == path]
     if len(out1) == 1:
         return out1[0]
-    elif len(out1) > 1 or out:
+    if len(out1) > 1 or out:
         return {"name": path, "type": "directory", "size": 0, "last_modified": None}
-    else:
-        raise FileNotFoundError(path)
+    raise FileNotFoundError(path)
 
 
 async def isdir(
-    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+    self: AsyncHyphaArtifact,
+    path: str,
+    version: str | None = None,
 ) -> bool:
     """Check if a path is a directory
 
@@ -162,16 +164,19 @@ async def isdir(
     -------
     bool
         True if the path is a directory, False otherwise
+
     """
     try:
         path_info = await self.info(path, version=version)
         return path_info["type"] == "directory"
-    except (FileNotFoundError, IOError):
+    except (OSError, FileNotFoundError):
         return False
 
 
 async def isfile(
-    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+    self: AsyncHyphaArtifact,
+    path: str,
+    version: str | None = None,
 ) -> bool:
     """Check if a path is a file
 
@@ -188,16 +193,19 @@ async def isfile(
     -------
     bool
         True if the path is a file, False otherwise
+
     """
     try:
         path_info = await self.info(path, version=version)
         return path_info["type"] == "file"
-    except (FileNotFoundError, IOError):
+    except (OSError, FileNotFoundError):
         return False
 
 
 async def listdir(
-    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+    self: AsyncHyphaArtifact,
+    path: str,
+    version: str | None = None,
 ) -> list[str]:
     """List files in a directory
 
@@ -214,13 +222,14 @@ async def listdir(
     -------
     list of str
         List of file names in the directory
+
     """
     return await self.ls(path, detail=False, version=version)
 
 
 @overload
 async def find(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     maxdepth: int | None = None,
     withdirs: bool = False,
@@ -232,7 +241,7 @@ async def find(
 
 @overload
 async def find(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     maxdepth: int | None = None,
     withdirs: bool = False,
@@ -242,7 +251,7 @@ async def find(
 
 
 async def find(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     maxdepth: int | None = None,
     withdirs: bool = False,
@@ -271,8 +280,8 @@ async def find(
     -------
     list or dict
         List of paths or dict of {path: info_dict}
-    """
 
+    """
     all_files = await walk_dir(self, path, maxdepth, withdirs, 1, version=version)
 
     if detail:
@@ -283,9 +292,11 @@ async def find(
 
 # TODO: currently returns last modified time, not creation time
 async def created(
-    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+    self: AsyncHyphaArtifact,
+    path: str,
+    version: str | None = None,
 ) -> datetime | None:
-    """Get the creation time of a file
+    """Get the creation time of a file.
 
     In the Hypha artifact system, we might not have direct access to creation time,
     but we can retrieve this information from file metadata if available.
@@ -303,6 +314,7 @@ async def created(
     -------
     datetime or None
         Creation time of the file, if available
+
     """
     path_info = await self.info(path, version=version)
 
@@ -316,7 +328,9 @@ async def created(
 
 
 async def size(
-    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+    self: AsyncHyphaArtifact,
+    path: str,
+    version: str | None = None,
 ) -> int:
     """Get the size of a file in bytes
 
@@ -333,6 +347,7 @@ async def size(
     -------
     int
         Size of the file in bytes
+
     """
     path_info = await self.info(path, version=version)
     if path_info["type"] == "directory":
@@ -341,7 +356,9 @@ async def size(
 
 
 async def sizes(
-    self: "AsyncHyphaArtifact", paths: list[str], version: str | None = None
+    self: AsyncHyphaArtifact,
+    paths: list[str],
+    version: str | None = None,
 ) -> list[int]:
     """Get the size of multiple files
 
@@ -358,12 +375,13 @@ async def sizes(
     -------
     list of int
         List of file sizes in bytes
+
     """
     return [await self.size(path, version=version) for path in paths]
 
 
 async def rm(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     recursive: bool = False,
     maxdepth: int | None = None,
@@ -372,7 +390,6 @@ async def rm(
 
     Parameters
     ----------
-
     path: str
         Path to the file or directory to remove
     recursive: bool
@@ -384,6 +401,7 @@ async def rm(
     -------
     datetime or None
         Creation time of the file, if available
+
     """
     paths_to_remove: list[str] = []
     if recursive and await self.isdir(path):
@@ -408,20 +426,21 @@ async def rm(
         )
 
 
-async def rm_file(self: "AsyncHyphaArtifact", path: str) -> None:
-    """Remove a file
+async def rm_file(self: AsyncHyphaArtifact, path: str) -> None:
+    """Remove a file.
 
     Parameters
     ----------
     path: str
         Path to remove
+
     """
     await self.rm(path)
 
 
 # TODO: fix
-async def rmdir(self: "AsyncHyphaArtifact", path: str) -> None:
-    """Remove an empty directory
+async def rmdir(self: AsyncHyphaArtifact, path: str) -> None:
+    """Remove an empty directory.
 
     In the Hypha artifact system, directories are implicit, so this would
     only make sense if the directory is empty. Since empty directories
@@ -432,6 +451,7 @@ async def rmdir(self: "AsyncHyphaArtifact", path: str) -> None:
     ----------
     path: str
         Path to remove
+
     """
     if not await self.isdir(path):
         raise FileNotFoundError(f"Directory not found: {path}")
@@ -442,7 +462,7 @@ async def rmdir(self: "AsyncHyphaArtifact", path: str) -> None:
 
 
 async def touch(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     truncate: bool = True,
 ) -> None:
@@ -455,6 +475,7 @@ async def touch(
     truncate: bool
         If True, always set file size to 0;
         if False, update timestamp and leave file unchanged
+
     """
     if truncate or not await self.exists(path):
         async with self.open(path, "wb"):
@@ -464,7 +485,7 @@ async def touch(
 
 
 async def mkdir(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     create_parents: bool = True,
 ) -> None:
@@ -478,6 +499,7 @@ async def mkdir(
         Path to create
     create_parents: bool
         If True, create parent directories if they don't exist
+
     """
     if path in ["", "/"]:
         return
@@ -498,7 +520,7 @@ async def mkdir(
 
 
 async def makedirs(
-    self: "AsyncHyphaArtifact",
+    self: AsyncHyphaArtifact,
     path: str,
     exist_ok: bool = True,
 ) -> None:
@@ -514,6 +536,7 @@ async def makedirs(
         Path to create
     exist_ok: bool
         If False and the directory exists, raise an error
+
     """
     if not exist_ok and await self.exists(path):
         raise FileExistsError(f"Directory already exists: {path}")
@@ -522,7 +545,9 @@ async def makedirs(
 
 
 async def exists(
-    self: "AsyncHyphaArtifact", path: str, version: str | None = None
+    self: AsyncHyphaArtifact,
+    path: str,
+    version: str | None = None,
 ) -> bool:
     """Check if a file or directory exists
 
@@ -535,14 +560,15 @@ async def exists(
     -------
     bool
         True if the path exists, False otherwise
+
     """
     try:
         async with self.open(path, "r", version=version) as f:
             await f.read(0)
             return True
-    except (FileNotFoundError, IOError, httpx.HTTPStatusError, httpx.RequestError):
+    except (OSError, FileNotFoundError, httpx.HTTPStatusError, httpx.RequestError):
         try:
             dir_files = await self.ls(path, detail=False, version=version)
             return len(dir_files) > 0
-        except (FileNotFoundError, IOError, httpx.HTTPStatusError, httpx.RequestError):
+        except (OSError, FileNotFoundError, httpx.HTTPStatusError, httpx.RequestError):
             return False

@@ -1,51 +1,47 @@
-"""
-Async HyphaArtifact module implements an fsspec-compatible interface for Hypha artifacts.
+"""Implements an fsspec-compatible interface for Hypha artifacts.
 
-This module provides an async file-system like interface to interact with remote Hypha artifacts
-using the fsspec specification, allowing for operations like reading, writing, listing,
-and manipulating files stored in Hypha artifacts.
+This module provides an async file-system like interface to interact with remote Hypha
+artifacts using the fsspec specification, allowing for operations like reading,
+writing, listing, and manipulating files stored in Hypha artifacts.
 """
 
 import os
-from typing import Self, Any
+from typing import Self
 
 import httpx
 
-from ._state import edit, commit, discard, create, delete
-from ._io import (
-    cat,
-    fsspec_open,
-    copy,
-    cp,
-    get,
-    put,
-    head,
-)
 from ._fs import (
-    ls,
-    listdir,
-    info,
+    created,
     exists,
+    find,
+    info,
     isdir,
     isfile,
-    find,
-    created,
-    size,
-    sizes,
+    listdir,
+    ls,
+    makedirs,
+    mkdir,
     rm,
     rm_file,
-    mkdir,
-    makedirs,
     rmdir,
+    size,
+    sizes,
     touch,
 )
+from ._io import (
+    cat,
+    copy,
+    cp,
+    fsspec_open,
+    get,
+    head,
+    put,
+)
+from ._state import commit, create, delete, discard, edit
 
 
 class AsyncHyphaArtifact:
-    """
-    AsyncHyphaArtifact provides an async fsspec-like interface for interacting with Hypha
-    artifact storage.
-    """
+    """Provides an async fsspec-like interface for interacting with Hypha artifact."""
 
     token: str | None
     workspace: str | None
@@ -62,29 +58,51 @@ class AsyncHyphaArtifact:
         workspace: str | None = None,
         token: str | None = None,
         server_url: str | None = None,
+        *,
         use_proxy: bool | None = None,
         use_local_url: bool | None = None,
         disable_ssl: bool = False,
-    ):
-        """Initialize an AsyncHyphaArtifact instance."""
+    ) -> None:
+        """Initialize an AsyncHyphaArtifact instance.
+
+        Parameters
+        ----------
+        artifact_id: str
+            The ID of the artifact to interact with.
+        workspace: str | None
+            The workspace the artifact belongs to (optional).
+        token: str | None
+            The authentication token to use (optional).
+        server_url: str | None
+            The URL of the Hypha server (optional).
+        use_proxy: bool | None
+            Whether to use a proxy (optional).
+        use_local_url: bool | None
+            Whether to use a local URL (optional).
+        disable_ssl: bool
+            Whether to disable SSL verification (optional).
+
+        """
         self.artifact_id = artifact_id
         if "/" in artifact_id:
             self.workspace, self.artifact_alias = artifact_id.split("/")
-            if workspace:
-                assert workspace == self.workspace, "Workspace mismatch"
+            if workspace and workspace != self.workspace:
+                error_msg = f"Workspace mismatch: {workspace} != {self.workspace}"
+                raise ValueError(error_msg)
         else:
-            assert (
-                workspace
-            ), "Workspace must be provided if artifact_id does not include it"
+            if not workspace:
+                error_msg = (
+                    "Workspace must be provided if artifact_id does not include it"
+                )
+                raise ValueError(error_msg)
             self.workspace = workspace
             self.artifact_alias = artifact_id
         self.token = token
         if server_url:
             self.artifact_url = f"{server_url}/public/services/artifact-manager"
         else:
-            raise ValueError(
-                "Server URL must be provided, e.g. https://hypha.aicell.io"
-            )
+            error_msg = "Server URL must be provided, e.g. https://hypha.aicell.io"
+            raise ValueError(error_msg)
         self._client = None
         self.ssl = False if disable_ssl else None
 
@@ -109,7 +127,12 @@ class AsyncHyphaArtifact:
         self._client = httpx.AsyncClient(verify=bool(self.ssl), timeout=30.0)
         return self
 
-    async def __aexit__(self: Self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(
+        self: Self,
+        exc_type: object,
+        exc_val: object,
+        exc_tb: object,
+    ) -> None:
         """Async context manager exit."""
         await self.aclose()
 

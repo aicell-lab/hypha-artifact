@@ -41,7 +41,8 @@ class ArtifactMethod(StrEnum):
 
     Args:
         self (Self): The instance of the AsyncHyphaArtifact class.
-        file_path (str): The relative path of the file to be downloaded (e.g., "data.csv").
+        file_path (str): The relative path of the file to be downloaded
+            (e.g., "data.csv").
         silent (bool, optional): A boolean to suppress the download count increment.
             Default is False.
         version (str | None, optional): The version of the artifact to download from.
@@ -86,7 +87,8 @@ class ArtifactMethod(StrEnum):
     EDIT = "edit"
     """Edits the artifact's metadata and saves it.
 
-    This includes the manifest, type, configuration, secrets, and versioning information.
+    This includes the manifest, type, configuration, secrets, and versioning
+    information.
 
     Args:
         manifest (dict[str, Any] | None): The manifest data to set for the artifact.
@@ -112,10 +114,12 @@ class ArtifactMethod(StrEnum):
     """
 
     DISCARD = "discard"
-    """Discards all staged changes for an artifact, reverting to the last committed state.
+    """Discards all staged changes for an artifact, reverting to the last committed
+        state.
 
     Parameters:
-        artifact_id: The id of the artifact to discard changes for. Can be a UUID or alias.
+        artifact_id: The id of the artifact to discard changes for. Can be a UUID or
+        alias.
 
     Returns:
         A dictionary containing the artifact reverted to its last committed state.
@@ -125,8 +129,8 @@ class ArtifactMethod(StrEnum):
     """Creates a new artifact or collection with the specified manifest."""
 
     DELETE = "delete"
-    """Deletes an artifact, its manifest, and all associated files from both the database and
-    S3 storage.
+    """Deletes an artifact, its manifest, and all associated files from both the
+    database and S3 storage.
 
     Args:
         artifact_id (str): The id of the artifact to delete. Can be a UUID or alias.
