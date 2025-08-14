@@ -65,7 +65,7 @@ class TestAsyncHyphaArtifactUnit:
             return_value="test"
         )
         await async_artifact.cat("test.txt")
-        async_artifact.open.assert_called_once_with("test.txt", "r")
+        async_artifact.open.assert_called_once_with("test.txt", "r", version=None)
 
     @pytest.mark.asyncio
     async def test_copy(
