@@ -187,8 +187,6 @@ class ArtifactCLI(HyphaArtifact):
 def main() -> None:
     """Run main CLI entry point."""
     # TODO @hugokallander: fix "is folder" errors in get
-    # TODO @hugokallander: try CLI methods in general
-    # TODO @hugokallander: list children (artifacts)
     fire.Fire(ArtifactCLI)
 
 

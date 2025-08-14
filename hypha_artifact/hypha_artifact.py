@@ -73,26 +73,7 @@ class HyphaArtifact:
         use_local_url: bool | None = None,
         disable_ssl: bool = False,
     ) -> None:
-        """Initialize a HyphaArtifact instance.
-
-        Parameters
-        ----------
-        artifact_id: str
-            The identifier of the Hypha artifact to interact with
-        workspace: str | None
-            The workspace identifier associated with the artifact
-        token: str | None
-            The authentication token for accessing the artifact service
-        server_url: str | None
-            The base URL for the Hypha server
-        use_proxy: bool | None
-            Whether to use a proxy for HTTP requests
-        use_local_url: bool | None
-            Whether to use a local URL for HTTP requests
-        disable_ssl: bool
-            Whether to disable SSL verification
-
-        """
+        """Initialize a HyphaArtifact instance."""
         self._async_artifact = AsyncHyphaArtifact(
             artifact_id,
             workspace=workspace,
@@ -116,28 +97,7 @@ class HyphaArtifact:
         *,
         overwrite: bool | None = None,
     ) -> None:
-        """Create a new artifact.
-
-        Args:
-            self (Self): The HyphaArtifact instance.
-            manifest (str | dict[str, Any] | None, optional): The artifact manifest.
-                Defaults to None.
-            parent_id (str | None, optional): The parent artifact ID. Defaults to None.
-            type (str | None, optional): The artifact type. Defaults to None.
-            version (str | None, optional): The artifact version. Defaults to None.
-            stage (str | None, optional): The artifact stage. Defaults to None.
-            comment (str | None, optional): The commit comment. Defaults to None.
-            secrets (dict[str, str] | None, optional): The artifact secrets.
-                Defaults to None.
-            overwrite (bool | None, optional): Whether to overwrite the artifact if it
-                exists. Defaults to None.
-            config: dict[str, Any] | None
-                The artifact configuration. Defaults to None.
-
-        Returns:
-            _type_: _description_
-
-        """
+        """Create a new artifact."""
         return run_sync(
             self._async_artifact.create(
                 manifest=manifest,
@@ -145,7 +105,6 @@ class HyphaArtifact:
                 type=type,
                 config=config,
                 version=version,
-                stage=stage,
                 comment=comment,
                 secrets=secrets,
                 overwrite=overwrite,
@@ -188,6 +147,32 @@ class HyphaArtifact:
                 secrets=secrets,
                 version=version,
                 comment=comment,
+                stage=stage,
+            ),
+        )
+
+    def list_children(
+        self: Self,
+        keywords: list[str] | None = None,
+        filters: dict[str, Any] | None = None,
+        mode: str = "AND",
+        offset: int = 0,
+        limit: int = 100,
+        order_by: str | None = None,
+        *,
+        silent: bool = False,
+        stage: bool = False,
+    ) -> dict[str, Any]:
+        """Retrieve a list of child artifacts within a specified collection."""
+        return run_sync(
+            self._async_artifact.list_children(
+                keywords,
+                filters,
+                mode,
+                offset,
+                limit,
+                order_by,
+                silent=silent,
                 stage=stage,
             ),
         )

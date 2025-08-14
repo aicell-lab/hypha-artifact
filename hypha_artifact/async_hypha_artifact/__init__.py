@@ -37,7 +37,7 @@ from ._io import (
     head,
     put,
 )
-from ._state import commit, create, delete, discard, edit
+from ._state import commit, create, delete, discard, edit, list_children
 
 
 class AsyncHyphaArtifact:
@@ -152,6 +152,7 @@ class AsyncHyphaArtifact:
     delete = delete
     edit = edit
     commit = commit
+    list_children = list_children
     cat = cat
     open = fsspec_open
     copy = copy
