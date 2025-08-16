@@ -1,6 +1,6 @@
 """Hypha Artifact fsspec interface."""
 
-from .hypha_artifact import HyphaArtifact
 from .async_hypha_artifact_compat import AsyncHyphaArtifact
+from .hypha_artifact import HyphaArtifact
 
-__all__ = ["HyphaArtifact", "AsyncHyphaArtifact"]
+__all__ = ["AsyncHyphaArtifact", "HyphaArtifact"]

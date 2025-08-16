@@ -1,13 +1,13 @@
 """Represents a file or directory in the artifact storage."""
 
-from dataclasses import dataclass
-from typing import Any, TypedDict, Literal
+from typing import Any, Literal, TypedDict
+
+OnError = Literal["raise", "ignore"]
+JsonType = str | int | float | bool | None | dict[str, Any] | list[Any]
 
 
 class ArtifactItem(TypedDict):
-    """
-    Represents an item in the artifact, containing metadata and content.
-    """
+    """Represents an item in the artifact, containing metadata and content."""
 
     name: str
     type: Literal["file", "directory"]
@@ -15,23 +15,24 @@ class ArtifactItem(TypedDict):
     last_modified: float | None
 
 
-@dataclass
-class TransferPaths:
-    """Helper class to store source and destination paths."""
-
-    src: str
-    dst: str
-
-
 class StatusMessage:
     """Class to represent a status message for file operations."""
 
-    def __init__(self, operation: str, total_files: int):
+    def __init__(self, operation: str, total_files: int) -> None:
+        """Initialize a status message.
+
+        Args:
+            operation (str): The operation being performed (e.g., "upload", "download").
+            total_files (int): The total number of files involved in the operation.
+
+        """
         self.operation = operation
         self.total_files = total_files
 
     def in_progress(
-        self: "StatusMessage", file_path: str, current_file_index: int
+        self: "StatusMessage",
+        file_path: str,
+        current_file_index: int,
     ) -> dict[str, Any]:
         """Create a message indicating the progress of an operation."""
         return {
@@ -54,7 +55,9 @@ class StatusMessage:
         }
 
     def error(
-        self: "StatusMessage", file_path: str, error_message: str
+        self: "StatusMessage",
+        file_path: str,
+        error_message: str,
     ) -> dict[str, Any]:
         """Create a message indicating an error during the operation."""
         return {

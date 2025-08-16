@@ -1,5 +1,4 @@
-"""
-This module serves as a backward-compatibility layer for the AsyncHyphaArtifact class.
+"""Serves as a backward-compatibility layer for the AsyncHyphaArtifact class.
 
 The AsyncHyphaArtifact class has been refactored into a module.
 This file imports the class from the new module to ensure that existing code

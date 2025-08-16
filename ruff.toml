@@ -1,0 +1,2 @@
+select = ["ALL"]
+ignore = ["PLR0913", "ASYNC230"] # TODO @hugokallander: Look into ASYNC230 one day

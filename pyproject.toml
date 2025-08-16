@@ -14,13 +14,20 @@ dependencies = [
   "httpx>=0.24.0",
   "python-dotenv>=0.21.0",
   "hypha_rpc>=0.20.54",
+  "pyyaml>=6.0.1",
 ]
 license = "MIT"
 license-files = ["LICENSE"]
+
+[project.optional-dependencies]
+cli = ["fire>=0.6.0"]
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["hypha_artifact*"]
+include = ["hypha_artifact*", "cli*"]
 exclude = ["tests*"]
+
+[project.scripts]
+hypha-artifact = "cli.main:main"
