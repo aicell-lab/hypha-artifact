@@ -55,6 +55,7 @@ async def cat(
 ) -> str | None: ...
 
 
+# TODO: shorten
 async def cat(
     self: AsyncHyphaArtifact,
     path: str | list[str],
@@ -221,6 +222,7 @@ async def copy(
             maxdepth=maxdepth,
             withdirs=False,
             version=version,
+            hide_keep=False,
         )
         src_dst_paths = rel_path_pairs(files, src_path=path1, dst_path=path2)
     else:
@@ -256,7 +258,8 @@ async def get(
 
     all_file_pairs: list[tuple[str, str]] = []
     for rp, lp in zip(rpaths, lpaths, strict=False):
-        if recursive:
+        is_dir = await self.isdir(rp)
+        if recursive and is_dir:
             Path(lp).mkdir(exist_ok=True, parents=True)
             files = await self.find(
                 rp,
@@ -266,6 +269,11 @@ async def get(
             )
             file_pairs = rel_path_pairs(files, src_path=rp, dst_path=lp)
             all_file_pairs.extend(file_pairs)
+        elif not recursive and is_dir:
+            error_msg = (
+                f"Path is a directory: {rp}. Use --recursive to remove directories."
+            )
+            raise IsADirectoryError(error_msg)
         else:
             all_file_pairs.append((rp, lp))
 
@@ -275,8 +283,13 @@ async def get(
         if callback:
             callback(status_message.in_progress(remote_path, current_file_index))
 
+        if local_path[-1] == "/":
+            fixed_local_path = str(Path(local_path) / Path(remote_path).name)
+        else:
+            fixed_local_path = local_path
+
         try:
-            local_dir = Path(local_path).parent
+            local_dir = Path(fixed_local_path).parent
             if local_dir:
                 local_dir.mkdir(exist_ok=True, parents=True)
 
@@ -287,7 +300,7 @@ async def get(
                 content.encode("utf-8") if isinstance(content, str) else content
             )
 
-            with Path(local_path).open("wb") as local_file:
+            with Path(fixed_local_path).open("wb") as local_file:
                 local_file.write(content_bytes)
         except (OSError, FileNotFoundError, httpx.RequestError) as e:
             if callback:
@@ -317,10 +330,16 @@ async def put(
 
     all_file_pairs: list[tuple[str, str]] = []
     for rp, lp in zip(rpaths, lpaths, strict=False):
-        if recursive:
+        is_dir = Path(lp).is_dir()
+        if recursive and is_dir:
             files = local_walk(lp, maxdepth=maxdepth)
             file_pairs = rel_path_pairs(files, src_path=lp, dst_path=rp)
             all_file_pairs.extend(file_pairs)
+        elif not recursive and is_dir:
+            error_msg = (
+                f"Path is a directory: {rp}. Use --recursive to remove directories."
+            )
+            raise IsADirectoryError(error_msg)
         else:
             all_file_pairs.append((lp, rp))
 
@@ -330,19 +349,24 @@ async def put(
         if callback:
             callback(status_message.in_progress(local_path, current_file_index))
 
+        if remote_path[-1] == "/":
+            fixed_remote_path = str(Path(remote_path) / Path(local_path).name)
+        else:
+            fixed_remote_path = remote_path
+
         try:
             if multipart_config:
                 await upload_multipart(
                     self,
                     Path(local_path),
-                    remote_path,
+                    fixed_remote_path,
                     multipart_config,
                 )
             else:
                 with Path(local_path).open("rb") as local_file:
                     content = local_file.read()
 
-                async with self.open(remote_path, "wb") as remote_file:
+                async with self.open(fixed_remote_path, "wb") as remote_file:
                     await remote_file.write(content)
 
         except (OSError, FileNotFoundError, httpx.RequestError) as e:

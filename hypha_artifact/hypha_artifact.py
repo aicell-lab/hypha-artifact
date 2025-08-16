@@ -346,7 +346,7 @@ class HyphaArtifact:
     @overload
     def ls(
         self: Self,
-        path: str,
+        path: str = ".",
         version: str | None = None,
         *,
         detail: Literal[False],
@@ -355,7 +355,7 @@ class HyphaArtifact:
     @overload
     def ls(
         self: Self,
-        path: str,
+        path: str = ".",
         version: str | None = None,
         *,
         detail: None | Literal[True] = True,
@@ -363,7 +363,7 @@ class HyphaArtifact:
 
     def ls(
         self: Self,
-        path: str,
+        path: str = ".",
         version: str | None = None,
         *,
         detail: None | bool = True,
@@ -396,6 +396,7 @@ class HyphaArtifact:
         *,
         withdirs: bool = False,
         detail: Literal[True],
+        hide_keep: bool = True,
     ) -> dict[str, ArtifactItem]: ...
 
     @overload
@@ -407,6 +408,7 @@ class HyphaArtifact:
         *,
         withdirs: bool = False,
         detail: Literal[False] = False,
+        hide_keep: bool = True,
     ) -> list[str]: ...
 
     def find(
@@ -417,6 +419,7 @@ class HyphaArtifact:
         *,
         withdirs: bool = False,
         detail: bool = False,
+        hide_keep: bool = True,
     ) -> list[str] | dict[str, ArtifactItem]:
         """Find all files (and optional directories) under a path."""
         return run_sync(
@@ -426,6 +429,7 @@ class HyphaArtifact:
                 withdirs=withdirs,
                 detail=detail,
                 version=version,
+                hide_keep=hide_keep,
             ),
         )
 

@@ -139,4 +139,5 @@ class TestHyphaArtifactUnit:
             withdirs=False,
             detail=False,
             version=None,
+            hide_keep=True,
         )

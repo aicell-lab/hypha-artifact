@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import shlex
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -166,6 +167,30 @@ class ArtifactCLI(HyphaArtifact):
             stage=stage,
         )
 
+    def run_shell(self, artifact_id: str) -> None:
+        """Interactive mode."""
+        initial_msg = (
+            f"Welcome to the hypha-artifact shell for artifact '{artifact_id}'!"
+            " Type 'exit' or Ctrl+C to quit."
+            " For help, type '--help'"
+        )
+        print(initial_msg)  # noqa: T201
+        while True:
+            try:
+                cmd = input("> ").strip()
+                if cmd.lower() in ("exit", "quit"):
+                    print("Exiting shell.")  # noqa: T201
+                    break
+                if not cmd:
+                    continue
+
+                args = shlex.split(cmd)
+
+                fire.Fire(ArtifactCLI(artifact_id), args)
+            except (KeyboardInterrupt, EOFError):
+                print("\nExiting shell.")  # noqa: T201
+                break
+
     # Hide some methods from CLI
     def __dir__(self) -> list[str]:
         """Get a list of public methods in the CLI.
@@ -186,8 +211,12 @@ class ArtifactCLI(HyphaArtifact):
 
 def main() -> None:
     """Run main CLI entry point."""
-    # TODO @hugokallander: fix "is folder" errors in get
-    fire.Fire(ArtifactCLI)
+    repl_num_args = 3
+    if len(sys.argv) == repl_num_args and sys.argv[1] == "--artifact_id":
+        artifact_id = sys.argv[2]
+        ArtifactCLI(artifact_id).run_shell(artifact_id)
+    else:
+        fire.Fire(ArtifactCLI)
 
 
 if __name__ == "__main__":

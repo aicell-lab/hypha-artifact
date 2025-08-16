@@ -124,7 +124,7 @@ class AsyncHyphaArtifact:
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient(verify=bool(self.ssl), timeout=30.0)
+        self._client = httpx.AsyncClient(verify=bool(self.ssl), timeout=60.0)
         return self
 
     async def __aexit__(

@@ -96,14 +96,20 @@ class TestAsyncHyphaArtifactUnit:
         """Test the rm method."""
         mock_response = MagicMock()
         mock_response.status_code = 200
+        mock_response.content = "{}"
         mock_post = AsyncMock(return_value=mock_response)
         mock_remote_post = mocker.patch.object(
             async_artifact._client,
             "post",
             new=mock_post,
         )
+        mock_remote_get = mocker.patch.object(
+            async_artifact._client,
+            "get",
+            new=mock_post,
+        )
         await async_artifact.rm("test.txt")
-        mock_remote_post.assert_called_once_with(
+        mock_remote_post.assert_called_with(
             headers={},
             json={"artifact_id": "test-artifact", "file_path": "test.txt"},
             url="https://hypha.aicell.io/public/services/artifact-manager/remove_file",
@@ -144,7 +150,10 @@ class TestAsyncHyphaArtifactUnit:
         async_artifact.ls = AsyncMock(
             return_value=[
                 ArtifactItem(
-                    name="test.txt", type="file", size=123, last_modified=None
+                    name="test.txt",
+                    type="file",
+                    size=123,
+                    last_modified=None,
                 ),
             ],
         )

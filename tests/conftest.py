@@ -4,6 +4,8 @@ This module contains common fixtures and utility functions used by both
 sync and async test suites to avoid code duplication.
 """
 
+# TODO @hugokallander: For all tests, clean up artifacts afterward
+
 import asyncio
 import logging
 import os
@@ -149,7 +151,6 @@ def get_artifact_setup_teardown(artifact_name: str, credentials: tuple[str, str]
     yield token, workspace
 
     # Teardown
-    # TODO: ensure this works
     run_func_sync(artifact_name, token, delete_artifact)
 
 

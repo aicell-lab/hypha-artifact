@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 @overload
 async def ls(
     self: AsyncHyphaArtifact,
-    path: str,
+    path: str = ".",
     version: str | None = None,
     *,
     detail: Literal[False],
@@ -36,7 +36,7 @@ async def ls(
 @overload
 async def ls(
     self: AsyncHyphaArtifact,
-    path: str,
+    path: str = ".",
     version: str | None = None,
     *,
     detail: Literal[True],
@@ -46,7 +46,7 @@ async def ls(
 @overload
 async def ls(
     self: AsyncHyphaArtifact,
-    path: str,
+    path: str = ".",
     version: str | None = None,
     *,
     detail: None | bool = True,
@@ -57,7 +57,7 @@ async def ls(
 # TODO @hugokallander: shorten
 async def ls(
     self: AsyncHyphaArtifact,
-    path: str,
+    path: str = ".",
     version: str | None = None,
     *,
     detail: None | bool = True,
@@ -97,7 +97,7 @@ async def ls(
         url,
         params=params,
         headers=get_headers(self),
-        timeout=20,
+        timeout=60,
     )
 
     check_errors(response)
@@ -259,6 +259,7 @@ async def find(
     *,
     withdirs: bool = False,
     detail: Literal[True],
+    hide_keep: bool = True,
 ) -> dict[str, ArtifactItem]: ...
 
 
@@ -271,6 +272,7 @@ async def find(
     *,
     withdirs: bool = False,
     detail: Literal[False] = False,
+    hide_keep: bool = True,
 ) -> list[str]: ...
 
 
@@ -282,6 +284,7 @@ async def find(
     *,
     withdirs: bool = False,
     detail: bool = False,
+    hide_keep: bool = True,
 ) -> list[str] | dict[str, ArtifactItem]:
     """Find all files (and optional directories) under a path.
 
@@ -302,6 +305,9 @@ async def find(
         The version of the artifact to search in.
         By default, it searches in the latest version.
         If you want to search in a staged version, you can set it to "stage".
+    hide_keep: bool
+        If True, exclude .keep files from the results.
+        If False, include .keep files in the results.
 
     Returns
     -------
@@ -309,12 +315,25 @@ async def find(
         List of paths or dict of {path: info_dict}
 
     """
-    all_files = await walk_dir(self, path, maxdepth, 1, version, withdirs=withdirs)
+    filtered_all_files = await walk_dir(
+        self,
+        path,
+        maxdepth,
+        1,
+        version,
+        withdirs=withdirs,
+    )
+
+    filtered_all_files = (
+        {k: v for k, v in filtered_all_files.items() if not k.endswith(".keep")}
+        if hide_keep
+        else filtered_all_files
+    )
 
     if detail:
-        return all_files
+        return filtered_all_files
 
-    return sorted(all_files.keys())
+    return sorted(filtered_all_files.keys())
 
 
 # TODO @hugokallander: currently returns last modified time, not creation time
@@ -443,13 +462,20 @@ async def rm(
 
     """
     paths_to_remove: list[str] = []
-    if recursive and await self.isdir(path):
+    is_dir = await self.isdir(path)
+    if recursive and is_dir:
         paths_to_remove = await self.find(
             path,
             maxdepth=maxdepth,
             withdirs=False,
             detail=False,
+            hide_keep=False,
         )
+    elif not recursive and is_dir:
+        error_msg = (
+            f"Path is a directory: {path}. Use --recursive to remove directories."
+        )
+        raise IsADirectoryError(error_msg)
     else:
         paths_to_remove.append(path)
 
