@@ -91,11 +91,11 @@ class HyphaArtifact:
         type: str | None = None,  # noqa: A002
         config: dict[str, Any] | None = None,
         version: str | None = None,
-        stage: str | None = None,
         comment: str | None = None,
         secrets: dict[str, str] | None = None,
         *,
         overwrite: bool | None = None,
+        stage: bool | None = None,
     ) -> None:
         """Create a new artifact."""
         return run_sync(
@@ -108,6 +108,7 @@ class HyphaArtifact:
                 comment=comment,
                 secrets=secrets,
                 overwrite=overwrite,
+                stage=stage,
             ),
         )
 
