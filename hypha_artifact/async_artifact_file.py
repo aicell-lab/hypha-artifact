@@ -98,8 +98,8 @@ class AsyncArtifactHttpFile:
 
     async def download_content(self: Self, range_header: str | None = None) -> None:
         """Download content from URL into buffer, optionally using a range header."""
+        url = await self.get_url()
         try:
-            url = await self.get_url()
 
             headers: dict[str, str] = {
                 "Accept-Encoding": "identity",  # Prevent gzip compression

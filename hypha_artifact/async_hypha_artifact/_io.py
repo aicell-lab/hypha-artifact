@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from functools import partial
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    overload,
-)
+from typing import TYPE_CHECKING, Any, overload
 from urllib.parse import urlparse
 
 import httpx
@@ -17,13 +13,18 @@ from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
 from hypha_artifact.classes import OnError, StatusMessage
 
 from ._utils import (
-    ensure_equal_len,
+    build_local_to_remote_pairs,
+    build_remote_to_local_pairs,
+    decode_to_text,
+    download_to_path,
     get_existing_url,
     get_read_url,
     get_write_url,
-    local_walk,
+    params_get_file_url,
     prepare_params,
     rel_path_pairs,
+    target_path_with_optional_slash,
+    upload_file_simple,
     upload_multipart,
 )
 
@@ -55,7 +56,6 @@ async def cat(
 ) -> str | None: ...
 
 
-# TODO: shorten
 async def cat(
     self: AsyncHyphaArtifact,
     path: str | list[str],
@@ -89,42 +89,30 @@ async def cat(
 
     """
     if isinstance(path, list):
-        results: dict[str, str | None] = {}
-        for p in path:
-            results[p] = await self.cat(
+        return {
+            p: await self.cat(
                 p,
                 recursive=recursive,
                 on_error=on_error,
                 version=version,
             )
-        return results
+            for p in path
+        }
 
     if recursive and await self.isdir(path):
-        results = {}
         files = await self.find(path, withdirs=False, version=version)
-        for file_path in files:
-            results[file_path] = await self.cat(
-                file_path,
-                on_error=on_error,
-                version=version,
-            )
-        return results
+        return {f: await self.cat(f, on_error=on_error, version=version) for f in files}
 
     try:
         async with self.open(path, "r", version=version) as f:
-            content: str | bytes = await f.read()
-            if isinstance(content, bytes):
-                return content.decode("utf-8")
-            if isinstance(content, (bytearray, memoryview)):
-                return bytes(content).decode("utf-8")
-            return str(content)
+            content = await f.read()
+            return decode_to_text(content)
     except (OSError, FileNotFoundError, httpx.RequestError) as e:
         if on_error == "ignore":
             return None
         raise OSError from e
 
 
-# TODO @hugokallander: shorten
 def fsspec_open(
     self: AsyncHyphaArtifact,
     urlpath: str,
@@ -155,14 +143,15 @@ def fsspec_open(
         A file-like object
 
     """
+    get_file_params = params_get_file_url(
+        file_path=urlpath,
+        version=version,
+        use_proxy=self.use_proxy,
+        use_local_url=self.use_local_url,
+    )
     params: dict[str, Any] = prepare_params(
         self,
-        {
-            "file_path": urlpath,
-            "use_proxy": self.use_proxy,
-            "use_local_url": self.use_local_url,
-            "version": version,
-        },
+        get_file_params,
     )
 
     if urlparse(urlpath).scheme in ["http", "https", "ftp"]:
@@ -252,56 +241,29 @@ async def get(
     recursive: bool = False,
 ) -> None:
     """Copy file(s) from remote (artifact) to local filesystem."""
-    if not lpath:
-        lpath = rpath
-    rpaths, lpaths = ensure_equal_len(rpath, lpath)
-
-    all_file_pairs: list[tuple[str, str]] = []
-    for rp, lp in zip(rpaths, lpaths, strict=False):
-        is_dir = await self.isdir(rp)
-        if recursive and is_dir:
-            Path(lp).mkdir(exist_ok=True, parents=True)
-            files = await self.find(
-                rp,
-                maxdepth=maxdepth,
-                withdirs=False,
-                version=version,
-            )
-            file_pairs = rel_path_pairs(files, src_path=rp, dst_path=lp)
-            all_file_pairs.extend(file_pairs)
-        elif not recursive and is_dir:
-            error_msg = (
-                f"Path is a directory: {rp}. Use --recursive to remove directories."
-            )
-            raise IsADirectoryError(error_msg)
-        else:
-            all_file_pairs.append((rp, lp))
+    all_file_pairs = await build_remote_to_local_pairs(
+        self,
+        rpath,
+        lpath,
+        recursive=recursive,
+        maxdepth=maxdepth,
+        version=version,
+    )
 
     status_message = StatusMessage("download", len(all_file_pairs))
 
     for current_file_index, (remote_path, local_path) in enumerate(all_file_pairs):
         if callback:
             callback(status_message.in_progress(remote_path, current_file_index))
-
-        if local_path[-1] == "/":
-            fixed_local_path = str(Path(local_path) / Path(remote_path).name)
-        else:
-            fixed_local_path = local_path
+        fixed_local_path = target_path_with_optional_slash(remote_path, local_path)
 
         try:
-            local_dir = Path(fixed_local_path).parent
-            if local_dir:
-                local_dir.mkdir(exist_ok=True, parents=True)
-
-            async with self.open(remote_path, "rb", version=version) as remote_file:
-                content = await remote_file.read()
-
-            content_bytes = (
-                content.encode("utf-8") if isinstance(content, str) else content
+            await download_to_path(
+                self,
+                remote_path,
+                fixed_local_path,
+                version=version,
             )
-
-            with Path(fixed_local_path).open("wb") as local_file:
-                local_file.write(content_bytes)
         except (OSError, FileNotFoundError, httpx.RequestError) as e:
             if callback:
                 callback(status_message.error(remote_path, str(e)))
@@ -324,35 +286,19 @@ async def put(
     multipart_config: dict[str, Any] | None = None,
 ) -> None:
     """Copy file(s) from local filesystem to remote (artifact)."""
-    if not rpath:
-        rpath = lpath
-    rpaths, lpaths = ensure_equal_len(rpath, lpath)
-
-    all_file_pairs: list[tuple[str, str]] = []
-    for rp, lp in zip(rpaths, lpaths, strict=False):
-        is_dir = Path(lp).is_dir()
-        if recursive and is_dir:
-            files = local_walk(lp, maxdepth=maxdepth)
-            file_pairs = rel_path_pairs(files, src_path=lp, dst_path=rp)
-            all_file_pairs.extend(file_pairs)
-        elif not recursive and is_dir:
-            error_msg = (
-                f"Path is a directory: {rp}. Use --recursive to remove directories."
-            )
-            raise IsADirectoryError(error_msg)
-        else:
-            all_file_pairs.append((lp, rp))
+    all_file_pairs = build_local_to_remote_pairs(
+        lpath,
+        rpath,
+        recursive=recursive,
+        maxdepth=maxdepth,
+    )
 
     status_message = StatusMessage("upload", len(all_file_pairs))
 
     for current_file_index, (local_path, remote_path) in enumerate(all_file_pairs):
         if callback:
             callback(status_message.in_progress(local_path, current_file_index))
-
-        if remote_path[-1] == "/":
-            fixed_remote_path = str(Path(remote_path) / Path(local_path).name)
-        else:
-            fixed_remote_path = remote_path
+        fixed_remote_path = target_path_with_optional_slash(local_path, remote_path)
 
         try:
             if multipart_config:
@@ -363,11 +309,7 @@ async def put(
                     multipart_config,
                 )
             else:
-                with Path(local_path).open("rb") as local_file:
-                    content = local_file.read()
-
-                async with self.open(fixed_remote_path, "wb") as remote_file:
-                    await remote_file.write(content)
+                await upload_file_simple(self, local_path, fixed_remote_path)
 
         except (OSError, FileNotFoundError, httpx.RequestError) as e:
             if callback:

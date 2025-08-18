@@ -335,9 +335,9 @@ class HyphaArtifact:
         """Remove file or directory."""
         return run_sync(self._async_artifact.rm(path, maxdepth, recursive=recursive))
 
-    def created(self: Self, path: str, version: str | None = None) -> datetime | None:
+    def modified(self: Self, path: str, version: str | None = None) -> datetime | None:
         """Get the creation time of a file."""
-        return run_sync(self._async_artifact.created(path, version=version))
+        return run_sync(self._async_artifact.modified(path, version=version))
 
     def exists(self: Self, path: str, version: str | None = None) -> bool:
         """Check if a file or directory exists."""

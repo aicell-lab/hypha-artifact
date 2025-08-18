@@ -3,24 +3,320 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import math
 import os
 from http import HTTPStatus
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import httpx
 
 from hypha_artifact.async_hypha_artifact._remote_methods import ArtifactMethod
 
 if TYPE_CHECKING:
-    from hypha_artifact.classes import ArtifactItem, JsonType
+    from collections.abc import Mapping
+
+    from hypha_artifact.classes import ArtifactItem
 
     from . import AsyncHyphaArtifact
 
 DEFAULT_MULTIPART_THRESHOLD = 100 * 1024 * 1024  # 100 MB
 DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024  # 6 MB
+MINIMUM_CHUNK_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+class ListFilesParams(TypedDict, total=False):
+    dir_path: str
+    version: str
+
+
+class GetFileUrlParams(TypedDict, total=False):
+    file_path: str
+    version: str
+    use_proxy: bool
+    use_local_url: bool
+
+
+class RemoveFileParams(TypedDict, total=False):
+    file_path: str
+
+
+def params_list_files(
+    dir_path: str = ".",
+    version: str | None = None,
+) -> ListFilesParams:
+    """Typed builder for List Files parameters."""
+    p: ListFilesParams = {"dir_path": dir_path}
+    if version is not None:
+        p["version"] = version
+    return p
+
+
+def params_get_file_url(
+    file_path: str,
+    *,
+    version: str | None = None,
+    use_proxy: bool | None = None,
+    use_local_url: bool | None = None,
+) -> GetFileUrlParams:
+    """Typed builder for GET/PUT file URL params used by fsspec_open and uploads."""
+    p: GetFileUrlParams = {"file_path": file_path}
+    if version is not None:
+        p["version"] = version
+    if use_proxy is not None:
+        p["use_proxy"] = use_proxy
+    if use_local_url is not None:
+        p["use_local_url"] = use_local_url
+    return p
+
+
+def params_remove_file(file_path: str) -> RemoveFileParams:
+    return {"file_path": file_path}
+
+
+def params_create(
+    *,
+    alias: str,
+    workspace: str | None,
+    parent_id: str | None,
+    artifact_type: str | None,
+    manifest: str | dict[str, Any] | None,
+    config: dict[str, Any] | None,
+    version: str | None,
+    stage: bool | None,
+    comment: str | None,
+    secrets: dict[str, str] | None,
+    overwrite: bool | None,
+) -> dict[str, object]:
+    """Typed builder for create() arguments (no artifact_id injection)."""
+    return {
+        k: v
+        for k, v in {
+            "alias": alias,
+            "workspace": workspace,
+            "parent_id": parent_id,
+            "type": artifact_type,
+            "manifest": manifest,
+            "config": config,
+            "version": version,
+            "stage": stage,
+            "comment": comment,
+            "secrets": secrets,
+            "overwrite": overwrite,
+        }.items()
+        if v is not None
+    }
+
+
+def params_put_file_start_multipart(
+    file_path: str,
+    *,
+    part_count: int,
+    download_weight: float = 1.0,
+    use_proxy: bool | None = None,
+    use_local_url: bool | None = None,
+) -> dict[str, object]:
+    p: dict[str, object] = {
+        "file_path": file_path,
+        "part_count": part_count,
+        "download_weight": download_weight,
+    }
+    if use_proxy is not None:
+        p["use_proxy"] = use_proxy
+    if use_local_url is not None:
+        p["use_local_url"] = use_local_url
+    return p
+
+
+def params_put_file_complete_multipart(
+    upload_id: str,
+    *,
+    parts: list[dict[str, Any]],
+) -> dict[str, object]:
+    return {"upload_id": upload_id, "parts": parts}
+
+
+def params_edit(
+    *,
+    manifest: dict[str, Any] | None = None,
+    type: str | None = None,  # noqa: A002
+    config: dict[str, Any] | None = None,
+    secrets: dict[str, str] | None = None,
+    version: str | None = None,
+    comment: str | None = None,
+    stage: bool = False,
+) -> dict[str, object]:
+    return {
+        k: v
+        for k, v in {
+            "manifest": manifest,
+            "type": type,
+            "config": config,
+            "secrets": secrets,
+            "version": version,
+            "comment": comment,
+            "stage": stage,
+        }.items()
+        if v is not None
+    }
+
+
+def params_commit(
+    *,
+    version: str | None = None,
+    comment: str | None = None,
+) -> dict[str, object]:
+    return {
+        k: v
+        for k, v in {"version": version, "comment": comment}.items()
+        if v is not None
+    }
+
+
+def params_delete(
+    *,
+    delete_files: bool | None = None,
+    recursive: bool | None = None,
+    version: str | None = None,
+) -> dict[str, object]:
+    return {
+        k: v
+        for k, v in {
+            "delete_files": delete_files,
+            "recursive": recursive,
+            "version": version,
+        }.items()
+        if v is not None
+    }
+
+
+def target_path_with_optional_slash(src_path: str, dst_path: str) -> str:
+    """If dst ends with '/', append basename of src; otherwise return dst.
+
+    Used by both get (remote->local) and put (local->remote) for intuitive semantics.
+    """
+    return (
+        str(Path(dst_path) / Path(src_path).name)
+        if dst_path.endswith("/")
+        else dst_path
+    )
+
+
+def to_bytes(content: str | bytes | bytearray | memoryview) -> bytes:
+    if isinstance(content, bytes):
+        return content
+    if isinstance(content, str):
+        return content.encode("utf-8")
+    return bytes(content)
+
+
+def decode_to_text(content: str | bytes | bytearray | memoryview) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, bytes):
+        return content.decode("utf-8")
+    return bytes(content).decode("utf-8")
+
+
+def filter_by_name(
+    files: list[ArtifactItem],
+    name: str,
+) -> list[ArtifactItem]:
+    """Filter files by name."""
+    return [f for f in files if Path(f["name"]).name == Path(name).name]
+
+
+async def download_to_path(
+    self: AsyncHyphaArtifact,
+    remote_path: str,
+    local_path: str,
+    *,
+    version: str | None = None,
+) -> None:
+    parent = Path(local_path).parent
+    if parent:
+        parent.mkdir(parents=True, exist_ok=True)
+    async with self.open(remote_path, "rb", version=version) as fsrc:
+        data = await fsrc.read()
+    with Path(local_path).open("wb") as fdst:
+        fdst.write(to_bytes(data))
+
+
+async def upload_file_simple(
+    self: AsyncHyphaArtifact,
+    local_path: str | Path,
+    remote_path: str,
+) -> None:
+    with Path(local_path).open("rb") as fsrc:
+        data = fsrc.read()
+    async with self.open(remote_path, "wb") as fdst:
+        await fdst.write(data)
+
+
+async def build_remote_to_local_pairs(
+    self: AsyncHyphaArtifact,
+    rpath: str | list[str],
+    lpath: str | list[str] | None,
+    *,
+    recursive: bool,
+    maxdepth: int | None,
+    version: str | None,
+) -> list[tuple[str, str]]:
+    """Expand rpath/lpath into concrete (remote, local) file pairs.
+
+    Applies recursive listing when asked and errors when a directory is passed
+    without recursive flag.
+    """
+    if not lpath:
+        lpath = rpath
+    rpaths, lpaths = ensure_equal_len(rpath, lpath)
+    pairs: list[tuple[str, str]] = []
+    for rp, lp in zip(rpaths, lpaths, strict=False):
+        if await self.isdir(rp, version=version):
+            if not recursive:
+                msg = (
+                    f"Path is a directory: {rp}. Use --recursive to remove "
+                    "directories."
+                )
+                raise IsADirectoryError(msg)
+            Path(lp).mkdir(parents=True, exist_ok=True)
+            files = await self.find(
+                rp,
+                maxdepth=maxdepth,
+                withdirs=False,
+                version=version,
+            )
+            pairs.extend(rel_path_pairs(files, src_path=rp, dst_path=lp))
+        else:
+            pairs.append((rp, lp))
+    return pairs
+
+
+def build_local_to_remote_pairs(
+    lpath: str | list[str],
+    rpath: str | list[str] | None,
+    *,
+    recursive: bool,
+    maxdepth: int | None,
+) -> list[tuple[str, str]]:
+    """Expand lpath/rpath into concrete (local, remote) file pairs."""
+    if not rpath:
+        rpath = lpath
+    rpaths, lpaths = ensure_equal_len(rpath, lpath)
+    pairs: list[tuple[str, str]] = []
+    for rp, lp in zip(rpaths, lpaths, strict=False):
+        if Path(lp).is_dir():
+            if not recursive:
+                msg = (
+                    f"Path is a directory: {rp}. Use --recursive to remove "
+                    "directories."
+                )
+                raise IsADirectoryError(msg)
+            files = local_walk(lp, maxdepth=maxdepth)
+            pairs.extend(rel_path_pairs(files, src_path=lp, dst_path=rp))
+        else:
+            pairs.append((lp, rp))
+    return pairs
 
 
 async def get_existing_url(urlpath: str) -> str:
@@ -174,15 +470,13 @@ def ensure_equal_len(
 async def upload_part(
     self: AsyncHyphaArtifact,
     part_info: dict[str, Any],
-    chunk_data: bytes,
-    index: int,
 ) -> dict[str, Any]:
     """Upload a single part."""
-    part_number = part_info.get("part_number", index)
+    part_number = part_info["part_number"]
     upload_url = part_info["url"]
 
     async with self.open(upload_url, "wb") as f:
-        await f.write(chunk_data)
+        await f.write(part_info["chunk"])
 
     etag = f.etag
 
@@ -209,32 +503,10 @@ def read_chunks(
 async def upload_with_semaphore(
     self: AsyncHyphaArtifact,
     semaphore: asyncio.Semaphore,
-    index: int,
     part_info: dict[str, Any],
-    chunk_data: bytes,
 ) -> dict[str, Any]:
     async with semaphore:
-        return await upload_part(self, part_info, chunk_data, index=index + 1)
-
-
-async def upload_multipart_with_semaphore(
-    self: AsyncHyphaArtifact,
-    parts_info: list[dict[str, Any]],
-    chunks: list[bytes],
-    max_parallel_uploads: int,
-) -> list[dict[str, Any]]:
-    """Upload a part using a semaphore for concurrency control."""
-    semaphore = asyncio.Semaphore(max_parallel_uploads)
-
-    # Upload all parts in parallel
-    return await asyncio.gather(
-        *[
-            upload_with_semaphore(self, semaphore, index, part_info, chunk)
-            for index, (part_info, chunk) in enumerate(
-                zip(parts_info, chunks, strict=False),
-            )
-        ],
-    )
+        return await upload_part(self, part_info)
 
 
 def should_use_multipart(file_size: int, multipart_config: dict[str, Any]) -> bool:
@@ -248,7 +520,132 @@ def should_use_multipart(file_size: int, multipart_config: dict[str, Any]) -> bo
     return file_size >= multipart_config.get("threshold", DEFAULT_MULTIPART_THRESHOLD)
 
 
-# TODO @hugokallander: Refactor, merge with normal transfer
+def handle_input_errors(
+    file_size: int,
+    chunk_size: int,
+    multipart_config: dict[str, Any],
+) -> None:
+    """Handle input errors for multipart upload.
+
+    Args:
+        file_size (int): The size of the local file in bytes.
+        chunk_size (int): The chunk size for the upload.
+        multipart_config (dict[str, Any]): The multipart configuration.
+
+    Raises:
+        ValueError: If the input parameters are invalid.
+
+    """
+    if not should_use_multipart(file_size, multipart_config):
+        return
+
+    if chunk_size < MINIMUM_CHUNK_SIZE:
+        error_msg = (
+            "Chunk size must be greater than"
+            f" {MINIMUM_CHUNK_SIZE // (1024 * 1024)}"
+            "MB for multipart upload"
+        )
+        raise ValueError(error_msg)
+
+
+async def start_multipart_upload(
+    self: AsyncHyphaArtifact,
+    local_path: Path,
+    remote_path: str,
+    multipart_config: dict[str, Any],
+    download_weight: float = 1.0,
+) -> dict[str, Any]:
+    """Start a multipart upload for a file."""
+    chunk_size = multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE)
+    file_size = local_path.stat().st_size
+    handle_input_errors(file_size, chunk_size, multipart_config)
+    part_count = math.ceil(file_size / chunk_size)
+
+    start_params = params_put_file_start_multipart(
+        file_path=remote_path,
+        part_count=part_count,
+        download_weight=download_weight,
+        use_proxy=self.use_proxy,
+        use_local_url=self.use_local_url,
+    )
+    start_params = prepare_params(self, start_params)
+
+    start_url = get_method_url(self, ArtifactMethod.PUT_FILE_START_MULTIPART)
+    start_resp = await self.get_client().post(
+        start_url,
+        headers=get_headers(self),
+        json=start_params,
+    )
+    check_errors(start_resp)
+    return start_resp.json()
+
+
+async def upload_parts(
+    self: AsyncHyphaArtifact,
+    local_path: Path,
+    chunk_size: int,
+    parts: list[dict[str, Any]],
+    max_parallel_uploads: int,
+) -> list[dict[str, Any]]:
+    """Upload parts of a file in parallel.
+
+    Args:
+        self (AsyncHyphaArtifact): The artifact instance.
+        local_path (Path): The local file path.
+        chunk_size (int): The size of each chunk.
+        parts (list[dict[str, Any]]): The list of parts to upload.
+        max_parallel_uploads (int): The maximum number of parallel uploads.
+
+    Returns:
+        list[dict[str, Any]]: The list of responses from the uploaded parts.
+
+    """
+    chunks = read_chunks(local_path, chunk_size)
+    enumerate_parts = enumerate(zip(parts, chunks, strict=False))
+    parts_info = [
+        {
+            "chunk": chunk,
+            "url": part_info["url"],
+            "part_number": part_info.get("part_number", index + 1),
+        }
+        for index, (part_info, chunk) in enumerate_parts
+    ]
+
+    semaphore = asyncio.Semaphore(max_parallel_uploads)
+    upload_tasks = [
+        upload_with_semaphore(self, semaphore, part_info) for part_info in parts_info
+    ]
+
+    return await asyncio.gather(*upload_tasks)
+
+
+async def complete_multipart_upload(
+    self: AsyncHyphaArtifact,
+    upload_id: str,
+    completed_parts: list[dict[str, Any]],
+) -> None:
+    """Complete a multipart upload.
+
+    Args:
+        self (AsyncHyphaArtifact): The artifact instance.
+        upload_id (str): The ID of the upload.
+        completed_parts (list[dict[str, Any]]): The list of completed parts.
+
+    """
+    simple_params = params_put_file_complete_multipart(
+        upload_id=upload_id,
+        parts=completed_parts,
+    )
+    complete_params = prepare_params(self, simple_params)
+    complete_url = get_method_url(self, ArtifactMethod.PUT_FILE_COMPLETE_MULTIPART)
+    complete_resp = await self.get_client().post(
+        complete_url,
+        json=complete_params,
+        headers=get_headers(self),
+    )
+    check_errors(complete_resp)
+
+
 async def upload_multipart(
     self: AsyncHyphaArtifact,
     local_path: Path,
@@ -257,79 +654,36 @@ async def upload_multipart(
     download_weight: float = 1.0,
 ) -> None:
     """Upload a file using multipart upload with parallel uploads."""
-    file_size = local_path.stat().st_size
-
-    if not should_use_multipart(file_size, multipart_config):
-        return
-
-    chunk_size = multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE)
-    five_mb = 5 * 1024 * 1024
-    if chunk_size < five_mb:
-        error_msg = "Chunk size must be greater than 5MB for multipart upload"
-        raise ValueError(error_msg)
-    part_count = math.ceil(file_size / chunk_size)
-
-    params: dict[str, Any] = prepare_params(
+    multipart_info = await start_multipart_upload(
         self,
-        {
-            "file_path": remote_path,
-            "part_count": part_count,
-            "download_weight": download_weight,
-            "use_proxy": self.use_proxy,
-            "use_local_url": self.use_local_url,
-        },
+        local_path,
+        remote_path,
+        multipart_config,
+        download_weight=download_weight,
     )
 
-    url = get_method_url(self, ArtifactMethod.PUT_FILE_START_MULTIPART)
-
-    response = await self.get_client().post(
-        url,
-        headers=get_headers(self),
-        json=params,
-    )
-
-    check_errors(response)
-
-    multipart_info = json.loads(response.content.decode())
-
-    upload_id = multipart_info["upload_id"]
-    parts_info = multipart_info["parts"]
-    chunks = read_chunks(local_path, chunk_size)
     max_parallel_uploads = multipart_config.get("max_parallel_uploads", 4)
-
-    completed_parts = await upload_multipart_with_semaphore(
+    parts = multipart_info["parts"]
+    chunk_size = multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE)
+    completed_parts = await upload_parts(
         self,
-        parts_info,
-        chunks,
+        local_path,
+        chunk_size,
+        parts,
         max_parallel_uploads,
     )
 
-    params2: dict[str, Any] = prepare_params(
-        self,
-        {
-            "upload_id": upload_id,
-            "parts": completed_parts,
-        },
-    )
-
-    url2 = get_method_url(self, ArtifactMethod.PUT_FILE_COMPLETE_MULTIPART)
-
-    response = await self.get_client().post(
-        url2,
-        json=params2,
-        headers=get_headers(self),
-    )
-
-    check_errors(response)
+    upload_id = multipart_info["upload_id"]
+    await complete_multipart_upload(self, upload_id, completed_parts)
 
 
 def prepare_params(
     self: AsyncHyphaArtifact,
-    params: dict[str, JsonType] | None = None,
-) -> dict[str, JsonType]:
+    params: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
     """Extend parameters with artifact_id."""
-    cleaned_params: dict[str, JsonType] = {
-        k: v for k, v in (params or {}).items() if v is not None
+    cleaned_params: dict[str, object] = {
+        k: v for k, v in (dict(params or {})).items() if v is not None
     }
     cleaned_params["artifact_id"] = self.artifact_id
     return cleaned_params
@@ -354,6 +708,6 @@ def check_errors(response: httpx.Response) -> None:
     """Handle errors in HTTP responses."""
     if response.status_code != HTTPStatus.OK:
         error_msg = f"Unexpected error: {response.text}"
-        raise ValueError(error_msg)
+        raise httpx.RequestError(error_msg)
 
     response.raise_for_status()

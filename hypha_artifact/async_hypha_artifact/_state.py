@@ -5,7 +5,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ._remote_methods import ArtifactMethod
-from ._utils import check_errors, get_headers, get_method_url, prepare_params
+from ._utils import (
+    check_errors,
+    get_headers,
+    get_method_url,
+    params_commit,
+    params_create,
+    params_delete,
+    params_edit,
+    prepare_params,
+)
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
@@ -95,17 +104,18 @@ async def edit(
             exist.
 
     """
+    edit_params = params_edit(
+        manifest=manifest,
+        type=type,
+        config=config,
+        secrets=secrets,
+        version=version,
+        comment=comment,
+        stage=stage,
+    )
     params: dict[str, Any] = prepare_params(
         self,
-        {
-            "manifest": manifest,
-            "type": type,
-            "config": config,
-            "secrets": secrets,
-            "version": version,
-            "comment": comment,
-            "stage": stage,
-        },
+        edit_params,
     )
 
     url = get_method_url(self, ArtifactMethod.EDIT)
@@ -160,14 +170,14 @@ async def commit(
     copying, making it fast even for artifacts with large files.
 
     """
-    # TODO @hugokallander: Add specific prepare_params for each artifactmethod,
-    # with pre-filled and required ones
+    commit_params = params_commit(
+        version=version,
+        comment=comment,
+    )
+    # Param building handled centrally in utilities.
     params: dict[str, Any] = prepare_params(
         self,
-        {
-            "version": version,
-            "comment": comment,
-        },
+        commit_params,
     )
 
     response = await self.get_client().post(
@@ -332,22 +342,28 @@ async def create(
 
     # For CREATE, the server API does not accept an 'artifact_id' parameter.
     # Build params without using prepare_params to avoid injecting it.
-    params: dict[str, Any] = {
-        k: v
-        for k, v in {
-            "alias": self.artifact_alias,
-            "parent_id": parent_id,
-            "type": type,
-            "manifest": manifest,
-            "config": config,
-            "version": version,
-            "stage": stage,
-            "comment": comment,
-            "secrets": secrets,
-            "overwrite": overwrite,
-        }.items()
-        if v is not None
-    }
+    # Normalize parent_id: server accepts alias within the current workspace.
+    normalized_parent: str | None
+    if parent_id and "/" in parent_id:
+        normalized_parent = parent_id.split("/", 1)[1]
+    else:
+        normalized_parent = parent_id
+
+    create_params = params_create(
+        alias=self.artifact_alias,
+        workspace=self.workspace,
+        parent_id=normalized_parent,
+        artifact_type=type,
+        manifest=manifest,
+        config=config,
+        version=version,
+        stage=stage,
+        comment=comment,
+        secrets=secrets,
+        overwrite=overwrite,
+    )
+    # Note: create() must not include artifact_id; send create_params directly.
+    params: dict[str, Any] = dict(create_params)
 
     response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.CREATE),
@@ -407,14 +423,12 @@ async def delete(
     is irreversible.
 
     """
-    params: dict[str, Any] = prepare_params(
-        self,
-        {
-            "delete_files": delete_files,
-            "recursive": recursive,
-            "version": version,
-        },
+    delete_params = params_delete(
+        delete_files=delete_files,
+        recursive=recursive,
+        version=version,
     )
+    params: dict[str, Any] = prepare_params(self, delete_params)
 
     response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.DELETE),

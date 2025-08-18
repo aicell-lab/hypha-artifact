@@ -11,7 +11,6 @@ from typing import Self
 import httpx
 
 from ._fs import (
-    created,
     exists,
     find,
     info,
@@ -21,6 +20,7 @@ from ._fs import (
     ls,
     makedirs,
     mkdir,
+    modified,
     rm,
     rm_file,
     rmdir,
@@ -167,7 +167,7 @@ class AsyncHyphaArtifact:
     isdir = isdir
     isfile = isfile
     find = find
-    created = created
+    modified = modified
     size = size
     sizes = sizes
     rm = rm

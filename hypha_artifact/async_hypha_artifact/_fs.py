@@ -5,22 +5,26 @@ from __future__ import annotations
 import datetime
 import json
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Literal,
-    overload,
-)
+from typing import TYPE_CHECKING, Literal, overload
 
 import httpx
 
 from ._remote_methods import ArtifactMethod
-from ._utils import check_errors, get_headers, get_method_url, prepare_params, walk_dir
+from ._utils import (
+    check_errors,
+    filter_by_name,
+    get_headers,
+    get_method_url,
+    params_list_files,
+    params_remove_file,
+    prepare_params,
+    walk_dir,
+)
 
 if TYPE_CHECKING:
-    from hypha_artifact.classes import ArtifactItem
-
     from . import AsyncHyphaArtifact
+if TYPE_CHECKING:
+    from hypha_artifact.classes import ArtifactItem
 
 
 @overload
@@ -53,8 +57,6 @@ async def ls(
 ) -> list[ArtifactItem]: ...
 
 
-# TODO @hugokallander: test with directories
-# TODO @hugokallander: shorten
 async def ls(
     self: AsyncHyphaArtifact,
     path: str = ".",
@@ -83,13 +85,8 @@ async def ls(
         List of file names or detailed artifact items
 
     """
-    params: dict[str, Any] = prepare_params(
-        self,
-        {
-            "dir_path": path,
-            "version": version,
-        },
-    )
+    simple_params = params_list_files(dir_path=path, version=version)
+    params = prepare_params(self, simple_params)
 
     url = get_method_url(self, ArtifactMethod.LIST_FILES)
 
@@ -135,26 +132,18 @@ async def info(
 
     """
     parent_path = str(Path(path).parent)
-
     files_here = await self.ls(parent_path, detail=True, version=version)
-    matching_files_here = [
-        file_here
-        for file_here in files_here
-        if str(file_here["name"]).rstrip("/") == Path(path).name
-    ]
+    matching_files_here = filter_by_name(files_here, path)
 
     if matching_files_here:
         return matching_files_here[0]
 
     files_in_sub = await self.ls(path, detail=True, version=version)
-    path = str(Path(path))
-    matching_files_in_sub = [
-        file_in_sub
-        for file_in_sub in files_in_sub
-        if str(file_in_sub["name"]).rstrip("/") == path
-    ]
+    matching_files_in_sub = filter_by_name(files_in_sub, path)
+
     if len(matching_files_in_sub) == 1:
         return matching_files_in_sub[0]
+
     if len(matching_files_in_sub) > 1 or files_in_sub:
         return {"name": path, "type": "directory", "size": 0, "last_modified": None}
 
@@ -336,16 +325,12 @@ async def find(
     return sorted(filtered_all_files.keys())
 
 
-# TODO @hugokallander: currently returns last modified time, not creation time
-async def created(
+async def modified(
     self: AsyncHyphaArtifact,
     path: str,
     version: str | None = None,
 ) -> datetime.datetime | None:
-    """Get the creation time of a file.
-
-    In the Hypha artifact system, we might not have direct access to creation time,
-    but we can retrieve this information from file metadata if available.
+    """Return the modified timestamp of a file as a datetime.datetime.
 
     Parameters
     ----------
@@ -361,7 +346,7 @@ async def created(
     Returns
     -------
     datetime or None
-        Creation time of the file, if available
+        Modified time of the file, if available
 
     """
     path_info = await self.info(path, version=version)
@@ -480,18 +465,15 @@ async def rm(
         paths_to_remove.append(path)
 
     for file_path in paths_to_remove:
-        params: dict[str, Any] = prepare_params(
-            self,
-            {
-                "file_path": file_path,
-            },
-        )
-
-        await self.get_client().post(
+        simple_params = params_remove_file(file_path)
+        params = prepare_params(self, simple_params)
+        response = await self.get_client().post(
             url=get_method_url(self, ArtifactMethod.REMOVE_FILE),
             headers=get_headers(self),
             json=params,
         )
+
+        check_errors(response)
 
 
 async def rm_file(self: AsyncHyphaArtifact, path: str) -> None:
@@ -508,7 +490,6 @@ async def rm_file(self: AsyncHyphaArtifact, path: str) -> None:
     await self.rm(path)
 
 
-# TODO @hugokallander: fix
 async def rmdir(self: AsyncHyphaArtifact, path: str) -> None:
     """Remove an empty directory.
 
@@ -526,7 +507,7 @@ async def rmdir(self: AsyncHyphaArtifact, path: str) -> None:
 
     files = await self.ls(path)
     has_keep = any(f["name"] == ".keep" for f in files)
-    if len(files) > 0 or (has_keep and len(files) > 1):
+    if (not has_keep and len(files) > 0) or (has_keep and len(files) > 1):
         error_msg = f"Directory not empty: {path}"
         raise OSError(error_msg)
 
@@ -552,11 +533,14 @@ async def touch(
         if False, update timestamp and leave file unchanged
 
     """
-    if truncate or not await self.exists(path):
-        async with self.open(path, "wb"):
-            pass
+    async with self.open(path, "wb") as f:
+        if truncate or not await self.exists(path):
+            return
 
-    # TODO @hugokallander: handle not truncate option
+        if not truncate:
+            current_content = await f.read()
+            f.seek(0)
+            await f.write(current_content)
 
 
 async def mkdir(
