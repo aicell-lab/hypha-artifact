@@ -63,7 +63,7 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
             await async_artifact.commit()
 
             # Verify the file was created
-            files = await async_artifact.ls("/")
+            files = await async_artifact.ls("/", detail=True)
             file_names = [f["name"] for f in files]
             assert (
                 test_file_path in file_names
@@ -74,12 +74,12 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
         """Test listing files in the artifact using real async operations."""
         async with async_artifact:
             # First, list files with detail=True (default)
-            files = await async_artifact.ls("/")
+            files = await async_artifact.ls("/", detail=True)
             self._validate_file_listing(files)
             logging.info(f"Files in artifact: {files}")
 
             # Test listing with detail=False
-            file_names = await async_artifact.ls("/", detail=False)
+            file_names = await async_artifact.ls("/")
             self._validate_file_listing(file_names)
 
     @pytest.mark.asyncio

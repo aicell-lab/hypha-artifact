@@ -140,7 +140,7 @@ class TestAsyncHyphaArtifactUnit:
             "get",
             new=mock_get,
         )
-        await async_artifact.ls("/")
+        await async_artifact.ls("/", detail=True)
         mock_remote_post.assert_called_once()
 
     @pytest.mark.asyncio

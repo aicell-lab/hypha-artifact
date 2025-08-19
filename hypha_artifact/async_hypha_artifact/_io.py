@@ -23,7 +23,7 @@ from ._utils import (
     params_get_file_url,
     prepare_params,
     rel_path_pairs,
-    target_path_with_optional_slash,
+    target_file_or_dir,
     upload_file_simple,
     upload_multipart,
 )
@@ -255,7 +255,7 @@ async def get(
     for current_file_index, (remote_path, local_path) in enumerate(all_file_pairs):
         if callback:
             callback(status_message.in_progress(remote_path, current_file_index))
-        fixed_local_path = target_path_with_optional_slash(remote_path, local_path)
+        fixed_local_path = target_file_or_dir(remote_path, local_path)
 
         try:
             await download_to_path(
@@ -298,7 +298,7 @@ async def put(
     for current_file_index, (local_path, remote_path) in enumerate(all_file_pairs):
         if callback:
             callback(status_message.in_progress(local_path, current_file_index))
-        fixed_remote_path = target_path_with_optional_slash(local_path, remote_path)
+        fixed_remote_path = target_file_or_dir(local_path, remote_path)
 
         try:
             if multipart_config:

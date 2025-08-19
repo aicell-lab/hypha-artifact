@@ -44,7 +44,7 @@ class TestAsyncStateMethods:
         await ephemeral_artifact.create()
 
         # Basic smoke: can list root on a newly created artifact
-        files = await ephemeral_artifact.ls("/")
+        files = await ephemeral_artifact.ls("/", detail=True)
         assert isinstance(files, list)
 
         # Cleanup for this test
@@ -61,7 +61,7 @@ class TestAsyncStateMethods:
 
         # Subsequent operations against the deleted artifact should fail
         with pytest.raises(Exception):
-            await ephemeral_artifact.ls("/")
+            await ephemeral_artifact.ls("/", detail=True)
 
 
 class TestVersionedRetrievals:
@@ -111,7 +111,9 @@ class TestVersionedRetrievals:
             # ls with version should see the file in both versions
             names_latest = [i["name"] for i in await artifact.ls("/")]
             assert fname in names_latest
-            names_v0 = [i["name"] for i in await artifact.ls("/", version="v0")]
+            names_v0 = [
+                i["name"] for i in await artifact.ls("/", detail=True, version="v0")
+            ]
             assert fname in names_v0
 
             # info/size consistency across versions

@@ -190,14 +190,14 @@ def params_delete(
     }
 
 
-def target_path_with_optional_slash(src_path: str, dst_path: str) -> str:
+def target_file_or_dir(src_path: str, dst_path: str) -> str:
     """If dst ends with '/', append basename of src; otherwise return dst.
 
     Used by both get (remote->local) and put (local->remote) for intuitive semantics.
     """
     return (
         str(Path(dst_path) / Path(src_path).name)
-        if dst_path.endswith("/")
+        if Path(dst_path).is_dir()
         else dst_path
     )
 
