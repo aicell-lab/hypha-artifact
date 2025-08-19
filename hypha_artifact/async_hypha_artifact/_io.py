@@ -240,7 +240,28 @@ async def get(
     *,
     recursive: bool = False,
 ) -> None:
-    """Copy file(s) from remote (artifact) to local filesystem."""
+    """Copy file(s) from remote (artifact) to local filesystem.
+
+    Parameters
+    ----------
+    self: AsyncHyphaArtifact
+        Instance of the AsyncHyphaArtifact class
+    rpath: str or list of str
+        Remote path(s) to copy from
+    lpath: str or list of str | None
+        Local path(s) to copy to
+    callback: None | Callable[[dict[str, Any]], None]
+        Optional callback function to report progress
+    maxdepth: int | None
+        Maximum recursion depth
+    on_error: OnError
+        Error handling strategy
+    version: str | None
+        Version of the artifact to copy from
+    recursive: bool
+        Whether to copy directories recursively
+
+    """
     all_file_pairs = await build_remote_to_local_pairs(
         self,
         rpath,
@@ -285,7 +306,30 @@ async def put(
     recursive: bool = False,
     multipart_config: dict[str, Any] | None = None,
 ) -> None:
-    """Copy file(s) from local filesystem to remote (artifact)."""
+    """Copy file(s) from local filesystem to remote (artifact).
+
+    Parameters
+    ----------
+    self: AsyncHyphaArtifact
+        Instance of the AsyncHyphaArtifact class
+    lpath: str or list of str
+        Local path(s) to copy from
+    rpath: str or list of str | None
+        Remote path(s) to copy to
+    callback: None | Callable[[dict[str, Any]], None]
+        Optional callback function to report progress
+    maxdepth: int | None
+        Maximum recursion depth
+    on_error: OnError
+        Error handling strategy
+    version: str | None
+        Version of the artifact to copy to
+    recursive: bool
+        Whether to copy directories recursively
+    multipart_config: dict[str, Any] | None
+        Configuration for multipart uploads, if applicable.
+
+    """
     all_file_pairs = build_local_to_remote_pairs(
         lpath,
         rpath,

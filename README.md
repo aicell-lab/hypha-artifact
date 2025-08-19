@@ -231,7 +231,8 @@ HyphaArtifact(
 
 #### Upload Operations
 
-- **`upload(local_path, remote_path="", recursive=True, enable_multipart=False, ...)`** - Upload files or folders with multipart support
+- **`upload(local_path, remote_path="", recursive=True, enable_multipart=False, ...)`**
+  - Upload files or folders with multipart support
 
 #### Example Usage
 
@@ -343,8 +344,10 @@ All methods are async versions of the synchronous API:
 - **`await exists(path: str) -> bool`** - Check if file exists
 - **`await copy(source: str, destination: str)`** - Copy a file within the artifact
 - **`await rm(path: str)`** - Remove a file
-- **`await get(remote_path: str, local_path: str, recursive: bool = False)`** - Copy from remote to local filesystem
-- **`await put(local_path: str, remote_path: str, recursive: bool = False)`** - Copy from local to remote filesystem
+- **`await get(remote_path: str, local_path: str, recursive: bool = False)`**
+  - Copy from remote to local filesystem
+- **`await put(local_path: str, remote_path: str, recursive: bool = False)`**
+  - Copy from local to remote filesystem
 
 #### Context Manager Support
 

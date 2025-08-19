@@ -7,7 +7,15 @@ import math
 import os
 from http import HTTPStatus
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Protocol,
+    Self,
+    TypedDict,
+    cast,
+    runtime_checkable,
+)
 
 import httpx
 
@@ -15,6 +23,7 @@ from hypha_artifact.async_hypha_artifact._remote_methods import ArtifactMethod
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from types import TracebackType
 
     from hypha_artifact.classes import ArtifactItem
 
@@ -23,6 +32,97 @@ if TYPE_CHECKING:
 DEFAULT_MULTIPART_THRESHOLD = 100 * 1024 * 1024  # 100 MB
 DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024  # 6 MB
 MINIMUM_CHUNK_SIZE = 5 * 1024 * 1024  # 5 MB
+
+anyio: Any | None
+try:  # pragma: no cover - import guard
+    import anyio as _anyio
+
+    anyio = _anyio
+    _HAS_ANYIO = True
+except ImportError:  # pragma: no cover - optional dependency
+    anyio = None
+    _HAS_ANYIO = False
+
+
+@runtime_checkable
+class AsyncBinaryFile(Protocol):
+    async def __aenter__(self) -> Self: ...
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None: ...
+
+    async def read(self) -> bytes: ...
+    async def write(self, data: bytes) -> int: ...
+    async def close(self) -> None: ...
+
+
+class AsyncFile:
+    """Minimal async wrapper around a file object.
+
+    Provides async context management and async read/write using a thread
+    offload when anyio is unavailable. When anyio is present, use anyio's
+    async file operations directly.
+    """
+
+    def __init__(self, fp: object, mode: str) -> None:
+        self._fp = fp
+        self._mode = mode
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.close()
+
+    async def read(self) -> bytes:
+        f = cast("Any", self._fp)
+        if _HAS_ANYIO:
+            return await f.read()
+        return await asyncio.to_thread(f.read)
+
+    async def write(self, data: bytes) -> int:
+        f = cast("Any", self._fp)
+        if _HAS_ANYIO:
+            return await f.write(data)
+        return await asyncio.to_thread(f.write, data)
+
+    async def close(self) -> None:
+        f = cast("Any", self._fp)
+        if _HAS_ANYIO:
+            return await f.aclose()
+        return await asyncio.to_thread(f.close)
+
+
+async def aio_open(path: str | Path, mode: str) -> AsyncBinaryFile:
+    """Open a file for async usage.
+
+    - If anyio is installed, use anyio.open_file which provides true async I/O
+      on supported platforms.
+    - Otherwise, open the file synchronously and wrap it so read/write happen
+      via asyncio.to_thread to avoid blocking the event loop.
+    """
+    if _HAS_ANYIO and anyio is not None:
+        # anyio.open_file returns an async file object implementing aclose/read/write
+        open_file_fn = anyio.open_file
+        return await open_file_fn(str(path), mode)
+    # Fallback: open in a thread; return an AsyncFile wrapper
+    fp = await asyncio.to_thread(Path(path).open, mode)
+    return AsyncFile(fp, mode)
+
+
+class SyncBinaryFile(Protocol):
+    def read(self, size: int = ...) -> bytes: ...
+    def write(self, data: bytes) -> int: ...
+    def close(self) -> None: ...
 
 
 class ListFilesParams(TypedDict, total=False):
@@ -254,10 +354,11 @@ async def download_to_path(
     parent = Path(local_path).parent
     if parent:
         parent.mkdir(parents=True, exist_ok=True)
-    async with self.open(remote_path, "rb", version=version) as fsrc:
-        data = await fsrc.read()
-    with Path(local_path).open("wb") as fdst:
-        fdst.write(to_bytes(data))
+    async with self.open(remote_path, "rb", version=version) as src_file:
+        data = await src_file.read()
+    pre_dst_file = await aio_open(local_path, "wb")
+    async with pre_dst_file as dst_file:
+        await dst_file.write(to_bytes(data))
 
 
 async def upload_file_simple(
@@ -265,10 +366,11 @@ async def upload_file_simple(
     local_path: str | Path,
     remote_path: str,
 ) -> None:
-    with Path(local_path).open("rb") as fsrc:
-        data = fsrc.read()
-    async with self.open(remote_path, "wb") as fdst:
-        await fdst.write(data)
+    pre_src_file = await aio_open(local_path, "rb")
+    async with pre_src_file as src_file:
+        data = await src_file.read()
+    async with self.open(remote_path, "wb") as dst_file:
+        await dst_file.write(data)
 
 
 async def build_remote_to_local_pairs(
@@ -374,7 +476,7 @@ async def walk_dir(
     results: dict[str, ArtifactItem] = {}
 
     try:
-        items = await self.ls(current_path, version=version)
+        items = await self.ls(current_path, version=version, detail=True)
     except (OSError, FileNotFoundError, httpx.RequestError):
         return {}
 
@@ -407,8 +509,9 @@ async def put_single_file(
     dst_path: str,
 ) -> None:
     """Copy a single file from local to remote."""
-    with Path(src_path).open("rb") as local_file:
-        content = local_file.read()
+    _lf = await aio_open(src_path, "rb")
+    async with _lf as local_file:
+        content = await local_file.read()
 
     async with self.open(dst_path, "wb") as remote_file:
         await remote_file.write(content)

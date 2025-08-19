@@ -109,7 +109,7 @@ class TestVersionedRetrievals:
             assert explicit_v0_cat == content_v0
 
             # ls with version should see the file in both versions
-            names_latest = [i["name"] for i in await artifact.ls("/")]
+            names_latest = [i["name"] for i in await artifact.ls("/", detail=True)]
             assert fname in names_latest
             names_v0 = [
                 i["name"] for i in await artifact.ls("/", detail=True, version="v0")

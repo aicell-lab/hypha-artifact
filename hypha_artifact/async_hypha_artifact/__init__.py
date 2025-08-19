@@ -5,7 +5,6 @@ artifacts using the fsspec specification, allowing for operations like reading,
 writing, listing, and manipulating files stored in Hypha artifacts.
 """
 
-import os
 from typing import Self
 
 import httpx
