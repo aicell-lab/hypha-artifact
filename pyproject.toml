@@ -20,7 +20,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 
 [project.optional-dependencies]
-cli = ["fire>=0.6.0"]
+cli = ["fire>=0.6.0", "tqdm"]
 
 [tool.setuptools]
 include-package-data = true
