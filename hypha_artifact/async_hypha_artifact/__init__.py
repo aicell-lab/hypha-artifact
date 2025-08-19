@@ -111,8 +111,8 @@ class AsyncHyphaArtifact:
 
         should_use_proxy = env_override("HYPHA_USE_PROXY", override=use_proxy)
 
-        if not isinstance(should_use_proxy, bool):
-            error_msg = f"Invalid type for HYPHA_USE_PROXY: {type(should_use_proxy)}"
+        if isinstance(should_use_proxy, str):
+            error_msg = "Invalid type for HYPHA_USE_PROXY: str"
             raise TypeError(error_msg)
 
         self.use_proxy = should_use_proxy
