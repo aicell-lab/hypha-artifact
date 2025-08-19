@@ -25,4 +25,5 @@ jobs:
       env:
         HYPHA_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
         HYPHA_WORKSPACE: ${{ secrets.PERSONAL_WORKSPACE }}
+        HYPHA_SERVER_URL: ${{ vars.HYPHA_SERVER_URL }}
       run: pytest -v

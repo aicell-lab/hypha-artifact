@@ -1,18 +1,22 @@
-"""
-Shared test fixtures and utilities for HyphaArtifact tests.
+"""Shared test fixtures and utilities for HyphaArtifact tests.
 
 This module contains common fixtures and utility functions used by both
 sync and async test suites to avoid code duplication.
 """
 
+# TODO @hugokallander: For all tests, clean up artifacts afterward
+
+import asyncio
+import logging
 import os
 import uuid
-import asyncio
 from collections.abc import Callable
 from typing import Any
+
 import pytest
-from hypha_rpc import connect_to_server  # type: ignore
 from dotenv import load_dotenv
+from hypha_rpc import connect_to_server
+
 from hypha_artifact import AsyncHyphaArtifact
 
 # Load environment variables from .env file
@@ -45,13 +49,14 @@ async def get_artifact_manager(token: str) -> tuple[Any, Any]:
 
     Returns:
         tuple[Any, Any]: The artifact manager and API client.
+
     """
-    api = await connect_to_server(  # type: ignore
+    api = await connect_to_server(
         {
             "name": "artifact-client",
             "server_url": "https://hypha.aicell.io",
             "token": token,
-        }
+        },
     )
 
     # Get the artifact manager service
@@ -62,9 +67,11 @@ async def get_artifact_manager(token: str) -> tuple[Any, Any]:
 
 async def create_artifact(artifact_id: str, token: str) -> None:
     """Create an artifact with the given ID.
+
     Args:
         artifact_id (str): The ID of the artifact to create.
         token (str): The personal access token.
+
     """
     artifact_manager, api = await get_artifact_manager(token)
 
@@ -74,14 +81,14 @@ async def create_artifact(artifact_id: str, token: str) -> None:
         "description": f"Artifact created programmatically: {artifact_id}",
     }
 
-    print(f"============Creating artifact: {artifact_id}============")
+    logging.info(f"============Creating artifact: {artifact_id}============")
     await artifact_manager.create(
         alias=artifact_id,
         type="generic",
         manifest=manifest,
         config={"permissions": {"*": "rw+", "@": "rw+"}},
     )
-    print(f"============Created artifact: {artifact_id}============")
+    logging.info(f"============Created artifact: {artifact_id}============")
 
     # Disconnect from the server
     await api.disconnect()
@@ -93,20 +100,23 @@ async def delete_artifact(artifact_id: str, token: str) -> None:
     Args:
         artifact_id (str): The ID of the artifact to delete.
         token (str): The personal access token.
+
     """
     artifact_manager, api = await get_artifact_manager(token)
 
     # Delete the artifact
-    print(f"============Deleting artifact: {artifact_id}============")
+    logging.info(f"============Deleting artifact: {artifact_id}============")
     await artifact_manager.delete(artifact_id)
-    print(f"============Deleted artifact: {artifact_id}============")
+    logging.info(f"============Deleted artifact: {artifact_id}============")
 
     # Disconnect from the server
     await api.disconnect()
 
 
 def run_func_sync(
-    artifact_id: str, token: str, func: Callable[[str, str], Any]
+    artifact_id: str,
+    token: str,
+    func: Callable[[str, str], Any],
 ) -> None:
     """Synchronous wrapper for async functions"""
     loop = asyncio.new_event_loop()
@@ -148,7 +158,9 @@ class ArtifactTestMixin:
     """Mixin class containing common test methods for both sync and async artifacts."""
 
     def _check_artifact_initialization(
-        self, artifact: AsyncHyphaArtifact, artifact_name: str
+        self,
+        artifact: AsyncHyphaArtifact,
+        artifact_name: str,
     ) -> None:
         """Test that the artifact is initialized correctly with real credentials."""
         assert artifact.artifact_alias == artifact_name
@@ -175,7 +187,9 @@ class ArtifactTestMixin:
                 ), "File names should be strings"
 
     def _validate_file_content(
-        self, content: str | bytes | None, expected_content: str | bytes
+        self,
+        content: str | bytes | None,
+        expected_content: str | bytes,
     ) -> None:
         """Validate file content matches expected."""
         assert (
@@ -183,7 +197,10 @@ class ArtifactTestMixin:
         ), f"File content doesn't match. Expected: '{expected_content}', Got: '{content}'"
 
     def _validate_file_existence(
-        self, artifact: Any, file_path: str, should_exist: bool
+        self,
+        artifact: Any,
+        file_path: str,
+        should_exist: bool,
     ) -> None:
         """Helper to validate file existence."""
         if should_exist:
@@ -194,15 +211,19 @@ class ArtifactTestMixin:
             ), f"File {file_path} should not exist"
 
     def _validate_copy_operation(
-        self, artifact: Any, source_path: str, copy_path: str, expected_content: str
+        self,
+        artifact: Any,
+        source_path: str,
+        copy_path: str,
+        expected_content: str,
     ) -> None:
         """Validate that copy operation worked correctly."""
         # Verify both files exist
         assert artifact.exists(
-            source_path
+            source_path,
         ), f"Source file {source_path} should exist after copying"
         assert artifact.exists(
-            copy_path
+            copy_path,
         ), f"Copied file {copy_path} should exist after copying"
 
         # Verify content is the same

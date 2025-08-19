@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "*": "r",
+    "@": "r+"
+  },
+  "list_fields": ["manifest", "download_count"],
+  "publish_to": "sandbox_zenodo"
+} 
