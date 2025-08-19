@@ -43,7 +43,7 @@ class HyphaArtifact:
         The base URL for the Hypha server.
     use_proxy : bool | None
         Whether to use a proxy for HTTP requests.
-    use_local_url : bool | None
+    use_local_url : bool | str | None
         Whether to use a local URL for HTTP requests.
 
     Examples
@@ -70,7 +70,7 @@ class HyphaArtifact:
         server_url: str | None = None,
         *,
         use_proxy: bool | None = None,
-        use_local_url: bool | None = None,
+        use_local_url: bool | str | None = None,
         disable_ssl: bool = False,
     ) -> None:
         """Initialize a HyphaArtifact instance."""
