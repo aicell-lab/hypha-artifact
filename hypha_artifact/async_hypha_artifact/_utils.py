@@ -292,10 +292,7 @@ async def build_remote_to_local_pairs(
     for rp, lp in zip(rpaths, lpaths, strict=False):
         if await self.isdir(rp, version=version):
             if not recursive:
-                msg = (
-                    f"Path is a directory: {rp}. Use --recursive to remove "
-                    "directories."
-                )
+                msg = f"Path is a directory: {rp}. Use --recursive to get directories."
                 raise IsADirectoryError(msg)
             Path(lp).mkdir(parents=True, exist_ok=True)
             files = await self.find(
@@ -325,10 +322,7 @@ def build_local_to_remote_pairs(
     for rp, lp in zip(rpaths, lpaths, strict=False):
         if Path(lp).is_dir():
             if not recursive:
-                msg = (
-                    f"Path is a directory: {rp}. Use --recursive to remove "
-                    "directories."
-                )
+                msg = f"Path is a directory: {rp}. Use --recursive to put directories."
                 raise IsADirectoryError(msg)
             files = local_walk(lp, maxdepth=maxdepth)
             pairs.extend(rel_path_pairs(files, src_path=lp, dst_path=rp))
