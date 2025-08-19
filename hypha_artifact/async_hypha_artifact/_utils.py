@@ -34,7 +34,7 @@ class GetFileUrlParams(TypedDict, total=False):
     file_path: str
     version: str
     use_proxy: bool
-    use_local_url: bool
+    use_local_url: bool | str
 
 
 class RemoveFileParams(TypedDict, total=False):
@@ -57,7 +57,7 @@ def params_get_file_url(
     *,
     version: str | None = None,
     use_proxy: bool | None = None,
-    use_local_url: bool | None = None,
+    use_local_url: bool | str | None = None,
 ) -> GetFileUrlParams:
     """Typed builder for GET/PUT file URL params used by fsspec_open and uploads."""
     p: GetFileUrlParams = {"file_path": file_path}
@@ -114,7 +114,7 @@ def params_put_file_start_multipart(
     part_count: int,
     download_weight: float = 1.0,
     use_proxy: bool | None = None,
-    use_local_url: bool | None = None,
+    use_local_url: bool | str | None = None,
 ) -> dict[str, object]:
     p: dict[str, object] = {
         "file_path": file_path,
@@ -200,6 +200,24 @@ def target_path_with_optional_slash(src_path: str, dst_path: str) -> str:
         if dst_path.endswith("/")
         else dst_path
     )
+
+
+def env_override(
+    env_var_name: str,
+    *,
+    override: bool | str | None = None,
+) -> bool | str | None:
+    env_var_val = os.getenv(env_var_name)
+
+    if override is not None:
+        return override
+
+    if env_var_val is not None:
+        if env_var_val.lower() == "true":
+            return True
+        return env_var_val
+
+    return None
 
 
 def to_bytes(content: str | bytes | bytearray | memoryview) -> bytes:

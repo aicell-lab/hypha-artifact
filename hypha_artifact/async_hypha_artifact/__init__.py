@@ -38,6 +38,7 @@ from ._io import (
     put,
 )
 from ._state import commit, create, delete, discard, edit, list_children
+from ._utils import env_override
 
 
 class AsyncHyphaArtifact:
@@ -48,7 +49,7 @@ class AsyncHyphaArtifact:
     artifact_alias: str
     artifact_url: str
     use_proxy: bool | None = None
-    use_local_url: bool | None = False
+    use_local_url: bool | str | None = False
     disable_ssl: bool = False
     _client: httpx.AsyncClient | None
 
@@ -60,7 +61,7 @@ class AsyncHyphaArtifact:
         server_url: str | None = None,
         *,
         use_proxy: bool | None = None,
-        use_local_url: bool | None = None,
+        use_local_url: bool | str | None = None,
         disable_ssl: bool = False,
     ) -> None:
         """Initialize an AsyncHyphaArtifact instance.
@@ -77,8 +78,10 @@ class AsyncHyphaArtifact:
             The URL of the Hypha server (optional).
         use_proxy: bool | None
             Whether to use a proxy (optional).
-        use_local_url: bool | None
-            Whether to use a local URL (optional).
+        use_local_url: bool | str | None
+            If True, use a generated local URL.
+            If False, use a remote URL.
+            If is string, use specified local URL (optional).
         disable_ssl: bool
             Whether to disable SSL verification (optional).
 
@@ -106,21 +109,14 @@ class AsyncHyphaArtifact:
         self._client = None
         self.ssl = False if disable_ssl else None
 
-        env_proxy = os.getenv("HYPHA_USE_PROXY")
-        if use_proxy is not None:
-            self.use_proxy = use_proxy
-        elif env_proxy is not None:
-            self.use_proxy = env_proxy.lower() == "true"
-        else:
-            self.use_proxy = None
+        should_use_proxy = env_override("HYPHA_USE_PROXY", override=use_proxy)
 
-        env_local_url = os.getenv("HYPHA_USE_LOCAL_URL")
-        if use_local_url is not None:
-            self.use_local_url = use_local_url
-        elif env_local_url is not None:
-            self.use_local_url = env_local_url.lower() == "true"
-        else:
-            self.use_local_url = None
+        if not isinstance(should_use_proxy, bool):
+            error_msg = f"Invalid type for HYPHA_USE_PROXY: {type(should_use_proxy)}"
+            raise TypeError(error_msg)
+
+        self.use_proxy = should_use_proxy
+        self.use_local_url = env_override("HYPHA_USE_LOCAL_URL", override=use_local_url)
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
