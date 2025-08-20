@@ -86,20 +86,14 @@ class AsyncFile:
 
     async def read(self) -> bytes:
         f = cast("Any", self._fp)
-        if _has_anyio:
-            return await f.read()
         return await asyncio.to_thread(f.read)
 
     async def write(self, data: bytes) -> int:
         f = cast("Any", self._fp)
-        if _has_anyio:
-            return await f.write(data)
         return await asyncio.to_thread(f.write, data)
 
     async def close(self) -> None:
         f = cast("Any", self._fp)
-        if _has_anyio:
-            return await f.aclose()
         return await asyncio.to_thread(f.close)
 
 

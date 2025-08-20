@@ -11,6 +11,7 @@ import importlib
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import TracebackType
 
 import pytest
 
@@ -122,3 +123,62 @@ def test_run_sync_import_override(monkeypatch: pytest.MonkeyPatch) -> None:
         return 1
 
     assert callable(local_run_sync)
+
+
+@pytest.mark.asyncio
+async def test_aio_open_uses_anyio_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify that aio_open delegates to anyio.open_file when available.
+
+    We monkeypatch utils.anyio and its open_file to capture the call.
+    """
+
+    class DummyAsyncFile:
+        def __init__(self) -> None:
+            self.data: bytearray = bytearray()
+
+        async def __aenter__(self) -> "DummyAsyncFile":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> None:
+            return None
+
+        async def write(self, data: bytes) -> int:
+            self.data.extend(data)
+            return len(data)
+
+        async def read(self) -> bytes:
+            return bytes(self.data)
+
+        @staticmethod
+        async def aclose() -> None:
+            return None
+
+    calls: list[tuple[str, str]] = []
+
+    class DummyAnyio:
+        async def open_file(self, path: str, mode: str) -> DummyAsyncFile:  # type: ignore[name-defined]
+            calls.append((path, mode))
+            return DummyAsyncFile()
+
+    dummy_anyio = DummyAnyio()
+    monkeypatch.setattr(utils, "anyio", dummy_anyio, raising=False)
+    monkeypatch.setattr(utils, "_has_anyio", True, raising=False)
+    monkeypatch.setattr(utils, "_HAS_ANYIO", True, raising=False)
+
+    p = tmp_path / "file.bin"
+    data = b"hello-anyio"
+
+    f = await utils.aio_open(p, "wb")
+    async with f as fd:
+        n = await fd.write(data)
+
+    assert n == len(data)
+    assert calls == [(str(p), "wb")]
