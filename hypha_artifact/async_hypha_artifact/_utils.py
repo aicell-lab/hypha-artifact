@@ -20,16 +20,17 @@ from typing import (
 import httpx
 
 from hypha_artifact.async_hypha_artifact._remote_methods import ArtifactMethod
+from hypha_artifact.classes import MultipartStatusMessage
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from types import TracebackType
 
     from hypha_artifact.classes import ArtifactItem
 
     from . import AsyncHyphaArtifact
 
-DEFAULT_MULTIPART_THRESHOLD = 100 * 1024 * 1024  # 100 MB
+MAXIMUM_MULTIPART_THRESHOLD = 100 * 1024 * 1024  # 100 MB
 DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024  # 6 MB
 MINIMUM_CHUNK_SIZE = 5 * 1024 * 1024  # 5 MB
 
@@ -615,30 +616,34 @@ def read_chunks(
     return chunks
 
 
-async def upload_with_semaphore(
-    self: AsyncHyphaArtifact,
-    semaphore: asyncio.Semaphore,
-    part_info: dict[str, Any],
-) -> dict[str, Any]:
-    async with semaphore:
-        return await upload_part(self, part_info)
-
-
-def should_use_multipart(file_size: int, multipart_config: dict[str, Any]) -> bool:
+def should_use_multipart(
+    local_path: Path,
+    multipart_config: dict[str, Any] | None = None,
+) -> bool:
     """Determine if multipart upload should be used."""
-    if not file_size > multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE):
-        return False
+    file_size = local_path.stat().st_size
 
-    if multipart_config.get("enable"):
+    if file_size > MAXIMUM_MULTIPART_THRESHOLD:
         return True
 
-    return file_size >= multipart_config.get("threshold", DEFAULT_MULTIPART_THRESHOLD)
+    if not multipart_config:
+        return False
+
+    chunk_size = multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE)
+
+    if file_size < chunk_size:
+        return False
+
+    threshold = multipart_config.get("threshold")
+
+    if threshold and file_size >= threshold:
+        return True
+
+    return bool(multipart_config.get("enable", False))
 
 
-def handle_input_errors(
-    file_size: int,
+def validate_chunk_size(
     chunk_size: int,
-    multipart_config: dict[str, Any],
 ) -> None:
     """Handle input errors for multipart upload.
 
@@ -651,9 +656,6 @@ def handle_input_errors(
         ValueError: If the input parameters are invalid.
 
     """
-    if not should_use_multipart(file_size, multipart_config):
-        return
-
     if chunk_size < MINIMUM_CHUNK_SIZE:
         error_msg = (
             "Chunk size must be greater than"
@@ -667,13 +669,13 @@ async def start_multipart_upload(
     self: AsyncHyphaArtifact,
     local_path: Path,
     remote_path: str,
-    multipart_config: dict[str, Any],
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
     download_weight: float = 1.0,
 ) -> dict[str, Any]:
     """Start a multipart upload for a file."""
-    chunk_size = multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE)
+    chunk_size = min(chunk_size, MAXIMUM_MULTIPART_THRESHOLD)
     file_size = local_path.stat().st_size
-    handle_input_errors(file_size, chunk_size, multipart_config)
+    validate_chunk_size(chunk_size)
     part_count = math.ceil(file_size / chunk_size)
 
     start_params = params_put_file_start_multipart(
@@ -695,12 +697,37 @@ async def start_multipart_upload(
     return start_resp.json()
 
 
+async def upload_with_callback(
+    self: AsyncHyphaArtifact,
+    semaphore: asyncio.Semaphore,
+    pinfo: dict[str, Any],
+    callback: Callable[[dict[str, Any]], None] | None,
+    mpm: MultipartStatusMessage | None = None,
+) -> dict[str, Any]:
+    if callback and mpm:
+            callback(mpm.part_info(pinfo["part_number"], pinfo.get("part_size")))
+    try:
+        async with semaphore:
+            res = await upload_part(self, pinfo)
+    except Exception as e:
+        if callback and mpm:
+            callback(mpm.part_error(pinfo["part_number"], str(e)))
+        raise
+    else:
+        if callback and mpm:
+            callback(mpm.part_success(pinfo["part_number"], pinfo.get("part_size")))
+        return res
+
+
 async def upload_parts(
     self: AsyncHyphaArtifact,
     local_path: Path,
     chunk_size: int,
     parts: list[dict[str, Any]],
     max_parallel_uploads: int,
+    *,
+    callback: Callable[[dict[str, Any]], None] | None = None,
+    file_path: str | None = None,
 ) -> list[dict[str, Any]]:
     """Upload parts of a file in parallel.
 
@@ -709,7 +736,10 @@ async def upload_parts(
         local_path (Path): The local file path.
         chunk_size (int): The size of each chunk.
         parts (list[dict[str, Any]]): The list of parts to upload.
-        max_parallel_uploads (int): The maximum number of parallel uploads.
+        max_parallel_uploads (int): Maximum number of concurrent part uploads.
+        callback (Callable[[dict[str, Any]], None] | None): Optional progress callback
+            invoked for each part with multipart status messages.
+        file_path (str | None): Optional path used to annotate status messages.
 
     Returns:
         list[dict[str, Any]]: The list of responses from the uploaded parts.
@@ -722,13 +752,21 @@ async def upload_parts(
             "chunk": chunk,
             "url": part_info["url"],
             "part_number": part_info.get("part_number", index + 1),
+            "part_size": len(chunk),
         }
         for index, (part_info, chunk) in enumerate_parts
     ]
 
     semaphore = asyncio.Semaphore(max_parallel_uploads)
+    mpm = (
+        MultipartStatusMessage("upload", file_path or str(local_path), len(parts_info))
+        if callback is not None
+        else None
+    )
+
     upload_tasks = [
-        upload_with_semaphore(self, semaphore, part_info) for part_info in parts_info
+        upload_with_callback(self, semaphore, part_info, callback=callback, mpm=mpm)
+        for part_info in parts_info
     ]
 
     return await asyncio.gather(*upload_tasks)
@@ -761,31 +799,47 @@ async def complete_multipart_upload(
     check_errors(complete_resp)
 
 
+def get_multipart_settings(
+    multipart_config: dict[str, Any] | None = None,
+) -> tuple[int, int]:
+    """Get the default multipart settings."""
+    if multipart_config is None:
+        return DEFAULT_CHUNK_SIZE, 4
+
+    chunk_size = multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE)
+    max_parallel_uploads = multipart_config.get("max_parallel_uploads", 4)
+
+    return chunk_size, max_parallel_uploads
+
+
 async def upload_multipart(
     self: AsyncHyphaArtifact,
     local_path: Path,
     remote_path: str,
-    multipart_config: dict[str, Any],
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    max_parallel_uploads: int = 4,
     download_weight: float = 1.0,
+    *,
+    callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> None:
     """Upload a file using multipart upload with parallel uploads."""
     multipart_info = await start_multipart_upload(
         self,
         local_path,
         remote_path,
-        multipart_config,
+        chunk_size=chunk_size,
         download_weight=download_weight,
     )
 
-    max_parallel_uploads = multipart_config.get("max_parallel_uploads", 4)
     parts = multipart_info["parts"]
-    chunk_size = multipart_config.get("chunk_size", DEFAULT_CHUNK_SIZE)
     completed_parts = await upload_parts(
         self,
         local_path,
         chunk_size,
         parts,
         max_parallel_uploads,
+        callback=callback,
+        file_path=str(local_path),
     )
 
     upload_id = multipart_info["upload_id"]

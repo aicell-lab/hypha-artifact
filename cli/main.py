@@ -6,6 +6,7 @@ import os
 import shlex
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import fire
@@ -48,9 +49,12 @@ class _CLIProgress:
 
     def __init__(self, operation: str) -> None:
         self.operation = operation
-        self.total: int | None = None
+        self.total = None
         self.completed = 0
-        self.pbar: Any | None = None
+        self.pbar = None  # files-level bar
+        self._part_bars = {}
+        self._parts_done = {}
+        self._parts_total = {}
 
     def _fallback_write(self, msg: str) -> None:
         try:
@@ -69,6 +73,7 @@ class _CLIProgress:
                 unit="file",
                 dynamic_ncols=True,
                 leave=False,
+                position=0,
             )
         else:
             self._fallback_write(
@@ -112,6 +117,49 @@ class _CLIProgress:
                 str(event.get("file", "?")),
                 str(event.get("message", "")),
             )
+            return
+        if etype in {"part_info", "part_success", "part_error"}:
+            self._handle_part_event(event)
+            return
+
+    def _handle_part_event(self, event: dict[str, Any]) -> None:
+        file_path = str(event.get("file", "?"))
+        total_parts = event.get("total_parts")
+        if isinstance(total_parts, int) and file_path not in self._part_bars:
+            self._parts_total[file_path] = total_parts
+            self._parts_done[file_path] = 0
+            if tqdm is not None:
+                desc = f"Uploading {Path(file_path).name}"
+                self._part_bars[file_path] = tqdm(
+                    total=total_parts,
+                    desc=desc,
+                    unit="part",
+                    dynamic_ncols=True,
+                    leave=False,
+                    position=1,
+                )
+            else:
+                self._fallback_write(
+                    f"{self.operation.capitalize()}ing parts: 0/{total_parts}",
+                )
+
+        etype = event.get("type")
+        if etype in {"part_success", "part_error"}:
+            self._parts_done[file_path] = self._parts_done.get(file_path, 0) + 1
+            bar = self._part_bars.get(file_path)
+            if bar is not None:
+                bar.update(1)
+                if self._parts_done[file_path] >= self._parts_total.get(file_path, 0):
+                    bar.close()
+                    self._part_bars.pop(file_path, None)
+                    self._parts_done.pop(file_path, None)
+                    self._parts_total.pop(file_path, None)
+            else:
+                done = self._parts_done[file_path]
+                tot = self._parts_total.get(file_path, 0)
+                self._fallback_write(
+                    f"{self.operation.capitalize()}ing parts: {done}/{tot}",
+                )
 
 
 def get_connection_params() -> dict[str, str]:

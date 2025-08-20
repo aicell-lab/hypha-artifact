@@ -18,11 +18,13 @@ from ._utils import (
     decode_to_text,
     download_to_path,
     get_existing_url,
+    get_multipart_settings,
     get_read_url,
     get_write_url,
     params_get_file_url,
     prepare_params,
     rel_path_pairs,
+    should_use_multipart,
     target_file_or_dir,
     upload_file_simple,
     upload_multipart,
@@ -345,12 +347,21 @@ async def put(
         fixed_remote_path = target_file_or_dir(local_path, remote_path)
 
         try:
-            if multipart_config:
+            if should_use_multipart(
+                Path(local_path),
+                multipart_config,
+            ):
+                chunk_size, max_parallel_uploads = get_multipart_settings(
+                    multipart_config,
+                )
+
                 await upload_multipart(
                     self,
                     Path(local_path),
                     fixed_remote_path,
-                    multipart_config,
+                    chunk_size=chunk_size,
+                    max_parallel_uploads=max_parallel_uploads,
+                    callback=callback,
                 )
             else:
                 await upload_file_simple(self, local_path, fixed_remote_path)
