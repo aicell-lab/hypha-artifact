@@ -75,7 +75,7 @@ def test_module_import_without_anyio_reload(monkeypatch: pytest.MonkeyPatch) -> 
             sys.modules.pop(mod_name)
 
         module = importlib.import_module(mod_name)
-        assert module._HAS_ANYIO is False  # noqa: SLF001  # type: ignore[attr-defined]
+        assert module._has_anyio is False  # noqa: SLF001  # type: ignore[attr-defined]
         assert module.anyio is None  # type: ignore[attr-defined]
     finally:
         # Restore original module to avoid cross-test side-effects
@@ -118,7 +118,7 @@ def test_run_sync_import_override(monkeypatch: pytest.MonkeyPatch) -> None:
     local_run_sync = sync_utils.run_sync
 
     # Should be callable (will error if wrong object)
-    def _noop() -> int:
+    def _noop() -> int:  # pyright: ignore reportUnusedFunction
         return 1
 
     assert callable(local_run_sync)

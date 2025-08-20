@@ -119,7 +119,12 @@ class AsyncHyphaArtifact:
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient(verify=bool(self.ssl), timeout=60.0)
+        verify_opt = self.ssl if self.ssl is not None else True
+        self._client = httpx.AsyncClient(
+            verify=verify_opt,
+            timeout=60.0,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
         return self
 
     async def __aexit__(
@@ -140,7 +145,12 @@ class AsyncHyphaArtifact:
     def get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(verify=bool(self.ssl))
+            verify_opt = self.ssl if self.ssl is not None else True
+            self._client = httpx.AsyncClient(
+                verify=verify_opt,
+                timeout=60.0,
+                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            )
         return self._client
 
     create = create

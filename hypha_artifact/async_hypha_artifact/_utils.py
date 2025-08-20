@@ -39,10 +39,10 @@ try:  # pragma: no cover - import guard
     import anyio as _anyio
 
     anyio = _anyio
-    _HAS_ANYIO = True
+    _has_anyio = True
 except ImportError:  # pragma: no cover - optional dependency
     anyio = None
-    _HAS_ANYIO = False
+    _has_anyio = False
 
 
 @runtime_checkable
@@ -86,19 +86,19 @@ class AsyncFile:
 
     async def read(self) -> bytes:
         f = cast("Any", self._fp)
-        if _HAS_ANYIO:
+        if _has_anyio:
             return await f.read()
         return await asyncio.to_thread(f.read)
 
     async def write(self, data: bytes) -> int:
         f = cast("Any", self._fp)
-        if _HAS_ANYIO:
+        if _has_anyio:
             return await f.write(data)
         return await asyncio.to_thread(f.write, data)
 
     async def close(self) -> None:
         f = cast("Any", self._fp)
-        if _HAS_ANYIO:
+        if _has_anyio:
             return await f.aclose()
         return await asyncio.to_thread(f.close)
 
@@ -111,7 +111,7 @@ async def aio_open(path: str | Path, mode: str) -> AsyncBinaryFile:
     - Otherwise, open the file synchronously and wrap it so read/write happen
       via asyncio.to_thread to avoid blocking the event loop.
     """
-    if _HAS_ANYIO and anyio is not None:
+    if _has_anyio and anyio is not None:
         # anyio.open_file returns an async file object implementing aclose/read/write
         open_file_fn = anyio.open_file
         return await open_file_fn(str(path), mode)
@@ -140,6 +140,29 @@ class GetFileUrlParams(TypedDict, total=False):
 
 class RemoveFileParams(TypedDict, total=False):
     file_path: str
+
+
+class UploadPartServerInfo(TypedDict):
+    """Server-provided info for a part to upload."""
+
+    url: str
+    part_number: int
+
+
+class PreparedPartInfo(TypedDict):
+    """Client-prepared part info with data to upload."""
+
+    url: str
+    part_number: int
+    chunk: bytes
+    part_size: int
+
+
+class CompletedPart(TypedDict):
+    """Completed part info used to finalize multipart upload."""
+
+    part_number: int
+    etag: str
 
 
 def params_list_files(
@@ -188,25 +211,22 @@ def params_create(
     comment: str | None,
     secrets: dict[str, str] | None,
     overwrite: bool | None,
-) -> dict[str, object]:
-    """Typed builder for create() arguments (no artifact_id injection)."""
-    return {
-        k: v
-        for k, v in {
-            "alias": alias,
-            "workspace": workspace,
-            "parent_id": parent_id,
-            "type": artifact_type,
-            "manifest": manifest,
-            "config": config,
-            "version": version,
-            "stage": stage,
-            "comment": comment,
-            "secrets": secrets,
-            "overwrite": overwrite,
-        }.items()
-        if v is not None
+) -> dict[str, Any]:
+    tmp: dict[str, Any | None] = {
+        "alias": alias,
+        "workspace": workspace,
+        "parent_id": parent_id,
+        "type": artifact_type,
+        "manifest": manifest,
+        "config": config,
+        "version": version,
+        "stage": stage,
+        "comment": comment,
+        "secrets": secrets,
+        "overwrite": overwrite,
     }
+    result: dict[str, Any] = {k: v for k, v in tmp.items() if v is not None}
+    return result
 
 
 def params_put_file_start_multipart(
@@ -216,8 +236,8 @@ def params_put_file_start_multipart(
     download_weight: float = 1.0,
     use_proxy: bool | None = None,
     use_local_url: bool | str | None = None,
-) -> dict[str, object]:
-    p: dict[str, object] = {
+) -> dict[str, Any]:
+    p: dict[str, Any] = {
         "file_path": file_path,
         "part_count": part_count,
         "download_weight": download_weight,
@@ -232,8 +252,8 @@ def params_put_file_start_multipart(
 def params_put_file_complete_multipart(
     upload_id: str,
     *,
-    parts: list[dict[str, Any]],
-) -> dict[str, object]:
+    parts: list[CompletedPart],
+) -> dict[str, Any]:
     return {"upload_id": upload_id, "parts": parts}
 
 
@@ -246,32 +266,36 @@ def params_edit(
     version: str | None = None,
     comment: str | None = None,
     stage: bool = False,
-) -> dict[str, object]:
-    return {
-        k: v
-        for k, v in {
-            "manifest": manifest,
-            "type": type,
-            "config": config,
-            "secrets": secrets,
-            "version": version,
-            "comment": comment,
-            "stage": stage,
-        }.items()
-        if v is not None
-    }
+) -> dict[str, Any]:
+    res: dict[str, Any] = {}
+    if manifest is not None:
+        res["manifest"] = manifest
+    if type is not None:
+        res["type"] = type
+    if config is not None:
+        res["config"] = config
+    if secrets is not None:
+        res["secrets"] = secrets
+    if version is not None:
+        res["version"] = version
+    if comment is not None:
+        res["comment"] = comment
+    if stage:
+        res["stage"] = stage
+    return res
 
 
 def params_commit(
     *,
     version: str | None = None,
     comment: str | None = None,
-) -> dict[str, object]:
-    return {
-        k: v
-        for k, v in {"version": version, "comment": comment}.items()
-        if v is not None
-    }
+) -> dict[str, Any]:
+    res: dict[str, Any] = {}
+    if version is not None:
+        res["version"] = version
+    if comment is not None:
+        res["comment"] = comment
+    return res
 
 
 def params_delete(
@@ -279,28 +303,46 @@ def params_delete(
     delete_files: bool | None = None,
     recursive: bool | None = None,
     version: str | None = None,
-) -> dict[str, object]:
-    return {
-        k: v
-        for k, v in {
-            "delete_files": delete_files,
-            "recursive": recursive,
-            "version": version,
-        }.items()
-        if v is not None
-    }
+) -> dict[str, Any]:
+    res: dict[str, Any] = {}
+    if delete_files is not None:
+        res["delete_files"] = delete_files
+    if recursive is not None:
+        res["recursive"] = recursive
+    if version is not None:
+        res["version"] = version
+    return res
 
 
-def target_file_or_dir(src_path: str, dst_path: str) -> str:
-    """If dst ends with '/', append basename of src; otherwise return dst.
+def local_file_or_dir(src_path: str, dst_path: str) -> str:
+    """Resolve destination semantics without using the local filesystem.
 
-    Used by both get (remote->local) and put (local->remote) for intuitive semantics.
+    - If `dst_path` ends with a path separator (`/` on POSIX), treat it as a
+        directory hint and append the basename of `src_path`.
+    - Otherwise, treat `dst_path` as the full target path.
+
+    This avoids surprising behavior when a local directory happens to share
+    the same name as the intended file (e.g., a directory named 'file.txt').
     """
-    return (
-        str(Path(dst_path) / Path(src_path).name)
-        if Path(dst_path).is_dir()
-        else dst_path
-    )
+    is_dir_hint = str(dst_path).endswith(("/", os.sep))
+    return str(Path(dst_path) / Path(src_path).name) if is_dir_hint else str(dst_path)
+
+
+async def remote_file_or_dir(
+    self: AsyncHyphaArtifact,
+    src_path: str,
+    dst_path: str,
+) -> str:
+    """Resolve remote destination semantics with explicit hint or remote check.
+
+    - If `dst_path` ends with a path separator, treat as directory and append basename.
+    - Else, if the remote `dst_path` currently exists as a directory, append basename.
+    - Otherwise, treat `dst_path` as the full target path.
+    """
+    if str(dst_path).endswith(("/", os.sep)):
+        return str(Path(dst_path) / Path(src_path).name)
+    is_remote_dir = await self.isdir(dst_path)
+    return str(Path(dst_path) / Path(src_path).name) if is_remote_dir else str(dst_path)
 
 
 def env_override(
@@ -585,8 +627,8 @@ def ensure_equal_len(
 
 async def upload_part(
     self: AsyncHyphaArtifact,
-    part_info: dict[str, Any],
-) -> dict[str, Any]:
+    part_info: PreparedPartInfo,
+) -> CompletedPart:
     """Upload a single part."""
     part_number = part_info["part_number"]
     upload_url = part_info["url"]
@@ -596,8 +638,12 @@ async def upload_part(
 
     etag = f.etag
 
+    if etag is None:
+        error_msg = "Failed to retrieve ETag from response"
+        raise ValueError(error_msg)
+
     # Get ETag from response
-    return {"part_number": part_number, "etag": etag}
+    return CompletedPart(part_number=part_number, etag=etag)
 
 
 def read_chunks(
@@ -700,12 +746,12 @@ async def start_multipart_upload(
 async def upload_with_callback(
     self: AsyncHyphaArtifact,
     semaphore: asyncio.Semaphore,
-    pinfo: dict[str, Any],
+    pinfo: PreparedPartInfo,
     callback: Callable[[dict[str, Any]], None] | None,
     mpm: MultipartStatusMessage | None = None,
-) -> dict[str, Any]:
+) -> CompletedPart:
     if callback and mpm:
-            callback(mpm.part_info(pinfo["part_number"], pinfo.get("part_size")))
+        callback(mpm.part_info(pinfo["part_number"], pinfo.get("part_size")))
     try:
         async with semaphore:
             res = await upload_part(self, pinfo)
@@ -723,12 +769,12 @@ async def upload_parts(
     self: AsyncHyphaArtifact,
     local_path: Path,
     chunk_size: int,
-    parts: list[dict[str, Any]],
+    parts: list[UploadPartServerInfo],
     max_parallel_uploads: int,
     *,
     callback: Callable[[dict[str, Any]], None] | None = None,
     file_path: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[CompletedPart]:
     """Upload parts of a file in parallel.
 
     Args:
@@ -747,7 +793,7 @@ async def upload_parts(
     """
     chunks = read_chunks(local_path, chunk_size)
     enumerate_parts = enumerate(zip(parts, chunks, strict=False))
-    parts_info = [
+    parts_info: list[PreparedPartInfo] = [
         {
             "chunk": chunk,
             "url": part_info["url"],
@@ -775,7 +821,7 @@ async def upload_parts(
 async def complete_multipart_upload(
     self: AsyncHyphaArtifact,
     upload_id: str,
-    completed_parts: list[dict[str, Any]],
+    completed_parts: list[CompletedPart],
 ) -> None:
     """Complete a multipart upload.
 
