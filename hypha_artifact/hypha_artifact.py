@@ -367,7 +367,7 @@ class HyphaArtifact:
         path: str = ".",
         version: str | None = None,
         *,
-        detail: None | bool = True,
+        detail: None | bool = False,
     ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory."""
         return run_sync(self._async_artifact.ls(path, version, detail=detail))

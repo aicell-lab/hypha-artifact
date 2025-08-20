@@ -62,7 +62,7 @@ async def ls(
     path: str = ".",
     version: str | None = None,
     *,
-    detail: None | bool = True,
+    detail: None | bool = False,
 ) -> list[str] | list[ArtifactItem]:
     """List contents of path.
 
@@ -505,9 +505,9 @@ async def rmdir(self: AsyncHyphaArtifact, path: str) -> None:
         error_msg = f"Directory not found: {path}"
         raise FileNotFoundError(error_msg)
 
-    files = await self.ls(path)
-    has_keep = any(f["name"] == ".keep" for f in files)
-    if (not has_keep and len(files) > 0) or (has_keep and len(files) > 1):
+    file_names = await self.ls(path, detail=False)
+    has_keep = any(f_name == ".keep" for f_name in file_names)
+    if (not has_keep and len(file_names) > 0) or (has_keep and len(file_names) > 1):
         error_msg = f"Directory not empty: {path}"
         raise OSError(error_msg)
 

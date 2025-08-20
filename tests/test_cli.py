@@ -86,7 +86,7 @@ class TestRealFileOperations:
 
     def test_real_ls_command(self, real_artifact: ArtifactCLI):
         """Test real ls command."""
-        items = real_artifact.ls("/")
+        items = real_artifact.ls("/", detail=True)
         logging.info(f"✅ Found {len(items)} items in artifact root")
         assert isinstance(items, list)
 
@@ -98,9 +98,9 @@ class TestRealFileOperations:
         # Step 1: Put artifact in staging mode
         logging.info("Before staging - checking current artifact state...")
         try:
-            current_files = real_artifact.ls("/")
+            current_files = real_artifact.ls("/", detail=True)
             logging.info(
-                f"Current files in artifact: {[f['name'] for f in current_files]}"
+                f"Current files in artifact: {[f['name'] for f in current_files]}",
             )
         except Exception as e:
             logging.info(f"Could not list current files: {e}")
@@ -632,7 +632,7 @@ class TestRealErrorHandling:
             artifact = ArtifactCLI("nonexistent-artifact-12345")
             # Try to list files - should fail gracefully
             try:
-                items = artifact.ls("/")
+                items = artifact.ls("/", detail=True)
                 logging.info(
                     f"⚠️  Unexpectedly found {len(items)} items in nonexistent artifact",
                 )

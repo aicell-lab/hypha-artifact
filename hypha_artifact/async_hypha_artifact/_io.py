@@ -18,12 +18,15 @@ from ._utils import (
     decode_to_text,
     download_to_path,
     get_existing_url,
+    get_multipart_settings,
     get_read_url,
     get_write_url,
+    local_file_or_dir,
     params_get_file_url,
     prepare_params,
     rel_path_pairs,
-    target_path_with_optional_slash,
+    remote_file_or_dir,
+    should_use_multipart,
     upload_file_simple,
     upload_multipart,
 )
@@ -240,7 +243,28 @@ async def get(
     *,
     recursive: bool = False,
 ) -> None:
-    """Copy file(s) from remote (artifact) to local filesystem."""
+    """Copy file(s) from remote (artifact) to local filesystem.
+
+    Parameters
+    ----------
+    self: AsyncHyphaArtifact
+        Instance of the AsyncHyphaArtifact class
+    rpath: str or list of str
+        Remote path(s) to copy from
+    lpath: str or list of str | None
+        Local path(s) to copy to
+    callback: None | Callable[[dict[str, Any]], None]
+        Optional callback function to report progress
+    maxdepth: int | None
+        Maximum recursion depth
+    on_error: OnError
+        Error handling strategy
+    version: str | None
+        Version of the artifact to copy from
+    recursive: bool
+        Whether to copy directories recursively
+
+    """
     all_file_pairs = await build_remote_to_local_pairs(
         self,
         rpath,
@@ -255,7 +279,7 @@ async def get(
     for current_file_index, (remote_path, local_path) in enumerate(all_file_pairs):
         if callback:
             callback(status_message.in_progress(remote_path, current_file_index))
-        fixed_local_path = target_path_with_optional_slash(remote_path, local_path)
+        fixed_local_path = local_file_or_dir(remote_path, local_path)
 
         try:
             await download_to_path(
@@ -285,7 +309,30 @@ async def put(
     recursive: bool = False,
     multipart_config: dict[str, Any] | None = None,
 ) -> None:
-    """Copy file(s) from local filesystem to remote (artifact)."""
+    """Copy file(s) from local filesystem to remote (artifact).
+
+    Parameters
+    ----------
+    self: AsyncHyphaArtifact
+        Instance of the AsyncHyphaArtifact class
+    lpath: str or list of str
+        Local path(s) to copy from
+    rpath: str or list of str | None
+        Remote path(s) to copy to
+    callback: None | Callable[[dict[str, Any]], None]
+        Optional callback function to report progress
+    maxdepth: int | None
+        Maximum recursion depth
+    on_error: OnError
+        Error handling strategy
+    version: str | None
+        Version of the artifact to copy to
+    recursive: bool
+        Whether to copy directories recursively
+    multipart_config: dict[str, Any] | None
+        Configuration for multipart uploads, if applicable.
+
+    """
     all_file_pairs = build_local_to_remote_pairs(
         lpath,
         rpath,
@@ -298,15 +345,24 @@ async def put(
     for current_file_index, (local_path, remote_path) in enumerate(all_file_pairs):
         if callback:
             callback(status_message.in_progress(local_path, current_file_index))
-        fixed_remote_path = target_path_with_optional_slash(local_path, remote_path)
+        fixed_remote_path = await remote_file_or_dir(self, local_path, remote_path)
 
         try:
-            if multipart_config:
+            if should_use_multipart(
+                Path(local_path),
+                multipart_config,
+            ):
+                chunk_size, max_parallel_uploads = get_multipart_settings(
+                    multipart_config,
+                )
+
                 await upload_multipart(
                     self,
                     Path(local_path),
                     fixed_remote_path,
-                    multipart_config,
+                    chunk_size=chunk_size,
+                    max_parallel_uploads=max_parallel_uploads,
+                    callback=callback,
                 )
             else:
                 await upload_file_simple(self, local_path, fixed_remote_path)

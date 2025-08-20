@@ -140,7 +140,7 @@ class TestAsyncHyphaArtifactUnit:
             "get",
             new=mock_get,
         )
-        await async_artifact.ls("/")
+        await async_artifact.ls("/", detail=True)
         mock_remote_post.assert_called_once()
 
     @pytest.mark.asyncio
@@ -197,4 +197,4 @@ class TestAsyncHyphaArtifactUnit:
         """Test the find method."""
         async_artifact.ls = AsyncMock(return_value=[])
         await async_artifact.find("/")
-        async_artifact.ls.assert_called_once_with("/", version=None)
+        async_artifact.ls.assert_called_once_with("/", detail=True, version=None)

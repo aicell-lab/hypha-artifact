@@ -43,7 +43,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         artifact.commit()
 
         # Verify the file was created
-        files = artifact.ls("/")
+        files = artifact.ls("/", detail=True)
         file_names = [f["name"] for f in files]
         assert (
             test_file_path in file_names
@@ -52,7 +52,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
     def test_list_files(self, artifact: HyphaArtifact) -> None:
         """Test listing files in the artifact using real operations."""
         # First, list files with detail=True (default)
-        files = artifact.ls("/")
+        files = artifact.ls("/", detail=True)
         self._validate_file_listing(files)
 
         # Test listing with detail=False
@@ -160,7 +160,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         artifact.copy(original_file, copied_file)
         artifact.commit()
         assert artifact.exists(copied_file)
-        logging.info(artifact.ls("/"))
+        logging.info(artifact.ls("/", detail=True))
 
         # Step 4: Remove copied file
         artifact.edit(stage=True)
@@ -454,7 +454,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             artifact.commit()
 
             # Verify files were uploaded
-            files = artifact.ls(remote_folder, detail=False)
+            files = artifact.ls(remote_folder)
             expected_files = {"file1.txt", "file2.txt", "subdir"}
             actual_files = set(files)
 
@@ -463,7 +463,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             ), f"Expected files {expected_files} not found in {actual_files}"
 
             # Verify subdirectory file
-            subdir_files = artifact.ls(f"{remote_folder}/subdir", detail=False)
+            subdir_files = artifact.ls(f"{remote_folder}/subdir")
             assert "file3.txt" in subdir_files, "Subdirectory file should be uploaded"
 
             # Verify file contents

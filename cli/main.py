@@ -6,6 +6,7 @@ import os
 import shlex
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import fire
@@ -15,6 +16,11 @@ from hypha_artifact.classes import OnError
 from hypha_artifact.hypha_artifact import HyphaArtifact
 
 logger = logging.getLogger(__name__)
+
+try:  # optional dependency for nicer progress bars
+    from tqdm import tqdm  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - fallback when tqdm isn't available
+    tqdm = None  # type: ignore[assignment]
 
 
 def ensure_dict(obj: str | dict[str, Any] | None) -> dict[str, Any] | None:
@@ -36,6 +42,124 @@ def ensure_dict(obj: str | dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 load_dotenv()
+
+
+class _CLIProgress:
+    """Lightweight progress handler for CLI operations."""
+
+    def __init__(self, operation: str) -> None:
+        self.operation = operation
+        self.total = None
+        self.completed = 0
+        self.pbar = None  # files-level bar
+        self._part_bars = {}
+        self._parts_done = {}
+        self._parts_total = {}
+
+    def _fallback_write(self, msg: str) -> None:
+        try:
+            sys.stderr.write(msg + "\n")
+            sys.stderr.flush()
+        except OSError:  # pragma: no cover - extremely unlikely
+            logger.debug("stderr write failed for progress message")
+
+    def _init_progress(self, total: int) -> None:
+        self.total = total
+        if tqdm is not None:
+            desc = "Uploading" if self.operation == "upload" else "Downloading"
+            self.pbar = tqdm(
+                total=total,
+                desc=desc,
+                unit="file",
+                dynamic_ncols=True,
+                leave=False,
+                position=0,
+            )
+        else:
+            self._fallback_write(
+                f"{self.operation.capitalize()}ing {total} file(s)...",
+            )
+
+    def _on_success(self) -> None:
+        self.completed += 1
+        if self.pbar is not None:
+            self.pbar.update(1)
+            if isinstance(self.total, int) and self.completed >= self.total:
+                self.pbar.close()
+        elif isinstance(self.total, int):
+            if self.completed in (1, self.total) or self.completed % 10 == 0:
+                self._fallback_write(
+                    f"{self.operation.capitalize()} progress: "
+                    f"{self.completed}/{self.total}",
+                )
+
+    def _on_error(self, file_path: str, message: str) -> None:
+        if self.pbar is not None:
+            self.pbar.write(f"Error {self.operation} {file_path}: {message}")
+            self.pbar.update(1)
+        else:
+            self._fallback_write(
+                f"Error {self.operation} {file_path}: {message}",
+            )
+
+    def __call__(self, event: dict[str, Any]) -> None:
+        etype = event.get("type")
+        if etype == "info":
+            total = event.get("total_files")
+            if self.total is None and isinstance(total, int):
+                self._init_progress(total)
+            return
+        if etype == "success":
+            self._on_success()
+            return
+        if etype == "error":
+            self._on_error(
+                str(event.get("file", "?")),
+                str(event.get("message", "")),
+            )
+            return
+        if etype in {"part_info", "part_success", "part_error"}:
+            self._handle_part_event(event)
+            return
+
+    def _handle_part_event(self, event: dict[str, Any]) -> None:
+        file_path = str(event.get("file", "?"))
+        total_parts = event.get("total_parts")
+        if isinstance(total_parts, int) and file_path not in self._part_bars:
+            self._parts_total[file_path] = total_parts
+            self._parts_done[file_path] = 0
+            if tqdm is not None:
+                desc = f"Uploading {Path(file_path).name}"
+                self._part_bars[file_path] = tqdm(
+                    total=total_parts,
+                    desc=desc,
+                    unit="part",
+                    dynamic_ncols=True,
+                    leave=False,
+                    position=1,
+                )
+            else:
+                self._fallback_write(
+                    f"{self.operation.capitalize()}ing parts: 0/{total_parts}",
+                )
+
+        etype = event.get("type")
+        if etype in {"part_success", "part_error"}:
+            self._parts_done[file_path] = self._parts_done.get(file_path, 0) + 1
+            bar = self._part_bars.get(file_path)
+            if bar is not None:
+                bar.update(1)
+                if self._parts_done[file_path] >= self._parts_total.get(file_path, 0):
+                    bar.close()
+                    self._part_bars.pop(file_path, None)
+                    self._parts_done.pop(file_path, None)
+                    self._parts_total.pop(file_path, None)
+            else:
+                done = self._parts_done[file_path]
+                tot = self._parts_total.get(file_path, 0)
+                self._fallback_write(
+                    f"{self.operation.capitalize()}ing parts: {done}/{tot}",
+                )
 
 
 def get_connection_params() -> dict[str, str]:
@@ -112,15 +236,63 @@ class ArtifactCLI(HyphaArtifact):
         """
         multipart_config_dict = ensure_dict(multipart_config)
 
+        # Build a CLI progress callback if one isn't provided
+        progress_cb = callback or self._make_progress_callback("upload")
+
         super().put(
             lpath=lpath,
             rpath=rpath,
             recursive=recursive,
-            callback=callback,
+            callback=progress_cb,
             maxdepth=maxdepth,
             on_error=on_error,
             multipart_config=multipart_config_dict,
         )
+
+    def get(
+        self,
+        rpath: str | list[str],
+        lpath: str | list[str],
+        callback: None | Callable[[dict[str, Any]], None] = None,
+        maxdepth: int | None = None,
+        on_error: OnError = "raise",
+        version: str | None = None,
+        *,
+        recursive: bool = False,
+    ) -> None:
+        """Download files from the remote artifact to local filesystem.
+
+        Args:
+            rpath (str | list[str]): Remote path(s) to download
+            lpath (str | list[str]): Local destination path(s)
+            callback (None | Callable[[dict[str, Any]], None], optional): Callback
+                function to call on download progress. Defaults to None.
+            maxdepth (int | None, optional): Maximum depth to download.
+                Defaults to None.
+            on_error (OnError, optional): Error handling strategy. Defaults to "raise".
+            version (str | None, optional): Artifact version to download from.
+                Defaults to None.
+            recursive (bool, optional): Whether to download directories recursively.
+                Defaults to False.
+
+        """
+        # Build a CLI progress callback if one isn't provided
+        progress_cb = callback or self._make_progress_callback("download")
+
+        super().get(
+            rpath=rpath,
+            lpath=lpath,
+            recursive=recursive,
+            callback=progress_cb,
+            maxdepth=maxdepth,
+            on_error=on_error,
+            version=version,
+        )
+
+    @staticmethod
+    def _make_progress_callback(operation: str) -> Callable[[dict[str, Any]], None]:
+        """Create a progress callback for CLI using tqdm when available."""
+        return _CLIProgress(operation)
 
     def edit(
         self,

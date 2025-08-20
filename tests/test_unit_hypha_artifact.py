@@ -104,7 +104,7 @@ class TestHyphaArtifactUnit:
 
     def test_ls(self, artifact: HyphaArtifact):
         """Test the ls method."""
-        artifact.ls("/")
+        artifact.ls("/", detail=True)
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.ls.assert_called_once_with("/", None, detail=True)
 
