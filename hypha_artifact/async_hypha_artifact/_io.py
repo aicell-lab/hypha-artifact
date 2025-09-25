@@ -11,6 +11,7 @@ import httpx
 
 from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
 from hypha_artifact.classes import OnError, StatusMessage
+from hypha_artifact.transfer_progress import TransferProgress
 
 from ._utils import (
     build_local_to_remote_pairs,
@@ -275,6 +276,7 @@ async def get(
     )
 
     status_message = StatusMessage("download", len(all_file_pairs))
+    callback = callback or TransferProgress("download")
 
     for current_file_index, (remote_path, local_path) in enumerate(all_file_pairs):
         if callback:
@@ -341,6 +343,7 @@ async def put(
     )
 
     status_message = StatusMessage("upload", len(all_file_pairs))
+    callback = callback or TransferProgress("upload")
 
     for current_file_index, (local_path, remote_path) in enumerate(all_file_pairs):
         if callback:

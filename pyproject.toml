@@ -3,7 +3,7 @@ requires = ["setuptools>=65.0.0", "wheel"]
 
 [project]
 name = "hypha-artifact"
-version = "0.1.0"
+version = "0.1.1"
 readme = "README.md"
 authors = [
   { name = "Hugo Dettner Källander", email = "hugokallander@gmail.com"}
@@ -15,12 +15,13 @@ dependencies = [
   "python-dotenv>=0.21.0",
   "hypha_rpc>=0.20.54",
   "pyyaml>=6.0.1",
+  "tqdm>=4.67.1",
 ]
 license = "MIT"
 license-files = ["LICENSE"]
 
 [project.optional-dependencies]
-cli = ["fire>=0.6.0", "tqdm"]
+cli = ["fire>=0.6.0"]
 
 [tool.setuptools]
 include-package-data = true
