@@ -29,6 +29,22 @@ def get_artifact(mocker: MockerFixture) -> HyphaArtifact:
 class TestHyphaArtifactUnit:
     """Unit test suite for the HyphaArtifact class."""
 
+    def test_constructor_passes_additional_headers(self, mocker: MockerFixture):
+        """HyphaArtifact should forward default headers to AsyncHyphaArtifact."""
+
+        patched_async = mocker.patch("hypha_artifact.hypha_artifact.AsyncHyphaArtifact")
+
+        headers = {"X-Test": "abc"}
+
+        HyphaArtifact(
+            "test-artifact",
+            "test-workspace",
+            server_url="https://hypha.aicell.io",
+            additional_headers=headers,
+        )
+
+        assert patched_async.call_args.kwargs["additional_headers"] == headers
+
     def test_edit(self, artifact: HyphaArtifact):
         """Test the edit method."""
         artifact.edit(stage=True)
@@ -68,6 +84,18 @@ class TestHyphaArtifactUnit:
             "test.txt",
             "w",
             version=None,
+        )
+
+    def test_open_with_additional_headers(self, artifact: HyphaArtifact):
+        """Per-call headers should be forwarded to the async implementation."""
+
+        artifact.open("test.txt", "w", additional_headers={"X-Test": "abc"})
+
+        artifact._async_artifact.open.assert_called_once_with(
+            "test.txt",
+            "w",
+            version=None,
+            additional_headers={"X-Test": "abc"},
         )
 
     def test_copy(self, artifact: HyphaArtifact):

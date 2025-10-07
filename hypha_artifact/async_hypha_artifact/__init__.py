@@ -5,7 +5,10 @@ artifacts using the fsspec specification, allowing for operations like reading,
 writing, listing, and manipulating files stored in Hypha artifacts.
 """
 
-from typing import Self
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Self
 
 import httpx
 
@@ -39,6 +42,9 @@ from ._io import (
 from ._state import commit, create, delete, discard, edit, list_children
 from ._utils import env_override
 
+if TYPE_CHECKING:
+    from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
+
 
 class AsyncHyphaArtifact:
     """Provides an async fsspec-like interface for interacting with Hypha artifact."""
@@ -62,6 +68,7 @@ class AsyncHyphaArtifact:
         use_proxy: bool | None = None,
         use_local_url: bool | str | None = None,
         disable_ssl: bool = False,
+        additional_headers: Mapping[str, str] | None = None,
     ) -> None:
         """Initialize an AsyncHyphaArtifact instance.
 
@@ -83,6 +90,9 @@ class AsyncHyphaArtifact:
             If is string, use specified local URL (optional).
         disable_ssl: bool
             Whether to disable SSL verification (optional).
+        additional_headers: Mapping[str, str] | None
+            Headers that should be attached to outgoing HTTP requests when working
+            with artifact files (optional).
 
         """
         self.artifact_id = artifact_id
@@ -116,6 +126,7 @@ class AsyncHyphaArtifact:
 
         self.use_proxy = should_use_proxy
         self.use_local_url = env_override("HYPHA_USE_LOCAL_URL", override=use_local_url)
+        self._default_headers = dict(additional_headers or {})
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
@@ -159,7 +170,36 @@ class AsyncHyphaArtifact:
     commit = commit
     list_children = list_children
     cat = cat
-    open = fsspec_open
+    def open(
+        self: Self,
+        urlpath: str,
+        mode: str = "rb",
+        content_type: str = "application/octet-stream",
+        version: str | None = None,
+        *,
+        additional_headers: Mapping[str, str] | None = None,
+    ) -> AsyncArtifactHttpFile:
+        """Open a remote file, combining default and per-call HTTP headers."""
+
+        combined_headers: Mapping[str, str] | None
+        if self._default_headers and additional_headers:
+            merged = dict(self._default_headers)
+            merged.update(additional_headers)
+            combined_headers = merged
+        elif self._default_headers:
+            combined_headers = dict(self._default_headers)
+        else:
+            combined_headers = additional_headers
+
+        return fsspec_open(
+            self,
+            urlpath,
+            mode=mode,
+            content_type=content_type,
+            version=version,
+            additional_headers=combined_headers,
+        )
+
     copy = copy
     cp = cp
     get = get

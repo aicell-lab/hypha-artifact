@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, overload
@@ -123,6 +124,8 @@ def fsspec_open(
     mode: str = "rb",
     content_type: str = "application/octet-stream",
     version: str | None = None,
+    *,
+    additional_headers: Mapping[str, str] | None = None,
 ) -> AsyncArtifactHttpFile:
     """Open a file for reading or writing.
 
@@ -174,6 +177,7 @@ def fsspec_open(
         name=str(urlpath),
         content_type=content_type,
         ssl=self.ssl,
+        additional_headers=additional_headers,
     )
 
 

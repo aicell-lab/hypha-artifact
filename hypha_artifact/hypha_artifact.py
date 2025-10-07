@@ -6,7 +6,7 @@ writing, listing, and manipulating files stored in Hypha artifacts.
 """
 
 import contextlib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Self, overload
 
@@ -72,6 +72,7 @@ class HyphaArtifact:
         use_proxy: bool | None = None,
         use_local_url: bool | str | None = None,
         disable_ssl: bool = False,
+        additional_headers: Mapping[str, str] | None = None,
     ) -> None:
         """Initialize a HyphaArtifact instance."""
         self._async_artifact = AsyncHyphaArtifact(
@@ -82,6 +83,7 @@ class HyphaArtifact:
             use_proxy=use_proxy,
             use_local_url=use_local_url,
             disable_ssl=disable_ssl,
+            additional_headers=additional_headers,
         )
 
     def create(
@@ -233,15 +235,26 @@ class HyphaArtifact:
         urlpath: str,
         mode: str = "rb",
         version: str | None = None,
+        *,
+        additional_headers: Mapping[str, str] | None = None,
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing."""
-        async_file = self._async_artifact.open(urlpath, mode, version=version)
+        open_kwargs: dict[str, Any] = {"version": version}
+        if additional_headers is not None:
+            open_kwargs["additional_headers"] = additional_headers
+
+        async_file = self._async_artifact.open(
+            urlpath,
+            mode,
+            **open_kwargs,
+        )
         url = run_sync(async_file.get_url())
 
         return ArtifactHttpFile(
             url=url,
             mode=mode,
             name=async_file.name,
+            additional_headers=additional_headers,
         )
 
     def copy(

@@ -4,6 +4,7 @@
 
 import contextlib
 import io
+from collections.abc import Mapping
 from types import TracebackType
 from typing import TYPE_CHECKING, Self
 
@@ -38,6 +39,7 @@ class ArtifactHttpFile(io.IOBase):
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
+        additional_headers: Mapping[str, str] | None = None,
     ) -> None:
         """Initialize an ArtifactHttpFile instance.
 
@@ -50,6 +52,8 @@ class ArtifactHttpFile(io.IOBase):
             newline (str | None, optional): The newline character to use for the file.
                 Defaults to None.
             name (str | None, optional): The name of the file. Defaults to None.
+            additional_headers (Mapping[str, str] | None, optional): Extra headers to
+                include with HTTP requests. Defaults to None.
 
         """
 
@@ -63,6 +67,7 @@ class ArtifactHttpFile(io.IOBase):
             encoding=encoding,
             newline=newline,
             name=name,
+            additional_headers=additional_headers,
         )
 
     def __enter__(self: Self) -> Self:

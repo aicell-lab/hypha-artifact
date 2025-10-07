@@ -198,3 +198,63 @@ class TestAsyncHyphaArtifactUnit:
         async_artifact.ls = AsyncMock(return_value=[])
         await async_artifact.find("/")
         async_artifact.ls.assert_called_once_with("/", detail=True, version=None)
+
+    def test_open_uses_default_additional_headers(self, mocker: MockerFixture):
+        """AsyncHyphaArtifact.open should forward default headers to fsspec_open."""
+
+        patched_open = mocker.patch(
+            "hypha_artifact.async_hypha_artifact.fsspec_open",
+            return_value=MagicMock(),
+        )
+
+        artifact = AsyncHyphaArtifact(
+            "test-artifact",
+            "test-workspace",
+            server_url="https://hypha.aicell.io",
+            additional_headers={"X-Test": "abc"},
+        )
+
+        artifact.open("foo.txt")
+
+        assert patched_open.call_count == 1
+        assert patched_open.call_args.kwargs["additional_headers"] == {"X-Test": "abc"}
+
+    def test_open_merges_per_call_headers(self, mocker: MockerFixture):
+        """Per-call headers should extend, not overwrite, default headers."""
+
+        patched_open = mocker.patch(
+            "hypha_artifact.async_hypha_artifact.fsspec_open",
+            return_value=MagicMock(),
+        )
+
+        artifact = AsyncHyphaArtifact(
+            "test-artifact",
+            "test-workspace",
+            server_url="https://hypha.aicell.io",
+            additional_headers={"X-Default": "123"},
+        )
+
+        artifact.open("foo.txt", additional_headers={"X-Request": "456"})
+
+        assert patched_open.call_args.kwargs["additional_headers"] == {
+            "X-Default": "123",
+            "X-Request": "456",
+        }
+
+    def test_open_with_only_per_call_headers(self, mocker: MockerFixture):
+        """Headers supplied only for the call should flow through unchanged."""
+
+        patched_open = mocker.patch(
+            "hypha_artifact.async_hypha_artifact.fsspec_open",
+            return_value=MagicMock(),
+        )
+
+        artifact = AsyncHyphaArtifact(
+            "test-artifact",
+            "test-workspace",
+            server_url="https://hypha.aicell.io",
+        )
+
+        artifact.open("foo.txt", additional_headers={"X-Request": "456"})
+
+        assert patched_open.call_args.kwargs["additional_headers"] == {"X-Request": "456"}

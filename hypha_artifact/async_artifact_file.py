@@ -3,7 +3,7 @@
 import io
 import locale
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from types import TracebackType
 from typing import Self
 
@@ -30,6 +30,7 @@ class AsyncArtifactHttpFile:
         content_type: str = "",
         *,
         ssl: bool | None = None,
+        additional_headers: Mapping[str, str] | None = None,
     ) -> None:
         """Initialize an AsyncArtifactHttpFile instance.
 
@@ -45,6 +46,8 @@ class AsyncArtifactHttpFile:
             name (str | None, optional): The name of the file. Defaults to None.
             content_type (str, optional): The content type of the file. Defaults to "".
             ssl (bool | None, optional): Whether to use SSL. Defaults to None.
+            additional_headers (Mapping[str, str] | None, optional): Extra headers
+                to include with HTTP requests. Defaults to None.
 
         """
         self._url_func = url_func
@@ -59,6 +62,7 @@ class AsyncArtifactHttpFile:
         self._timeout = 120
         self._content_type = content_type
         self._ssl = ssl
+        self._additional_headers = dict(additional_headers or {})
         self.name = name
         self.etag = None
 
@@ -104,6 +108,8 @@ class AsyncArtifactHttpFile:
             headers: dict[str, str] = {
                 "Accept-Encoding": "identity",  # Prevent gzip compression
             }
+            if self._additional_headers:
+                headers.update(self._additional_headers)
             if range_header:
                 headers["Range"] = range_header
 
@@ -142,6 +148,8 @@ class AsyncArtifactHttpFile:
                 "Content-Type": self._content_type,
                 "Content-Length": str(len(content)),
             }
+            if self._additional_headers:
+                headers.update(self._additional_headers)
 
             client = self._get_client()
             response = await client.put(
