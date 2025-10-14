@@ -33,7 +33,7 @@ async def ls(
     path: str = ".",
     version: str | None = None,
     *,
-    detail: Literal[False],
+    detail: None | Literal[False] = False,
 ) -> list[str]: ...
 
 
