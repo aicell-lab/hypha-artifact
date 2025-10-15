@@ -232,7 +232,7 @@ async def copy(
 
             async with self.open(dst_path, "wb") as dst_file:
                 await dst_file.write(content)
-    except (OSError, FileNotFoundError, httpx.RequestError) as e:
+    except Exception as e:
         if on_error == "raise":
             raise OSError from e
 
@@ -294,7 +294,7 @@ async def get(
                 fixed_local_path,
                 version=version,
             )
-        except (OSError, FileNotFoundError, httpx.RequestError) as e:
+        except Exception as e:
             if callback:
                 callback(status_message.error(remote_path, str(e)))
             if on_error == "raise":
@@ -374,7 +374,7 @@ async def put(
             else:
                 await upload_file_simple(self, local_path, fixed_remote_path)
 
-        except (OSError, FileNotFoundError, httpx.RequestError) as e:
+        except Exception as e:
             if callback:
                 callback(status_message.error(local_path, str(e)))
             if on_error == "raise":

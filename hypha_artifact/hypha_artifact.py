@@ -363,7 +363,7 @@ class HyphaArtifact:
         path: str = ".",
         version: str | None = None,
         *,
-        detail: Literal[False],
+        detail: None | Literal[False] = False,
     ) -> list[str]: ...
 
     @overload
@@ -372,7 +372,7 @@ class HyphaArtifact:
         path: str = ".",
         version: str | None = None,
         *,
-        detail: None | Literal[True] = True,
+        detail: Literal[True],
     ) -> list[ArtifactItem]: ...
 
     def ls(
