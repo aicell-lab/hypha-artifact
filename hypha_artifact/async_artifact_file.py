@@ -5,12 +5,21 @@ import locale
 import os
 from collections.abc import Awaitable, Callable, Mapping
 from types import TracebackType
-from typing import Self
+from typing import TYPE_CHECKING, Generic, Self, TypeVar, overload
 
 import httpx
 
+if TYPE_CHECKING:
+    from _typeshed import OpenBinaryMode, OpenTextMode
+else:
+    OpenBinaryMode = str
+    OpenTextMode = str
 
-class AsyncArtifactHttpFile:
+DataType = TypeVar("DataType", str, bytes)
+OpenMode = OpenBinaryMode | OpenTextMode
+
+
+class AsyncArtifactHttpFile(Generic[DataType]):
     """An async file-like object that supports async context manager protocols.
 
     This implements an async file interface for Hypha artifacts,
@@ -20,10 +29,12 @@ class AsyncArtifactHttpFile:
     name: str | None
     etag: str | None
 
+    # Constructor overloads tie mode to the instance data type
+    @overload
     def __init__(
-        self: Self,
-        url_func: Callable[[], Awaitable[str]],
-        mode: str = "r",
+        self: "AsyncArtifactHttpFile[str]",
+        url: str | None,
+        mode: OpenTextMode = "r",
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
@@ -31,13 +42,42 @@ class AsyncArtifactHttpFile:
         *,
         ssl: bool | None = None,
         additional_headers: Mapping[str, str] | None = None,
+        url_factory: Callable[[], Awaitable[str]] | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self: "AsyncArtifactHttpFile[bytes]",
+        url: str | None,
+        mode: OpenBinaryMode = "rb",
+        encoding: str | None = None,
+        newline: str | None = None,
+        name: str | None = None,
+        content_type: str = "",
+        *,
+        ssl: bool | None = None,
+        additional_headers: Mapping[str, str] | None = None,
+        url_factory: Callable[[], Awaitable[str]] | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self: Self,
+        url: str | None,
+        mode: OpenMode = "r",
+        encoding: str | None = None,
+        newline: str | None = None,
+        name: str | None = None,
+        content_type: str = "",
+        *,
+        ssl: bool | None = None,
+        additional_headers: Mapping[str, str] | None = None,
+        url_factory: Callable[[], Awaitable[str]] | None = None,
     ) -> None:
         """Initialize an AsyncArtifactHttpFile instance.
 
         Args:
             self (Self): The instance of the AsyncArtifactHttpFile class.
-            url_func (Callable[[], Awaitable[str]]): A function that returns the URL
-                for the file.
+            url (str): The URL of the artifact file.
             mode (str, optional): The mode in which to open the file. Defaults to "r".
             encoding (str | None, optional): The encoding to use for the file.
                 Defaults to None.
@@ -48,12 +88,19 @@ class AsyncArtifactHttpFile:
             ssl (bool | None, optional): Whether to use SSL. Defaults to None.
             additional_headers (Mapping[str, str] | None, optional): Extra headers
                 to include with HTTP requests. Defaults to None.
+            url_factory (Callable[[], Awaitable[str]] | None, optional):
+                Async function to resolve the URL lazily when entering the
+                context manager. If provided, it will be used when `url` is
+                not set. Defaults to None.
 
         """
-        self._url_func = url_func
-        self._url: str | None = None
+        if not url and url_factory is None:
+            error_msg = "Either url or url_factory must be provided"
+            raise ValueError(error_msg)
+
+        self._url = url
+        self._url_factory = url_factory
         self._pos = 0
-        self._mode = mode
         self._encoding = encoding or locale.getpreferredencoding()
         self._newline = newline or os.linesep
         self._closed = False
@@ -65,17 +112,18 @@ class AsyncArtifactHttpFile:
         self._additional_headers = dict(additional_headers or {})
         self.name = name
         self.etag = None
-
-        if "r" in mode:
-            self._size = 0  # Will be set when content is downloaded
-        else:
-            # For write modes, initialize an empty buffer
-            self._size = 0
+        self._size = 0
+        self._mode = mode
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
         self._client = httpx.AsyncClient(verify=bool(self._ssl))
-        if "r" in self._mode:
+        if not self._url:
+            if self._url_factory is None:
+                error_msg = "URL not provided and url_factory missing"
+                raise OSError(error_msg)
+            self._url = await self._url_factory()
+        if self.readable():
             await self.download_content()
         return self
 
@@ -88,12 +136,6 @@ class AsyncArtifactHttpFile:
         """Async context manager exit."""
         await self.close()
 
-    async def get_url(self: Self) -> str:
-        """Get the URL for this file."""
-        if self._url is None:
-            self._url = await self._url_func()
-        return self._url
-
     def _get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None:
@@ -102,7 +144,6 @@ class AsyncArtifactHttpFile:
 
     async def download_content(self: Self, range_header: str | None = None) -> None:
         """Download content from URL into buffer, optionally using a range header."""
-        url = await self.get_url()
         try:
 
             headers: dict[str, str] = {
@@ -114,6 +155,7 @@ class AsyncArtifactHttpFile:
                 headers["Range"] = range_header
 
             client = self._get_client()
+            url = self._require_url()
             response = await client.get(url, headers=headers, timeout=60)
             response.raise_for_status()
             self._buffer = io.BytesIO(response.content)
@@ -127,7 +169,7 @@ class AsyncArtifactHttpFile:
             )
             message = str(e)
             error_msg = (
-                f"Error downloading content from {url}"
+                f"Error downloading content from {self._url}"
                 f" (status {status_code}): {message}"
             )
             raise OSError(
@@ -142,7 +184,6 @@ class AsyncArtifactHttpFile:
         response: httpx.Response
         try:
             content = self._buffer.getvalue()
-            url = await self.get_url()
 
             headers = {
                 "Content-Type": self._content_type,
@@ -152,6 +193,7 @@ class AsyncArtifactHttpFile:
                 headers.update(self._additional_headers)
 
             client = self._get_client()
+            url = self._require_url()
             response = await client.put(
                 url,
                 content=content,
@@ -192,9 +234,15 @@ class AsyncArtifactHttpFile:
         self._buffer.seek(self._pos)
         return self._pos
 
+    @overload
+    async def read(self: "AsyncArtifactHttpFile[bytes]", size: int = -1) -> bytes: ...
+
+    @overload
+    async def read(self: "AsyncArtifactHttpFile[str]", size: int = -1) -> str: ...
+
     async def read(self: Self, size: int = -1) -> bytes | str:
         """Read up to size bytes from the file, using HTTP range if necessary."""
-        if "r" not in self._mode:
+        if not self.readable():
             error_msg = "File not open for reading"
             raise OSError(error_msg)
 
@@ -207,20 +255,20 @@ class AsyncArtifactHttpFile:
         data = self._buffer.read()
         self._pos += len(data)
 
-        if "b" not in self._mode:
-            return data.decode(self._encoding)
-        return data
+        if self._is_binary():
+            return data
+        return data.decode(self._encoding)
 
     async def write(self: Self, data: str | bytes) -> int:
         """Write data to the file."""
-        if "w" not in self._mode and "a" not in self._mode:
+        if not self.writable():
             error_msg = "File not open for writing"
             raise OSError(error_msg)
 
         # Convert string to bytes if necessary
-        if isinstance(data, str) and "b" in self._mode:
+        if isinstance(data, str) and self._is_binary():
             data = data.encode(self._encoding)
-        elif isinstance(data, bytes) and "b" not in self._mode:
+        elif isinstance(data, bytes) and not self._is_binary():
             data = data.decode(self._encoding)
             data = data.encode(self._encoding)
 
@@ -248,7 +296,7 @@ class AsyncArtifactHttpFile:
             return
 
         try:
-            if "w" in self._mode or "a" in self._mode:
+            if self.writable():
                 response = await self.upload_content()
                 self.etag = response.headers.get("ETag", "").strip('"')
                 self.ensure_etag()
@@ -274,3 +322,19 @@ class AsyncArtifactHttpFile:
     def seekable(self: Self) -> bool:
         """Return whether the file supports seeking."""
         return True
+
+    def _require_url(self: Self) -> str:
+        """Return a resolved URL or raise if unavailable.
+
+        This helps type checkers understand that from this point on, the URL is str.
+        """
+        if not self._url:
+            error_msg = "URL is not resolved yet"
+            raise OSError(error_msg)
+        return self._url
+
+    def _is_binary(
+        self: Self,
+    ) -> bool:
+        """Whether opened in binary mode."""
+        return "b" in self._mode

@@ -11,16 +11,16 @@ import logging
 import os
 import uuid
 from collections.abc import Callable
-from typing import Any
 
 import pytest
 from dotenv import load_dotenv
-from hypha_rpc import connect_to_server
+from hypha_rpc import connect_to_server  # type: ignore[import]
+from hypha_rpc.rpc import RemoteService  # type: ignore[import]
 
-from hypha_artifact import AsyncHyphaArtifact
+from hypha_artifact import AsyncHyphaArtifact, HyphaArtifact
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 # Skip all tests if no token is available
 pytestmark = pytest.mark.skipif(
@@ -41,17 +41,17 @@ def get_test_content() -> str:
     return "This is a test file content for integration testing"
 
 
-async def get_artifact_manager(token: str) -> tuple[Any, Any]:
+async def get_artifact_manager(token: str) -> tuple[RemoteService, RemoteService]:
     """Get the artifact manager and API client.
 
     Args:
         token (str): The personal access token.
 
     Returns:
-        tuple[Any, Any]: The artifact manager and API client.
+        tuple[object, object]: The artifact manager and API client.
 
     """
-    api = await connect_to_server(
+    api: RemoteService = await connect_to_server(  # type: ignore
         {
             "name": "artifact-client",
             "server_url": "https://hypha.aicell.io",
@@ -116,7 +116,7 @@ async def delete_artifact(artifact_id: str, token: str) -> None:
 def run_func_sync(
     artifact_id: str,
     token: str,
-    func: Callable[[str, str], Any],
+    func: Callable[[str, str], object],
 ) -> None:
     """Synchronous wrapper for async functions"""
     loop = asyncio.new_event_loop()
@@ -168,7 +168,7 @@ class ArtifactTestMixin:
         assert artifact.workspace is not None
         assert artifact.artifact_url is not None
 
-    def _validate_file_listing(self, files: list[Any]) -> None:
+    def _validate_file_listing(self, files: list[object]) -> None:
         """Validate file listing format."""
         assert isinstance(files, list)
         if files:
@@ -198,7 +198,7 @@ class ArtifactTestMixin:
 
     def _validate_file_existence(
         self,
-        artifact: Any,
+        artifact: HyphaArtifact,
         file_path: str,
         should_exist: bool,
     ) -> None:
@@ -212,7 +212,7 @@ class ArtifactTestMixin:
 
     def _validate_copy_operation(
         self,
-        artifact: Any,
+        artifact: object,
         source_path: str,
         copy_path: str,
         expected_content: str,

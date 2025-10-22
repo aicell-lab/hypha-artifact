@@ -446,7 +446,7 @@ import os
 from dotenv import load_dotenv
 
 # Load token from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 # Initialize artifact object
 artifact = HyphaArtifact(
@@ -493,7 +493,7 @@ from dotenv import load_dotenv
 
 async def main():
     # Load token from .env file
-    load_dotenv()
+    load_dotenv(override=True)
 
     # Initialize async artifact object
     async with AsyncHyphaArtifact(

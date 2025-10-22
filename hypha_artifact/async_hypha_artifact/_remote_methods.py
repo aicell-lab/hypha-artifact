@@ -91,9 +91,9 @@ class ArtifactMethod(StrEnum):
     information.
 
     Args:
-        manifest (dict[str, Any] | None): The manifest data to set for the artifact.
+        manifest (dict[str, object] | None): The manifest data to set for the artifact.
         type (str | None): The type of the artifact (e.g., "generic", "collection").
-        config (dict[str, Any] | None): Configuration dictionary for the artifact.
+        config (dict[str, object] | None): Configuration dictionary for the artifact.
         secrets (dict[str, str] | None): Secrets to store with the artifact.
         version (str | None): The version to edit or create.
             Can be "new" for a new version, "stage", or a specific version string.

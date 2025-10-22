@@ -7,10 +7,11 @@ writing, listing, and manipulating files stored in Hypha artifacts.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Self
 
 import httpx
+
+from hypha_artifact.utils import env_override
 
 from ._fs import (
     exists,
@@ -36,14 +37,14 @@ from ._io import (
     cp,
     fsspec_open,
     get,
+    get_file_url,
     head,
     put,
 )
 from ._state import commit, create, delete, discard, edit, list_children
-from ._utils import env_override
 
 if TYPE_CHECKING:
-    from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
+    from collections.abc import Mapping
 
 
 class AsyncHyphaArtifact:
@@ -126,7 +127,7 @@ class AsyncHyphaArtifact:
 
         self.use_proxy = should_use_proxy
         self.use_local_url = env_override("HYPHA_USE_LOCAL_URL", override=use_local_url)
-        self._default_headers = dict(additional_headers or {})
+        self.default_headers = additional_headers or {}
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
@@ -170,35 +171,8 @@ class AsyncHyphaArtifact:
     commit = commit
     list_children = list_children
     cat = cat
-    def open(
-        self: Self,
-        urlpath: str,
-        mode: str = "rb",
-        content_type: str = "application/octet-stream",
-        version: str | None = None,
-        *,
-        additional_headers: Mapping[str, str] | None = None,
-    ) -> AsyncArtifactHttpFile:
-        """Open a remote file, combining default and per-call HTTP headers."""
-
-        combined_headers: Mapping[str, str] | None
-        if self._default_headers and additional_headers:
-            merged = dict(self._default_headers)
-            merged.update(additional_headers)
-            combined_headers = merged
-        elif self._default_headers:
-            combined_headers = dict(self._default_headers)
-        else:
-            combined_headers = additional_headers
-
-        return fsspec_open(
-            self,
-            urlpath,
-            mode=mode,
-            content_type=content_type,
-            version=version,
-            additional_headers=combined_headers,
-        )
+    open = fsspec_open
+    get_file_url = get_file_url
 
     copy = copy
     cp = cp

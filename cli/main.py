@@ -5,24 +5,26 @@ import logging
 import os
 import shlex
 import sys
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Mapping
+from typing import TypeVar
 
-import fire
+import fire  # type: ignore
 from dotenv import load_dotenv
 
-from hypha_artifact.classes import OnError
+from hypha_artifact.classes import MultipartConfig, OnError, StatusMessage
 from hypha_artifact.hypha_artifact import HyphaArtifact
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
 
-def ensure_dict(obj: str | dict[str, Any] | None) -> dict[str, Any] | None:
+
+def ensure_dict(obj: str | Mapping[str, T] | None) -> dict[str, T] | None:
     """Ensure the given object is a dictionary.
 
     Parameters
     ----------
-    obj: str | dict[str, Any] | None
+    obj: str | dict[str, object] | None
         The object to check
 
     """
@@ -35,7 +37,7 @@ def ensure_dict(obj: str | dict[str, Any] | None) -> dict[str, Any] | None:
     return None
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 def get_connection_params() -> dict[str, str]:
@@ -88,10 +90,10 @@ class ArtifactCLI(HyphaArtifact):
         self,
         lpath: str | list[str],
         rpath: str | list[str],
-        callback: None | Callable[[dict[str, Any]], None] = None,
+        callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
-        multipart_config: str | dict[str, Any] | None = None,
+        multipart_config: str | MultipartConfig | None = None,
         *,
         recursive: bool = False,
     ) -> None:
@@ -100,17 +102,18 @@ class ArtifactCLI(HyphaArtifact):
         Args:
             lpath (str | list[str]): Local path(s) to upload
             rpath (str | list[str]): Remote path(s) to upload to
-            callback (None | Callable[[dict[str, Any]], None], optional): Callback
+            callback (None | Callable[[dict[str, object]], None], optional): Callback
                 function to call on upload progress. Defaults to None.
             maxdepth (int | None, optional): Maximum depth to upload. Defaults to None.
             on_error (OnError, optional): Error handling strategy. Defaults to "raise".
-            multipart_config (str | dict[str, Any] | None, optional): Multipart upload
-                configuration. Defaults to None.
+            multipart_config (str | dict[str, object] | None, optional):
+                Multipart upload configuration. Defaults to None.
             recursive (bool, optional): Whether to upload directories recursively.
                 Defaults to False.
 
         """
-        multipart_config_dict = ensure_dict(multipart_config)
+        if isinstance(multipart_config, str):
+            multipart_config = MultipartConfig(**json.loads(multipart_config))
 
         super().put(
             lpath=lpath,
@@ -119,14 +122,14 @@ class ArtifactCLI(HyphaArtifact):
             callback=callback,
             maxdepth=maxdepth,
             on_error=on_error,
-            multipart_config=multipart_config_dict,
+            multipart_config=multipart_config,
         )
 
     def get(
         self,
         rpath: str | list[str],
         lpath: str | list[str],
-        callback: None | Callable[[dict[str, Any]], None] = None,
+        callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         version: str | None = None,
@@ -138,7 +141,7 @@ class ArtifactCLI(HyphaArtifact):
         Args:
             rpath (str | list[str]): Remote path(s) to download
             lpath (str | list[str]): Local destination path(s)
-            callback (None | Callable[[dict[str, Any]], None], optional): Callback
+            callback (None | Callable[[dict[str, object]], None], optional): Callback
                 function to call on download progress. Defaults to None.
             maxdepth (int | None, optional): Maximum depth to download.
                 Defaults to None.
@@ -161,10 +164,10 @@ class ArtifactCLI(HyphaArtifact):
 
     def edit(
         self,
-        manifest: str | dict[str, Any] | None = None,
+        manifest: Mapping[str, object] | None = None,
         type: str | None = None,  # noqa: A002
-        config: str | dict[str, Any] | None = None,
-        secrets: str | dict[str, str] | None = None,
+        config: Mapping[str, object] | None = None,
+        secrets: Mapping[str, str] | None = None,
         version: str | None = None,
         comment: str | None = None,
         *,
@@ -173,10 +176,10 @@ class ArtifactCLI(HyphaArtifact):
         """Edit an existing artifact's manifest.
 
         Args:
-            manifest (str | dict[str, Any] | None, optional): The updated manifest.
+            manifest (str | dict[str, object] | None, optional): The updated manifest.
                 Defaults to None.
             type (str | None, optional): The type of the artifact. Defaults to None.
-            config (str | dict[str, Any] | None, optional):
+            config (str | dict[str, object] | None, optional):
                 A dictionary containing additional configuration options for the
                 artifact. Defaults to None.
             secrets (str | dict[str, str] | None, optional): A dictionary containing
@@ -223,7 +226,7 @@ class ArtifactCLI(HyphaArtifact):
 
                 args = shlex.split(cmd)
 
-                fire.Fire(ArtifactCLI(artifact_id), args)
+                fire.Fire(ArtifactCLI(artifact_id), args)  # type: ignore
             except (KeyboardInterrupt, EOFError):
                 print("\nExiting shell.")  # noqa: T201
                 break
@@ -253,7 +256,7 @@ def main() -> None:
         artifact_id = sys.argv[2]
         ArtifactCLI(artifact_id).run_shell(artifact_id)
     else:
-        fire.Fire(ArtifactCLI)
+        fire.Fire(ArtifactCLI)  # type: ignore
 
 
 if __name__ == "__main__":

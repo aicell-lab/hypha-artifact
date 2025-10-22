@@ -12,8 +12,16 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
+from typing import TYPE_CHECKING
 
+import anyio
 import pytest
+
+if TYPE_CHECKING:
+    from _typeshed import OpenBinaryMode, OpenTextMode
+else:
+    OpenBinaryMode = str
+    OpenTextMode = str
 
 import hypha_artifact.async_hypha_artifact._utils as utils
 
@@ -47,14 +55,14 @@ async def test_aio_open_fallback_without_anyio(
     # Write via aio_open
     data = b"hello-pyodide"
     p = tmp_path / "file.bin"
-    f = await utils.aio_open(p, "wb")
+    f = await anyio.open_file(p, "wb")
     async with f as fd:
         written = await fd.write(data)
     assert written == len(data)
     assert p.exists()
 
     # Read via aio_open
-    f2 = await utils.aio_open(p, "rb")
+    f2 = await anyio.open_file(p, "rb")
     async with f2 as fr:
         got = await fr.read()
     assert got == data
@@ -132,7 +140,7 @@ async def test_aio_open_uses_anyio_when_available(
 ) -> None:
     """Verify that aio_open delegates to anyio.open_file when available.
 
-    We monkeypatch utils.anyio and its open_file to capture the call.
+    We monkeypatch anyio and its open_file to capture the call.
     """
 
     class DummyAsyncFile:
@@ -164,7 +172,11 @@ async def test_aio_open_uses_anyio_when_available(
     calls: list[tuple[str, str]] = []
 
     class DummyAnyio:
-        async def open_file(self, path: str, mode: str) -> DummyAsyncFile:  # type: ignore[name-defined]
+        async def open_file(
+            self,
+            path: str,
+            mode: OpenBinaryMode | OpenTextMode,
+        ) -> DummyAsyncFile:
             calls.append((path, mode))
             return DummyAsyncFile()
 
@@ -176,7 +188,7 @@ async def test_aio_open_uses_anyio_when_available(
     p = tmp_path / "file.bin"
     data = b"hello-anyio"
 
-    f = await utils.aio_open(p, "wb")
+    f = await anyio.open_file(p, "wb")
     async with f as fd:
         n = await fd.write(data)
 

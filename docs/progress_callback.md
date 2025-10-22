@@ -15,7 +15,7 @@ The progress callback feature provides detailed information about file operation
 ### Basic Progress Callback Function
 
 ```python
-def progress_callback(info: Dict[str, Any]):
+def progress_callback(info: Dict[str, object]):
     emoji = {
         "info": "ℹ️",
         "success": "✅", 
@@ -88,7 +88,7 @@ The progress callback receives a dictionary with the following keys:
 You can create custom progress displays by using the callback information:
 
 ```python
-def custom_progress_callback(info: Dict[str, Any]):
+def custom_progress_callback(info: Dict[str, object]):
     if info.get("type") == "info" and info.get("total_files"):
         current = info.get("current_file", 0)
         total = info.get("total_files", 0)
@@ -110,7 +110,7 @@ class ProgressTracker:
         self.pbar = None
         self.total_files = 0
     
-    def callback(self, info: Dict[str, Any]):
+    def callback(self, info: Dict[str, object]):
         if info.get("type") == "info" and info.get("total_files"):
             self.total_files = info.get("total_files")
             self.pbar = tqdm(total=self.total_files, desc="Processing files")
@@ -136,7 +136,7 @@ tracker.close()
 The progress callback will be called with error information when operations fail:
 
 ```python
-def error_aware_callback(info: Dict[str, Any]):
+def error_aware_callback(info: Dict[str, object]):
     if info.get("type") == "error":
         # Log error or take corrective action
         print(f"ERROR: {info.get('message')} for file {info.get('file')}")

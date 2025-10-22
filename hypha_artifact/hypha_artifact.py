@@ -5,22 +5,26 @@ artifacts using the fsspec specification, allowing for operations like reading,
 writing, listing, and manipulating files stored in Hypha artifacts.
 """
 
-import contextlib
 from collections.abc import Callable, Mapping
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal, Self, overload
+from typing import TYPE_CHECKING, Literal, Self, overload
 
 from .artifact_file import ArtifactHttpFile
 from .async_hypha_artifact import AsyncHyphaArtifact
-from .classes import ArtifactItem, OnError
+from .classes import (
+    ArtifactItem,
+    ListChildrenMode,
+    MultipartConfig,
+    OnError,
+    StatusMessage,
+)
 from .sync_utils import run_sync
 
-if not TYPE_CHECKING:
-    try:
-        # Try to import the pyodide-specific run_sync
-        from pyodide.ffi import run_sync
-    except ImportError:
-        contextlib.suppress(ImportError)
+if TYPE_CHECKING:
+    from _typeshed import OpenBinaryMode, OpenTextMode
+else:
+    OpenBinaryMode = str
+    OpenTextMode = str
 
 
 class HyphaArtifact:
@@ -88,13 +92,13 @@ class HyphaArtifact:
 
     def create(
         self: Self,
-        manifest: str | dict[str, Any] | None = None,
+        manifest: Mapping[str, object] | None = None,
         parent_id: str | None = None,
         type: str | None = None,  # noqa: A002
-        config: dict[str, Any] | None = None,
+        config: Mapping[str, object] | None = None,
         version: str | None = None,
         comment: str | None = None,
-        secrets: dict[str, str] | None = None,
+        secrets: Mapping[str, str] | None = None,
         *,
         overwrite: bool | None = None,
         stage: bool | None = None,
@@ -132,10 +136,10 @@ class HyphaArtifact:
 
     def edit(
         self: Self,
-        manifest: dict[str, Any] | None = None,
+        manifest: Mapping[str, object] | None = None,
         type: str | None = None,  # noqa: A002
-        config: dict[str, Any] | None = None,
-        secrets: dict[str, str] | None = None,
+        config: Mapping[str, object] | None = None,
+        secrets: Mapping[str, str] | None = None,
         version: str | None = None,
         comment: str | None = None,
         *,
@@ -157,15 +161,15 @@ class HyphaArtifact:
     def list_children(
         self: Self,
         keywords: list[str] | None = None,
-        filters: dict[str, Any] | None = None,
-        mode: str = "AND",
+        filters: Mapping[str, object] | None = None,
+        mode: ListChildrenMode = "AND",
         offset: int = 0,
         limit: int = 100,
         order_by: str | None = None,
         *,
         silent: bool = False,
         stage: bool = False,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """Retrieve a list of child artifacts within a specified collection."""
         return run_sync(
             self._async_artifact.list_children(
@@ -230,31 +234,49 @@ class HyphaArtifact:
             ),
         )
 
+    @overload
     def open(
         self: Self,
         urlpath: str,
-        mode: str = "rb",
+        mode: OpenTextMode = "r",
         version: str | None = None,
         *,
         additional_headers: Mapping[str, str] | None = None,
-    ) -> ArtifactHttpFile:
-        """Open a file for reading or writing."""
-        open_kwargs: dict[str, Any] = {"version": version}
-        if additional_headers is not None:
-            open_kwargs["additional_headers"] = additional_headers
+    ) -> ArtifactHttpFile[str]: ...
 
-        async_file = self._async_artifact.open(
-            urlpath,
-            mode,
-            **open_kwargs,
+    @overload
+    def open(
+        self: Self,
+        urlpath: str,
+        mode: OpenBinaryMode,
+        version: str | None = None,
+        *,
+        additional_headers: Mapping[str, str] | None = None,
+    ) -> ArtifactHttpFile[bytes]: ...
+
+    def open(
+        self: Self,
+        urlpath: str,
+        mode: OpenBinaryMode | OpenTextMode = "r",
+        version: str | None = None,
+        *,
+        additional_headers: Mapping[str, str] | None = None,
+    ) -> ArtifactHttpFile[str] | ArtifactHttpFile[bytes]:
+        """Open a file for reading or writing."""
+        combined_headers = {
+            **self._async_artifact.default_headers,
+            **(additional_headers or {}),
+        }
+
+        url = run_sync(
+            self._async_artifact.get_file_url(urlpath, mode, version=version),
         )
-        url = run_sync(async_file.get_url())
 
         return ArtifactHttpFile(
             url=url,
             mode=mode,
-            name=async_file.name,
-            additional_headers=additional_headers,
+            name=str(urlpath),
+            additional_headers=combined_headers,
         )
 
     def copy(
@@ -283,7 +305,7 @@ class HyphaArtifact:
         self: Self,
         rpath: str | list[str],
         lpath: str | list[str],
-        callback: None | Callable[[dict[str, Any]], None] = None,
+        callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         version: str | None = None,
@@ -307,10 +329,10 @@ class HyphaArtifact:
         self: Self,
         lpath: str | list[str],
         rpath: str | list[str],
-        callback: None | Callable[[dict[str, Any]], None] = None,
+        callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
-        multipart_config: dict[str, Any] | None = None,
+        multipart_config: MultipartConfig | None = None,
         *,
         recursive: bool = False,
     ) -> None:

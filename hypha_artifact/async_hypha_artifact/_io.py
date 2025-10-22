@@ -2,31 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, overload
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING, overload
 
 import httpx
+from httpx import QueryParams
 
 from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
-from hypha_artifact.classes import OnError, StatusMessage
+from hypha_artifact.classes import MultipartConfig, OnError, StatusMessage
 from hypha_artifact.transfer_progress import TransferProgress
+from hypha_artifact.utils import decode_to_text, local_file_or_dir, rel_path_pairs
 
 from ._utils import (
+    GetFileUrlParams,
     build_local_to_remote_pairs,
     build_remote_to_local_pairs,
-    decode_to_text,
+    clean_params,
     download_to_path,
-    get_existing_url,
     get_multipart_settings,
-    get_read_url,
-    get_write_url,
-    local_file_or_dir,
-    params_get_file_url,
-    prepare_params,
-    rel_path_pairs,
+    get_url,
     remote_file_or_dir,
     should_use_multipart,
     upload_file_simple,
@@ -34,7 +28,9 @@ from ._utils import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
+
+    from _typeshed import OpenBinaryMode, OpenTextMode
 
     from . import AsyncHyphaArtifact
 
@@ -118,15 +114,39 @@ async def cat(
         raise OSError from e
 
 
+@overload
 def fsspec_open(
     self: AsyncHyphaArtifact,
     urlpath: str,
-    mode: str = "rb",
+    mode: OpenTextMode = "r",
+    content_type: str = "text/plain",
+    version: str | None = None,
+    *,
+    additional_headers: Mapping[str, str] | None = None,
+) -> AsyncArtifactHttpFile[str]: ...
+
+
+@overload
+def fsspec_open(
+    self: AsyncHyphaArtifact,
+    urlpath: str,
+    mode: OpenBinaryMode,
     content_type: str = "application/octet-stream",
     version: str | None = None,
     *,
     additional_headers: Mapping[str, str] | None = None,
-) -> AsyncArtifactHttpFile:
+) -> AsyncArtifactHttpFile[bytes]: ...
+
+
+def fsspec_open(
+    self: AsyncHyphaArtifact,
+    urlpath: str,
+    mode: OpenBinaryMode | OpenTextMode = "r",
+    content_type: str = "application/octet-stream",
+    version: str | None = None,
+    *,
+    additional_headers: Mapping[str, str] | None = None,
+) -> AsyncArtifactHttpFile[str] | AsyncArtifactHttpFile[bytes]:
     """Open a file for reading or writing.
 
     Parameters
@@ -135,7 +155,7 @@ def fsspec_open(
         The AsyncHyphaArtifact instance
     urlpath: str
         Path to the file within the artifact
-    mode: str
+    mode: OpenBinaryMode | OpenTextMode
         File mode, similar to 'r', 'rb', 'w', 'wb', 'a', 'ab'
     version: str | None = None
         The version of the artifact to read from or write to.
@@ -143,6 +163,9 @@ def fsspec_open(
         If you want to use a staged version, you can set it to "stage".
     content_type: str
         The content type of the file.
+    additional_headers: Mapping[str, str] | None
+        Optional headers to include for this file-open call. These are merged with
+        the instance's default headers, with per-call values taking precedence.
 
     Returns
     -------
@@ -150,35 +173,65 @@ def fsspec_open(
         A file-like object
 
     """
-    get_file_params = params_get_file_url(
+    get_file_params = GetFileUrlParams(
+        artifact_id=self.artifact_id,
         file_path=urlpath,
         version=version,
         use_proxy=self.use_proxy,
         use_local_url=self.use_local_url,
     )
-    params: dict[str, Any] = prepare_params(
-        self,
-        get_file_params,
-    )
+    params: QueryParams = clean_params(get_file_params)
 
-    if urlparse(urlpath).scheme in ["http", "https", "ftp"]:
-        get_url_func = partial(get_existing_url, urlpath)
-    elif "r" in mode:
-        get_url_func = partial(get_read_url, self, params)
-    elif "w" in mode or "a" in mode:
-        get_url_func = partial(get_write_url, self, params)
-    else:
-        exception_msg = f"Unsupported mode: {mode}"
-        raise ValueError(exception_msg)
+    async def _resolve_url() -> str:
+        return await get_url(self, urlpath, mode, params)
+
+    combined_headers = {**self.default_headers, **(additional_headers or {})}
 
     return AsyncArtifactHttpFile(
-        url_func=get_url_func,
+        url=None,
         mode=mode,
         name=str(urlpath),
         content_type=content_type,
         ssl=self.ssl,
-        additional_headers=additional_headers,
+        additional_headers=combined_headers,
+        url_factory=_resolve_url,
     )
+
+
+@overload
+async def get_file_url(
+    self: AsyncHyphaArtifact,
+    urlpath: str,
+    mode: OpenTextMode,
+    version: str | None = None,
+) -> str: ...
+
+
+@overload
+async def get_file_url(
+    self: AsyncHyphaArtifact,
+    urlpath: str,
+    mode: OpenBinaryMode,
+    version: str | None = None,
+) -> str: ...
+
+
+async def get_file_url(
+    self: AsyncHyphaArtifact,
+    urlpath: str,
+    mode: OpenBinaryMode | OpenTextMode,
+    version: str | None = None,
+) -> str:
+    """Public helper to resolve a read/write URL for a file based on mode/version."""
+    get_file_params = GetFileUrlParams(
+        artifact_id=self.artifact_id,
+        file_path=urlpath,
+        version=version,
+        use_proxy=self.use_proxy,
+        use_local_url=self.use_local_url,
+    )
+    params: QueryParams = clean_params(get_file_params)
+    return await get_url(self, urlpath, mode, params)
 
 
 async def copy(
@@ -241,7 +294,7 @@ async def get(
     self: AsyncHyphaArtifact,
     rpath: str | list[str],
     lpath: str | list[str] | None = None,
-    callback: None | Callable[[dict[str, Any]], None] = None,
+    callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
     version: str | None = None,
@@ -258,7 +311,7 @@ async def get(
         Remote path(s) to copy from
     lpath: str or list of str | None
         Local path(s) to copy to
-    callback: None | Callable[[dict[str, Any]], None]
+    callback: None | Callable[[StatusMessage.ProgressEvent], None]
         Optional callback function to report progress
     maxdepth: int | None
         Maximum recursion depth
@@ -308,12 +361,12 @@ async def put(
     self: AsyncHyphaArtifact,
     lpath: str | list[str],
     rpath: str | list[str] | None = None,
-    callback: None | Callable[[dict[str, Any]], None] = None,
+    callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
     *,
     recursive: bool = False,
-    multipart_config: dict[str, Any] | None = None,
+    multipart_config: MultipartConfig | None = None,
 ) -> None:
     """Copy file(s) from local filesystem to remote (artifact).
 
@@ -325,7 +378,7 @@ async def put(
         Local path(s) to copy from
     rpath: str or list of str | None
         Remote path(s) to copy to
-    callback: None | Callable[[dict[str, Any]], None]
+    callback: None | Callable[[StatusMessage.ProgressEvent], None]
         Optional callback function to report progress
     maxdepth: int | None
         Maximum recursion depth
@@ -335,7 +388,7 @@ async def put(
         Version of the artifact to copy to
     recursive: bool
         Whether to copy directories recursively
-    multipart_config: dict[str, Any] | None
+    multipart_config: MultipartConfig | None
         Configuration for multipart uploads, if applicable.
 
     """

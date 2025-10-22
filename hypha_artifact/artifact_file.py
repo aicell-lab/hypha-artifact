@@ -2,27 +2,26 @@
 # pyright: reportPrivateUsage=false
 """Artifact file handling for Hypha."""
 
-import contextlib
 import io
 from collections.abc import Mapping
 from types import TracebackType
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 import httpx
 
 from .async_artifact_file import AsyncArtifactHttpFile
 from .sync_utils import run_sync
 
-if not TYPE_CHECKING:
-    try:
-        # Try to import the pyodide-specific run_sync
-        from pyodide.ffi import run_sync
-    except ImportError:
-        # Fallback to the default implementation if pyodide is not available
-        contextlib.suppress(ImportError)
+if TYPE_CHECKING:
+    from _typeshed import OpenBinaryMode, OpenTextMode
+else:
+    OpenBinaryMode = str
+    OpenTextMode = str
+
+T = TypeVar("T", str, bytes)
 
 
-class ArtifactHttpFile(io.IOBase):
+class ArtifactHttpFile(io.IOBase, Generic[T]):
     """A file-like object that supports both sync and async context manager protocols.
 
     This implements a file interface for Hypha artifacts, handling HTTP operations
@@ -30,12 +29,12 @@ class ArtifactHttpFile(io.IOBase):
     """
 
     name: str | None
-    mode: str
+    mode: OpenBinaryMode | OpenTextMode
 
     def __init__(
         self: Self,
         url: str,
-        mode: str = "r",
+        mode: OpenBinaryMode | OpenTextMode = "r",
         encoding: str | None = None,
         newline: str | None = None,
         name: str | None = None,
@@ -56,13 +55,8 @@ class ArtifactHttpFile(io.IOBase):
                 include with HTTP requests. Defaults to None.
 
         """
-
-        async def get_url() -> str:
-            """Get the URL for the artifact file."""
-            return url
-
         self._async_file = AsyncArtifactHttpFile(
-            url_func=get_url,
+            url=url,
             mode=mode,
             encoding=encoding,
             newline=newline,

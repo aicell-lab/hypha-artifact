@@ -222,7 +222,7 @@ HyphaArtifact(
 
 #### File Operations
 
-- **`open(path: str, mode: str)`** - Open a file for reading/writing
+- **`open(path: str, mode: OpenBinaryMode | OpenTextMode)`** - Open a file for reading/writing
 - **`cat(path: str) -> str`** - Read entire file content
 - **`ls(path: str, detail: bool = True) -> list`** - List files and directories
 - **`exists(path: str) -> bool`** - Check if file exists
@@ -338,7 +338,7 @@ async_artifact = AsyncHyphaArtifact(
 
 All methods are async versions of the synchronous API:
 
-- **`await open(path: str, mode: str)`** - Open a file asynchronously
+- **`await open(path: str, mode: OpenBinaryMode | OpenTextMode)`** - Open a file asynchronously
 - **`await cat(path: str) -> str`** - Read entire file content
 - **`await ls(path: str, detail: bool = True) -> list`** - List files and directories
 - **`await exists(path: str) -> bool`** - Check if file exists

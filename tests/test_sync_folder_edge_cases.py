@@ -3,7 +3,7 @@
 Focus on methods that may behave differently or fail when the path is a directory.
 """
 
-from typing import Any, cast
+from typing import cast
 
 import pytest
 
@@ -11,7 +11,10 @@ from hypha_artifact import HyphaArtifact
 
 
 @pytest.fixture(scope="module", name="artifact")
-def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -> Any:
+def get_artifact(
+    artifact_name: str,
+    artifact_setup_teardown: tuple[str, str],
+) -> object:
     token, workspace = artifact_setup_teardown
     return HyphaArtifact(
         artifact_name,

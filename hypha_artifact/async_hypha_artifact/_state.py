@@ -2,30 +2,35 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ._remote_methods import ArtifactMethod
 from ._utils import (
+    CommitParams,
+    CreateParams,
+    DeleteParams,
+    EditParams,
+    ListChildrenParams,
     check_errors,
+    clean_params,
     get_headers,
     get_method_url,
-    params_commit,
-    params_create,
-    params_delete,
-    params_edit,
-    prepare_params,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from classes import ListChildrenMode
+
     from . import AsyncHyphaArtifact
 
 
 async def edit(
     self: AsyncHyphaArtifact,
-    manifest: dict[str, Any] | None = None,
+    manifest: Mapping[str, object] | None = None,
     type: str | None = None,  # noqa: A002
-    config: dict[str, Any] | None = None,
-    secrets: dict[str, str] | None = None,
+    config: Mapping[str, object] | None = None,
+    secrets: Mapping[str, str] | None = None,
     version: str | None = None,
     comment: str | None = None,
     *,
@@ -104,7 +109,8 @@ async def edit(
             exist.
 
     """
-    edit_params = params_edit(
+    edit_params = EditParams(
+        artifact_id=self.artifact_id,
         manifest=manifest,
         type=type,
         config=config,
@@ -113,17 +119,11 @@ async def edit(
         comment=comment,
         stage=stage,
     )
-    params: dict[str, Any] = prepare_params(
-        self,
-        edit_params,
-    )
-
-    url = get_method_url(self, ArtifactMethod.EDIT)
 
     response = await self.get_client().post(
-        url,
+        url=get_method_url(self, ArtifactMethod.EDIT),
         headers=get_headers(self),
-        json=params,
+        json=clean_params(edit_params),
     )
 
     check_errors(response)
@@ -170,20 +170,16 @@ async def commit(
     copying, making it fast even for artifacts with large files.
 
     """
-    commit_params = params_commit(
+    commit_params = CommitParams(
+        artifact_id=self.artifact_id,
         version=version,
         comment=comment,
-    )
-    # Param building handled centrally in utilities.
-    params: dict[str, Any] = prepare_params(
-        self,
-        commit_params,
     )
 
     response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.COMMIT),
         headers=get_headers(self),
-        json=params,
+        json=clean_params(commit_params),
     )
 
     check_errors(response)
@@ -215,7 +211,7 @@ async def discard(
     response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.DISCARD),
         headers=get_headers(self),
-        json=prepare_params(self),
+        json={"artifact_id": self.artifact_id},
     )
 
     check_errors(response)
@@ -223,12 +219,12 @@ async def discard(
 
 async def create(
     self: AsyncHyphaArtifact,
-    manifest: str | dict[str, Any] | None = None,
+    manifest: Mapping[str, object] | None = None,
     parent_id: str | None = None,
-    config: dict[str, Any] | None = None,
+    config: Mapping[str, object] | None = None,
     version: str | None = None,
     comment: str | None = None,
-    secrets: dict[str, str] | None = None,
+    secrets: Mapping[str, str] | None = None,
     *,
     type: str | None = None,  # noqa: A002
     overwrite: bool | None = None,
@@ -349,11 +345,11 @@ async def create(
     else:
         normalized_parent = parent_id
 
-    create_params = params_create(
+    create_params = CreateParams(
         alias=self.artifact_alias,
         workspace=self.workspace,
         parent_id=normalized_parent,
-        artifact_type=type,
+        type=type,
         manifest=manifest,
         config=config,
         version=version,
@@ -363,7 +359,7 @@ async def create(
         overwrite=overwrite,
     )
     # Note: create() must not include artifact_id; send create_params directly.
-    params: dict[str, Any] = dict(create_params)
+    params: dict[str, object] = dict(create_params)
 
     response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.CREATE),
@@ -423,17 +419,17 @@ async def delete(
     is irreversible.
 
     """
-    delete_params = params_delete(
+    delete_params = DeleteParams(
+        artifact_id=self.artifact_id,
         delete_files=delete_files,
         recursive=recursive,
         version=version,
     )
-    params: dict[str, Any] = prepare_params(self, delete_params)
 
     response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.DELETE),
         headers=get_headers(self),
-        json=params,
+        json=clean_params(delete_params),
     )
 
     check_errors(response)
@@ -442,15 +438,15 @@ async def delete(
 async def list_children(
     self: AsyncHyphaArtifact,
     keywords: list[str] | None = None,
-    filters: dict[str, Any] | None = None,
-    mode: str = "AND",
+    filters: Mapping[str, object] | None = None,
+    mode: ListChildrenMode = "AND",
     offset: int = 0,
     limit: int = 100,
     order_by: str | None = None,
     *,
     silent: bool = False,
     stage: bool = False,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Retrieve a list of child artifacts within a specified collection.
 
     Supports keyword-based fuzzy search, field-specific filters, and flexible ordering.
@@ -543,21 +539,17 @@ async def list_children(
         a dictionary containing all the fields.
 
     """
-    params: dict[str, Any] = {
-        k: v
-        for k, v in {
-            "parent_id": self.artifact_id,
-            "keywords": keywords,
-            "filters": filters,
-            "mode": mode,
-            "offset": offset,
-            "limit": limit,
-            "order_by": order_by,
-            "silent": silent,
-            "stage": True if stage else None,
-        }.items()
-        if v is not None
-    }
+    params = ListChildrenParams(
+        parent_id=self.artifact_id,
+        keywords=keywords,
+        filters=filters,
+        mode=mode,
+        offset=offset,
+        limit=limit,
+        order_by=order_by,
+        silent=silent,
+        stage=stage,
+    )
 
     response = await self.get_client().post(
         get_method_url(self, ArtifactMethod.LIST),

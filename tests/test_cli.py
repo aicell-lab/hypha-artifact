@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import pytest
 from dotenv import find_dotenv, load_dotenv
@@ -26,12 +26,18 @@ from cli.main import (
     get_connection_params,
 )
 
+if TYPE_CHECKING:
+    from hypha_artifact.classes import MultipartConfig
+
 # Load environment variables
-load_dotenv(dotenv_path=find_dotenv(usecwd=True))
+load_dotenv(override=True, dotenv_path=find_dotenv(usecwd=True))
 
 
 @pytest.fixture(scope="module", name="real_artifact")
-def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -> Any:
+def get_artifact(
+    artifact_name: str,
+    artifact_setup_teardown: tuple[str, str],
+) -> object:
     """Create a test artifact with a real connection to Hypha."""
     token, workspace = artifact_setup_teardown
     return ArtifactCLI(
@@ -173,7 +179,7 @@ class TestRealFileOperations:
                 comment="Testing multipart upload",
             )
 
-            multipart_config: dict[str, bool | int] = {
+            multipart_config: MultipartConfig | None = {
                 "enable": True,
                 "threshold": 2 * 1024 * 1024,  # 2MB threshold
                 "chunk_size": chunk_size,
@@ -497,7 +503,7 @@ class TestRealCLICommands:
 
             assert result.returncode == 0, f"CLI edit failed: {result.stderr}"
 
-            multipart_config: dict[str, bool | int] = {
+            multipart_config: MultipartConfig = {
                 "enable": True,
                 "threshold": 2 * 1024 * 1024,  # 2MB threshold
                 "chunk_size": 6 * 1024 * 1024,  # 6MB chunks
