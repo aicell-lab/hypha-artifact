@@ -5,9 +5,13 @@ artifacts using the fsspec specification, allowing for operations like reading,
 writing, listing, and manipulating files stored in Hypha artifacts.
 """
 
-from typing import Self
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Self
 
 import httpx
+
+from hypha_artifact.utils import env_override
 
 from ._fs import (
     exists,
@@ -33,11 +37,14 @@ from ._io import (
     cp,
     fsspec_open,
     get,
+    get_file_url,
     head,
     put,
 )
 from ._state import commit, create, delete, discard, edit, list_children
-from ._utils import env_override
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class AsyncHyphaArtifact:
@@ -62,6 +69,7 @@ class AsyncHyphaArtifact:
         use_proxy: bool | None = None,
         use_local_url: bool | str | None = None,
         disable_ssl: bool = False,
+        additional_headers: Mapping[str, str] | None = None,
     ) -> None:
         """Initialize an AsyncHyphaArtifact instance.
 
@@ -83,6 +91,9 @@ class AsyncHyphaArtifact:
             If is string, use specified local URL (optional).
         disable_ssl: bool
             Whether to disable SSL verification (optional).
+        additional_headers: Mapping[str, str] | None
+            Headers that should be attached to outgoing HTTP requests when working
+            with artifact files (optional).
 
         """
         self.artifact_id = artifact_id
@@ -116,6 +127,7 @@ class AsyncHyphaArtifact:
 
         self.use_proxy = should_use_proxy
         self.use_local_url = env_override("HYPHA_USE_LOCAL_URL", override=use_local_url)
+        self.default_headers = additional_headers or {}
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
@@ -160,6 +172,8 @@ class AsyncHyphaArtifact:
     list_children = list_children
     cat = cat
     open = fsspec_open
+    get_file_url = get_file_url
+
     copy = copy
     cp = cp
     get = get

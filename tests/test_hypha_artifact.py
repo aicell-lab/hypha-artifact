@@ -9,16 +9,22 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import pytest
 
 from hypha_artifact import HyphaArtifact
 from tests.conftest import ArtifactTestMixin
 
+if TYPE_CHECKING:
+    from hypha_artifact.classes import MultipartConfig
+
 
 @pytest.fixture(scope="module", name="artifact")
-def get_artifact(artifact_name: str, artifact_setup_teardown: tuple[str, str]) -> Any:
+def get_artifact(
+    artifact_name: str,
+    artifact_setup_teardown: tuple[str, str],
+) -> object:
     """Create a test artifact with a real connection to Hypha."""
     token, workspace = artifact_setup_teardown
     return HyphaArtifact(
@@ -379,7 +385,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
 
     def test_multipart_upload_large_file(self, artifact: HyphaArtifact) -> None:
         """Test multipart upload with a large file."""
-        multipart_config: dict[str, bool | int] = {
+        multipart_config: MultipartConfig = {
             "enable": True,
             "threshold": 1024,  # 1MB threshold
             "chunk_size": 10 * 1024 * 1024,  # 10MB chunks

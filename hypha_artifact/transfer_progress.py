@@ -1,16 +1,18 @@
 """Progress handler for transfers."""
 
+from __future__ import annotations
+
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, NoReturn
 
-try:  # optional dependency for nicer progress bars
-    from tqdm import tqdm  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - fallback when tqdm isn't available
-    tqdm = None  # type: ignore[assignment]
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from hypha_artifact.classes import ProgressEvent, ProgressType
 
 
 class TransferProgress:
@@ -28,7 +30,7 @@ class TransferProgress:
         self.total = None
         self.completed = 0
         self.pbar = None  # files-level bar
-        self._part_bars: dict[str, Any] = {}
+        self._part_bars: dict[str, tqdm[NoReturn]] = {}
         self._parts_done: dict[str, int] = {}
         self._parts_total: dict[str, int] = {}
 
@@ -41,20 +43,15 @@ class TransferProgress:
 
     def _init_progress(self, total: int) -> None:
         self.total = total
-        if tqdm is not None:
-            desc = "Uploading" if self.operation == "upload" else "Downloading"
-            self.pbar = tqdm(
-                total=total,
-                desc=desc,
-                unit="file",
-                dynamic_ncols=True,
-                leave=False,
-                position=0,
-            )
-        else:
-            self._fallback_write(
-                f"{self.operation.capitalize()}ing {total} file(s)...",
-            )
+        desc = "Uploading" if self.operation == "upload" else "Downloading"
+        self.pbar = tqdm(
+            total=total,
+            desc=desc,
+            unit="file",
+            dynamic_ncols=True,
+            leave=False,
+            position=0,
+        )
 
     def _on_success(self) -> None:
         self.completed += 1
@@ -78,14 +75,14 @@ class TransferProgress:
                 f"Error {self.operation} {file_path}: {message}",
             )
 
-    def __call__(self, event: dict[str, Any]) -> None:
+    def __call__(self, event: ProgressEvent) -> None:
         """Handle progress events.
 
         Args:
-            event (dict[str, Any]): The event data.
+            event (dict[str, object]): The event data.
 
         """
-        etype = event.get("type")
+        etype: ProgressType = event.get("type")
         if etype == "info":
             total = event.get("total_files")
             if self.total is None and isinstance(total, int):
@@ -104,26 +101,21 @@ class TransferProgress:
             self._handle_part_event(event)
             return
 
-    def _handle_part_event(self, event: dict[str, Any]) -> None:
+    def _handle_part_event(self, event: ProgressEvent) -> None:
         file_path = str(event.get("file", "?"))
         total_parts = event.get("total_parts")
         if isinstance(total_parts, int) and file_path not in self._part_bars:
             self._parts_total[file_path] = total_parts
             self._parts_done[file_path] = 0
-            if tqdm is not None:
-                desc = f"Uploading {Path(file_path).name}"
-                self._part_bars[file_path] = tqdm(
-                    total=total_parts,
-                    desc=desc,
-                    unit="part",
-                    dynamic_ncols=True,
-                    leave=False,
-                    position=1,
-                )
-            else:
-                self._fallback_write(
-                    f"{self.operation.capitalize()}ing parts: 0/{total_parts}",
-                )
+            desc = f"Uploading {Path(file_path).name}"
+            self._part_bars[file_path] = tqdm(
+                total=total_parts,
+                desc=desc,
+                unit="part",
+                dynamic_ncols=True,
+                leave=False,
+                position=1,
+            )
 
         etype = event.get("type")
         if etype in {"part_success", "part_error"}:

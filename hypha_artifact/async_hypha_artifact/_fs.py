@@ -11,13 +11,13 @@ import httpx
 
 from ._remote_methods import ArtifactMethod
 from ._utils import (
+    ListFilesParams,
+    RemoveFileParams,
     check_errors,
+    clean_params,
     filter_by_name,
     get_headers,
     get_method_url,
-    params_list_files,
-    params_remove_file,
-    prepare_params,
     walk_dir,
 )
 
@@ -85,14 +85,18 @@ async def ls(
         List of file names or detailed artifact items
 
     """
-    simple_params = params_list_files(dir_path=path, version=version)
-    params = prepare_params(self, simple_params)
+    simple_params = ListFilesParams(
+        artifact_id=self.artifact_id,
+        dir_path=path,
+        version=version,
+    )
+    params = clean_params(simple_params)
 
     url = get_method_url(self, ArtifactMethod.LIST_FILES)
 
     response = await self.get_client().get(
         url,
-        params=params,
+        params=params,  # type: ignore[arg-type]
         headers=get_headers(self),
         timeout=60,
     )
@@ -465,8 +469,11 @@ async def rm(
         paths_to_remove.append(path)
 
     for file_path in paths_to_remove:
-        simple_params = params_remove_file(file_path)
-        params = prepare_params(self, simple_params)
+        simple_params = RemoveFileParams(
+            artifact_id=self.artifact_id,
+            file_path=file_path,
+        )
+        params = clean_params(simple_params)
         response = await self.get_client().post(
             url=get_method_url(self, ArtifactMethod.REMOVE_FILE),
             headers=get_headers(self),

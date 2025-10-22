@@ -1,9 +1,21 @@
 """Represents a file or directory in the artifact storage."""
 
-from typing import Any, Literal, TypedDict
+from collections.abc import Mapping, Sequence
+from typing import Literal, TypedDict
 
 OnError = Literal["raise", "ignore"]
-JsonType = str | int | float | bool | None | dict[str, Any] | list[Any]
+JsonType = (
+    str
+    | int
+    | float
+    | bool
+    | None
+    | dict[str, object]
+    | list[object]
+    | Sequence[object]
+    | Mapping[str, object]
+)
+ListChildrenMode = Literal["AND", "OR"]
 
 
 class ArtifactItem(TypedDict):
@@ -13,6 +25,84 @@ class ArtifactItem(TypedDict):
     type: Literal["file", "directory"]
     size: int
     last_modified: float | None
+
+
+class FileInfoEvent(TypedDict):
+    """File operation event."""
+
+    type: Literal["info"]
+    message: str
+    file: str
+    total_files: int
+    current_file: int
+
+
+class FileSuccessEvent(TypedDict):
+    """File success event."""
+
+    type: Literal["success"]
+    message: str
+    file: str
+
+
+class FileErrorEvent(TypedDict):
+    """File error event."""
+
+    type: Literal["error"]
+    message: str
+    file: str
+
+
+class PartInfoEvent(TypedDict, total=False):
+    """Part info event."""
+
+    type: Literal["part_info"]
+    message: str
+    file: str
+    current_part: int
+    total_parts: int
+    part_size: int | None
+
+
+class PartSuccessEvent(TypedDict, total=False):
+    """Part success event."""
+
+    type: Literal["part_success"]
+    message: str
+    file: str
+    current_part: int
+    total_parts: int
+    part_size: int | None
+
+
+class PartErrorEvent(TypedDict):
+    """Part error event."""
+
+    type: Literal["part_error"]
+    message: str
+    file: str
+    current_part: int
+    total_parts: int
+
+
+ProgressEvent = (
+    FileInfoEvent
+    | FileSuccessEvent
+    | FileErrorEvent
+    | PartInfoEvent
+    | PartSuccessEvent
+    | PartErrorEvent
+)
+
+ProgressType = Literal[
+    "info",
+    "success",
+    "error",
+    "part_info",
+    "part_success",
+    "part_error",
+    None,
+]
 
 
 class StatusMessage:
@@ -33,7 +123,7 @@ class StatusMessage:
         self: "StatusMessage",
         file_path: str,
         current_file_index: int,
-    ) -> dict[str, Any]:
+    ) -> FileInfoEvent:
         """Create a message indicating the progress of an operation."""
         return {
             "type": "info",
@@ -46,7 +136,7 @@ class StatusMessage:
             "current_file": current_file_index + 1,
         }
 
-    def success(self: "StatusMessage", file_path: str) -> dict[str, Any]:
+    def success(self: "StatusMessage", file_path: str) -> FileSuccessEvent:
         """Create a message indicating a successful operation."""
         return {
             "type": "success",
@@ -58,7 +148,7 @@ class StatusMessage:
         self: "StatusMessage",
         file_path: str,
         error_message: str,
-    ) -> dict[str, Any]:
+    ) -> FileErrorEvent:
         """Create a message indicating an error during the operation."""
         return {
             "type": "error",
@@ -80,44 +170,44 @@ class MultipartStatusMessage(StatusMessage):
         self,
         part_number: int,
         part_size: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> PartInfoEvent:
         """Create an in-progress message for a given part."""
         msg = (
             f"{self.operation.capitalize()}ing part {part_number}/{self.total_parts}"
             f" for {self.file_path}"
         )
-        d: dict[str, Any] = {
-            "type": "part_info",
-            "message": msg,
-            "file": self.file_path,
-            "current_part": part_number,
-            "total_parts": self.total_parts,
-        }
-        if part_size is not None:
-            d["part_size"] = part_size
-        return d
+        return PartInfoEvent(
+            type="part_info",
+            message=msg,
+            file=self.file_path,
+            current_part=part_number,
+            total_parts=self.total_parts,
+            part_size=part_size,
+        )
 
     def part_success(
         self,
         part_number: int,
         part_size: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> PartSuccessEvent:
         """Create a success message for a completed part."""
-        d: dict[str, Any] = {
-            "type": "part_success",
-            "message": (
+        return PartSuccessEvent(
+            type="part_success",
+            message=(
                 f"Successfully {self.operation}ed part {part_number}/{self.total_parts}"
                 f" for {self.file_path}"
             ),
-            "file": self.file_path,
-            "current_part": part_number,
-            "total_parts": self.total_parts,
-        }
-        if part_size is not None:
-            d["part_size"] = part_size
-        return d
+            file=self.file_path,
+            current_part=part_number,
+            total_parts=self.total_parts,
+            part_size=part_size,
+        )
 
-    def part_error(self, part_number: int, error_message: str) -> dict[str, Any]:
+    def part_error(
+        self,
+        part_number: int,
+        error_message: str,
+    ) -> PartErrorEvent:
         """Create an error message for a part failure."""
         return {
             "type": "part_error",
@@ -129,3 +219,26 @@ class MultipartStatusMessage(StatusMessage):
             "current_part": part_number,
             "total_parts": self.total_parts,
         }
+
+
+class UploadPartServerInfo(TypedDict):
+    """Server-provided info for a part to upload."""
+
+    url: str
+    part_number: int
+
+
+class MultipartConfig(TypedDict, total=False):
+    """Configuration for multipart uploads."""
+
+    chunk_size: int
+    enable: bool
+    threshold: int
+    max_parallel_uploads: int
+
+
+class MultipartUpload(TypedDict):
+    """Multipart upload information."""
+
+    upload_id: str
+    parts: list[UploadPartServerInfo]
