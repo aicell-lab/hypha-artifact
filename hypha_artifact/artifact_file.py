@@ -33,7 +33,7 @@ class ArtifactHttpFile(io.IOBase, Generic[T]):
 
     def __init__(
         self: Self,
-        url: str,
+        url: str | None = None,
         mode: OpenBinaryMode | OpenTextMode = "r",
         encoding: str | None = None,
         newline: str | None = None,

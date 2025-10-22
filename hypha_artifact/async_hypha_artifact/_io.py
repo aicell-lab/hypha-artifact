@@ -6,10 +6,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, overload
 
 import httpx
-from httpx import QueryParams
 
 from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
-from hypha_artifact.classes import MultipartConfig, OnError, StatusMessage
+from hypha_artifact.classes import (
+    MultipartConfig,
+    OnError,
+    ProgressEvent,
+    StatusMessage,
+)
 from hypha_artifact.transfer_progress import TransferProgress
 from hypha_artifact.utils import decode_to_text, local_file_or_dir, rel_path_pairs
 
@@ -180,7 +184,7 @@ def fsspec_open(
         use_proxy=self.use_proxy,
         use_local_url=self.use_local_url,
     )
-    params: QueryParams = clean_params(get_file_params)
+    params = clean_params(get_file_params)
 
     async def _resolve_url() -> str:
         return await get_url(self, urlpath, mode, params)
@@ -230,7 +234,7 @@ async def get_file_url(
         use_proxy=self.use_proxy,
         use_local_url=self.use_local_url,
     )
-    params: QueryParams = clean_params(get_file_params)
+    params = clean_params(get_file_params)
     return await get_url(self, urlpath, mode, params)
 
 
@@ -294,7 +298,7 @@ async def get(
     self: AsyncHyphaArtifact,
     rpath: str | list[str],
     lpath: str | list[str] | None = None,
-    callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
+    callback: None | Callable[[ProgressEvent], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
     version: str | None = None,
@@ -311,7 +315,7 @@ async def get(
         Remote path(s) to copy from
     lpath: str or list of str | None
         Local path(s) to copy to
-    callback: None | Callable[[StatusMessage.ProgressEvent], None]
+    callback: None | Callable[[ProgressEvent], None]
         Optional callback function to report progress
     maxdepth: int | None
         Maximum recursion depth
@@ -361,7 +365,7 @@ async def put(
     self: AsyncHyphaArtifact,
     lpath: str | list[str],
     rpath: str | list[str] | None = None,
-    callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
+    callback: None | Callable[[ProgressEvent], None] = None,
     maxdepth: int | None = None,
     on_error: OnError = "raise",
     *,
@@ -378,7 +382,7 @@ async def put(
         Local path(s) to copy from
     rpath: str or list of str | None
         Remote path(s) to copy to
-    callback: None | Callable[[StatusMessage.ProgressEvent], None]
+    callback: None | Callable[[ProgressEvent], None]
         Optional callback function to report progress
     maxdepth: int | None
         Maximum recursion depth

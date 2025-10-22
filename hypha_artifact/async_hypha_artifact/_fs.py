@@ -96,7 +96,7 @@ async def ls(
 
     response = await self.get_client().get(
         url,
-        params=params,
+        params=params,  # type: ignore[arg-type]
         headers=get_headers(self),
         timeout=60,
     )

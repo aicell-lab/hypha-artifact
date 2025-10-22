@@ -5,15 +5,14 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, NoReturn
 
 from tqdm import tqdm
 
-if TYPE_CHECKING:
-    from hypha_artifact.classes import StatusMessage
-
-
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from hypha_artifact.classes import ProgressEvent, ProgressType
 
 
 class TransferProgress:
@@ -31,7 +30,7 @@ class TransferProgress:
         self.total = None
         self.completed = 0
         self.pbar = None  # files-level bar
-        self._part_bars: dict[str, tqdm[Any]] = {}
+        self._part_bars: dict[str, tqdm[NoReturn]] = {}
         self._parts_done: dict[str, int] = {}
         self._parts_total: dict[str, int] = {}
 
@@ -76,14 +75,14 @@ class TransferProgress:
                 f"Error {self.operation} {file_path}: {message}",
             )
 
-    def __call__(self, event: StatusMessage.ProgressEvent) -> None:
+    def __call__(self, event: ProgressEvent) -> None:
         """Handle progress events.
 
         Args:
             event (dict[str, object]): The event data.
 
         """
-        etype: StatusMessage.ProgressType = event.get("type")
+        etype: ProgressType = event.get("type")
         if etype == "info":
             total = event.get("total_files")
             if self.total is None and isinstance(total, int):
@@ -102,7 +101,7 @@ class TransferProgress:
             self._handle_part_event(event)
             return
 
-    def _handle_part_event(self, event: StatusMessage.ProgressEvent) -> None:
+    def _handle_part_event(self, event: ProgressEvent) -> None:
         file_path = str(event.get("file", "?"))
         total_parts = event.get("total_parts")
         if isinstance(total_parts, int) and file_path not in self._part_bars:

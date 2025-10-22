@@ -199,34 +199,18 @@ class TestListChildren:
 
             for _ in range(5):
                 res = await _list_children_committed()
+
                 # Normalize and break early if both names present
-                cand = (res.get("items") if isinstance(res, dict) else res) or []
-                cand_names = {
-                    i.get("manifest", {}).get("name")
-                    for i in cand
-                    if isinstance(i, dict)
-                }
+                cand_names = {i.get("manifest", {}).get("name") for i in res}
                 if {"Alpha", "Beta"}.issubset(cand_names):
                     break
                 await asyncio.sleep(0.3)
 
             res = await _list_children_committed()
 
-            # Result may be a list or a dict with items/results; normalize
-            if isinstance(res, dict):
-                items = (
-                    res.get("items")
-                    or res.get("results")
-                    or res.get("data")
-                    or res.get("artifacts")
-                    or []
-                )
-            else:
-                items = res
-
-            assert isinstance(items, list)
+            assert isinstance(res, list)
             names = {
-                i.get("manifest", {}).get("name") for i in items if isinstance(i, dict)
+                i.get("manifest", {}).get("name") for i in res if isinstance(i, dict)
             }
             assert {"Alpha", "Beta"}.issubset(names)
 

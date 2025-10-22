@@ -17,7 +17,12 @@ async def test_download_content_includes_additional_headers():
     async def url_func() -> str:
         return "https://example.org/resource"
 
-    file_obj = AsyncArtifactHttpFile(url_func, additional_headers={"X-Test": "abc"})
+    file_obj = AsyncArtifactHttpFile(
+        url_factory=url_func, additional_headers={"X-Test": "abc"}
+    )
+
+    # Resolve URL explicitly to avoid entering context (we mock the client)
+    file_obj._url = await url_func()  # type: ignore[attr-defined]
 
     mock_client = AsyncMock()
     response = MagicMock()
@@ -43,11 +48,14 @@ async def test_upload_content_includes_additional_headers():
         return "https://example.org/resource"
 
     file_obj = AsyncArtifactHttpFile(
-        url_func,
         mode="wb",
         content_type="text/plain",
         additional_headers={"X-Test": "abc"},
+        url_factory=url_func,
     )
+
+    # Resolve URL explicitly to avoid entering context (we mock the client)
+    file_obj._url = await url_func()  # type: ignore[attr-defined]
 
     await file_obj.write(b"data")
 

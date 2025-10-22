@@ -33,7 +33,7 @@ class AsyncArtifactHttpFile(Generic[DataType]):
     @overload
     def __init__(
         self: "AsyncArtifactHttpFile[str]",
-        url: str | None,
+        url: str | None = None,
         mode: OpenTextMode = "r",
         encoding: str | None = None,
         newline: str | None = None,
@@ -48,7 +48,7 @@ class AsyncArtifactHttpFile(Generic[DataType]):
     @overload
     def __init__(
         self: "AsyncArtifactHttpFile[bytes]",
-        url: str | None,
+        url: str | None = None,
         mode: OpenBinaryMode = "rb",
         encoding: str | None = None,
         newline: str | None = None,
@@ -62,7 +62,7 @@ class AsyncArtifactHttpFile(Generic[DataType]):
 
     def __init__(
         self: Self,
-        url: str | None,
+        url: str | None = None,
         mode: OpenMode = "r",
         encoding: str | None = None,
         newline: str | None = None,

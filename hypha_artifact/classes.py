@@ -85,6 +85,26 @@ class PartErrorEvent(TypedDict):
     total_parts: int
 
 
+ProgressEvent = (
+    FileInfoEvent
+    | FileSuccessEvent
+    | FileErrorEvent
+    | PartInfoEvent
+    | PartSuccessEvent
+    | PartErrorEvent
+)
+
+ProgressType = Literal[
+    "info",
+    "success",
+    "error",
+    "part_info",
+    "part_success",
+    "part_error",
+    None,
+]
+
+
 class StatusMessage:
     """Class to represent a status message for file operations."""
 
@@ -98,24 +118,6 @@ class StatusMessage:
         """
         self.operation = operation
         self.total_files = total_files
-
-    ProgressEvent = (
-        FileInfoEvent
-        | FileSuccessEvent
-        | FileErrorEvent
-        | PartInfoEvent
-        | PartSuccessEvent
-        | PartErrorEvent
-    )
-    ProgressType = Literal[
-        "info",
-        "success",
-        "error",
-        "part_info",
-        "part_success",
-        "part_error",
-        None,
-    ]
 
     def in_progress(
         self: "StatusMessage",
@@ -226,11 +228,17 @@ class UploadPartServerInfo(TypedDict):
     part_number: int
 
 
-class MultipartConfig(TypedDict):
+class MultipartConfig(TypedDict, total=False):
     """Configuration for multipart uploads."""
 
     chunk_size: int
     enable: bool
     threshold: int
+    max_parallel_uploads: int
+
+
+class MultipartUpload(TypedDict):
+    """Multipart upload information."""
+
     upload_id: str
     parts: list[UploadPartServerInfo]

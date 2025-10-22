@@ -19,12 +19,13 @@ from urllib.parse import urlparse
 
 import anyio
 import httpx
-from httpx import QueryParams
 
 from hypha_artifact.async_hypha_artifact._remote_methods import ArtifactMethod
 from hypha_artifact.classes import (
     MultipartConfig,
     MultipartStatusMessage,
+    MultipartUpload,
+    ProgressEvent,
     UploadPartServerInfo,
 )
 from hypha_artifact.utils import ensure_equal_len, local_walk, rel_path_pairs
@@ -282,7 +283,7 @@ async def get_url(
     artifact: AsyncHyphaArtifact,
     urlpath: str,
     mode: OpenBinaryMode | OpenTextMode,
-    params: QueryParams | None = None,
+    params: Mapping[str, object],
 ) -> str:
     """Get a URL for reading or writing a file."""
     if urlparse(urlpath).scheme in ["http", "https", "ftp"]:
@@ -293,7 +294,7 @@ async def get_url(
     if is_read and not is_write:
         response = await artifact.get_client().get(
             get_method_url(artifact, ArtifactMethod.GET_FILE),
-            params=params,
+            params=params,  # type: ignore[arg-type]
             headers=get_headers(artifact),
             timeout=60,
         )
@@ -459,7 +460,7 @@ async def start_multipart_upload(
     remote_path: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     download_weight: float = 1.0,
-) -> MultipartConfig:
+) -> MultipartUpload:
     """Start a multipart upload for a file."""
     chunk_size = min(chunk_size, MAXIMUM_MULTIPART_THRESHOLD)
     file_size = local_path.stat().st_size
@@ -480,17 +481,17 @@ async def start_multipart_upload(
     start_resp = await self.get_client().post(
         start_url,
         headers=get_headers(self),
-        json=start_params,
+        json=dict(start_params),
     )
     check_errors(start_resp)
-    return MultipartConfig(**start_resp.json())
+    return MultipartUpload(**start_resp.json())
 
 
 async def upload_with_callback(
     self: AsyncHyphaArtifact,
     semaphore: asyncio.Semaphore,
     pinfo: PreparedPartInfo,
-    callback: Callable[[MultipartStatusMessage.ProgressEvent], None] | None,
+    callback: Callable[[ProgressEvent], None] | None,
     mpm: MultipartStatusMessage | None = None,
 ) -> CompletedPart:
     if callback and mpm:
@@ -515,7 +516,7 @@ async def upload_parts(
     parts: list[UploadPartServerInfo],
     max_parallel_uploads: int,
     *,
-    callback: Callable[[MultipartStatusMessage.ProgressEvent], None] | None = None,
+    callback: Callable[[ProgressEvent], None] | None = None,
     file_path: str | None = None,
 ) -> list[CompletedPart]:
     """Upload parts of a file in parallel.
@@ -536,7 +537,7 @@ async def upload_parts(
 
     """
     chunks = read_chunks(local_path, chunk_size)
-    enumerate_parts = enumerate(zip(parts, chunks, strict=False))
+    enumerate_parts = enumerate(list(zip(parts, chunks, strict=False)))
     parts_info: list[PreparedPartInfo] = [
         {
             "chunk": chunk,
@@ -611,7 +612,7 @@ async def upload_multipart(
     max_parallel_uploads: int = 4,
     download_weight: float = 1.0,
     *,
-    callback: Callable[[MultipartStatusMessage.ProgressEvent], None] | None = None,
+    callback: Callable[[ProgressEvent], None] | None = None,
 ) -> None:
     """Upload a file using multipart upload with parallel uploads."""
     multipart_info = await start_multipart_upload(
@@ -643,11 +644,9 @@ async def upload_multipart(
 
 def clean_params(
     params: Mapping[str, object],
-) -> QueryParams:
-    """Extend parameters with artifact_id."""
-    return QueryParams(
-        **{k: v for k, v in params.items() if v is not None},
-    )
+) -> dict[str, object]:
+    """Return a plain dict of parameters with None values removed."""
+    return {k: v for k, v in params.items() if v is not None}
 
 
 def get_method_url(self: AsyncHyphaArtifact, method: ArtifactMethod) -> str:

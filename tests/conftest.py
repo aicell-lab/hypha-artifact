@@ -10,7 +10,7 @@ import asyncio
 import logging
 import os
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import pytest
 from dotenv import load_dotenv
@@ -82,7 +82,7 @@ async def create_artifact(artifact_id: str, token: str) -> None:
     }
 
     logging.info(f"============Creating artifact: {artifact_id}============")
-    await artifact_manager.create(
+    await artifact_manager.create(  # type: ignore
         alias=artifact_id,
         type="generic",
         manifest=manifest,
@@ -91,7 +91,7 @@ async def create_artifact(artifact_id: str, token: str) -> None:
     logging.info(f"============Created artifact: {artifact_id}============")
 
     # Disconnect from the server
-    await api.disconnect()
+    await api.disconnect()  # type: ignore
 
 
 async def delete_artifact(artifact_id: str, token: str) -> None:
@@ -106,11 +106,11 @@ async def delete_artifact(artifact_id: str, token: str) -> None:
 
     # Delete the artifact
     logging.info(f"============Deleting artifact: {artifact_id}============")
-    await artifact_manager.delete(artifact_id)
+    await artifact_manager.delete(artifact_id)  # type: ignore
     logging.info(f"============Deleted artifact: {artifact_id}============")
 
     # Disconnect from the server
-    await api.disconnect()
+    await api.disconnect()  # type: ignore
 
 
 def run_func_sync(
@@ -118,7 +118,7 @@ def run_func_sync(
     token: str,
     func: Callable[[str, str], object],
 ) -> None:
-    """Synchronous wrapper for async functions"""
+    """Wrap async functions synchronously."""
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(func(artifact_id, token))
@@ -168,7 +168,7 @@ class ArtifactTestMixin:
         assert artifact.workspace is not None
         assert artifact.artifact_url is not None
 
-    def _validate_file_listing(self, files: list[object]) -> None:
+    def _validate_file_listing(self, files: Sequence[object]) -> None:
         """Validate file listing format."""
         assert isinstance(files, list)
         if files:
@@ -212,7 +212,7 @@ class ArtifactTestMixin:
 
     def _validate_copy_operation(
         self,
-        artifact: object,
+        artifact: HyphaArtifact,
         source_path: str,
         copy_path: str,
         expected_content: str,

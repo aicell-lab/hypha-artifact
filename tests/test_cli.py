@@ -179,7 +179,7 @@ class TestRealFileOperations:
                 comment="Testing multipart upload",
             )
 
-            multipart_config: MultipartConfig | None = {
+            multipart_config: MultipartConfig = {
                 "enable": True,
                 "threshold": 2 * 1024 * 1024,  # 2MB threshold
                 "chunk_size": chunk_size,

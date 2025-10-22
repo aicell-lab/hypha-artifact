@@ -446,7 +446,7 @@ async def list_children(
     *,
     silent: bool = False,
     stage: bool = False,
-) -> dict[str, object]:
+) -> list[dict[str, object]]:
     """Retrieve a list of child artifacts within a specified collection.
 
     Supports keyword-based fuzzy search, field-specific filters, and flexible ordering.

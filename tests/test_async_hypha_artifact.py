@@ -16,6 +16,7 @@ import pytest
 import pytest_asyncio
 
 from hypha_artifact import AsyncHyphaArtifact
+from hypha_artifact.classes import ProgressEvent
 from tests.conftest import ArtifactTestMixin
 
 
@@ -500,9 +501,9 @@ class TestAsyncHyphaArtifactIntegration(ArtifactTestMixin):
         tmp_path: Path,
     ) -> None:
         """Ensure progress callback is called on get and put operations."""
-        callback_calls: list[dict[str, object]] = []
+        callback_calls: list[ProgressEvent] = []
 
-        def progress_callback(info: dict[str, object]) -> None:
+        def progress_callback(info: ProgressEvent) -> None:
             callback_calls.append(info)
 
         test_file = "async_progress_test.txt"

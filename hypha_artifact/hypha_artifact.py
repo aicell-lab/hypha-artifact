@@ -16,7 +16,7 @@ from .classes import (
     ListChildrenMode,
     MultipartConfig,
     OnError,
-    StatusMessage,
+    ProgressEvent,
 )
 from .sync_utils import run_sync
 
@@ -169,7 +169,7 @@ class HyphaArtifact:
         *,
         silent: bool = False,
         stage: bool = False,
-    ) -> dict[str, object]:
+    ) -> list[dict[str, object]]:
         """Retrieve a list of child artifacts within a specified collection."""
         return run_sync(
             self._async_artifact.list_children(
@@ -305,7 +305,7 @@ class HyphaArtifact:
         self: Self,
         rpath: str | list[str],
         lpath: str | list[str],
-        callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
+        callback: None | Callable[[ProgressEvent], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         version: str | None = None,
@@ -329,7 +329,7 @@ class HyphaArtifact:
         self: Self,
         lpath: str | list[str],
         rpath: str | list[str],
-        callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
+        callback: None | Callable[[ProgressEvent], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         multipart_config: MultipartConfig | None = None,

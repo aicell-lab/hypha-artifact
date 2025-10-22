@@ -11,7 +11,11 @@ from typing import TypeVar
 import fire  # type: ignore
 from dotenv import load_dotenv
 
-from hypha_artifact.classes import MultipartConfig, OnError, StatusMessage
+from hypha_artifact.classes import (
+    MultipartConfig,
+    OnError,
+    ProgressEvent,
+)
 from hypha_artifact.hypha_artifact import HyphaArtifact
 
 logger = logging.getLogger(__name__)
@@ -90,7 +94,7 @@ class ArtifactCLI(HyphaArtifact):
         self,
         lpath: str | list[str],
         rpath: str | list[str],
-        callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
+        callback: None | Callable[[ProgressEvent], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         multipart_config: str | MultipartConfig | None = None,
@@ -129,7 +133,7 @@ class ArtifactCLI(HyphaArtifact):
         self,
         rpath: str | list[str],
         lpath: str | list[str],
-        callback: None | Callable[[StatusMessage.ProgressEvent], None] = None,
+        callback: None | Callable[[ProgressEvent], None] = None,
         maxdepth: int | None = None,
         on_error: OnError = "raise",
         version: str | None = None,
