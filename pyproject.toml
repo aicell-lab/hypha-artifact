@@ -33,5 +33,5 @@ exclude = ["tests*"]
 [project.scripts]
 hypha-artifact = "cli.main:main"
 
-[options.package_data]
-hypha_artifact = py.typed
+[tool.setuptools.package-data]
+hypha_artifact = ["py.typed"]
