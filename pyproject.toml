@@ -3,7 +3,7 @@ requires = ["setuptools>=65.0.0", "wheel"]
 
 [project]
 name = "hypha-artifact"
-version = "0.2.0"
+version = "0.2.1"
 readme = "README.md"
 authors = [
   { name = "Hugo Dettner Källander", email = "hugokallander@gmail.com"}
@@ -32,3 +32,6 @@ exclude = ["tests*"]
 
 [project.scripts]
 hypha-artifact = "cli.main:main"
+
+[tool.setuptools.package-data]
+hypha_artifact = ["py.typed"]
