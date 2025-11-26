@@ -3,7 +3,7 @@ requires = ["setuptools>=65.0.0", "wheel"]
 
 [project]
 name = "hypha-artifact"
-version = "0.2.1"
+version = "0.2.2"
 readme = "README.md"
 authors = [
   { name = "Hugo Dettner Källander", email = "hugokallander@gmail.com"}
@@ -16,6 +16,7 @@ dependencies = [
   "hypha_rpc>=0.20.54",
   "pyyaml>=6.0.1",
   "tqdm>=4.67.1",
+  "anyio==4.11.0",
 ]
 license = "MIT"
 license-files = ["LICENSE"]
