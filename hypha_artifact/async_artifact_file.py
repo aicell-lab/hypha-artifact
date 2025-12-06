@@ -43,6 +43,7 @@ class AsyncArtifactHttpFile(Generic[DataType]):
         ssl: bool | None = None,
         additional_headers: Mapping[str, str] | None = None,
         url_factory: Callable[[], Awaitable[str]] | None = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None: ...
 
     @overload
@@ -58,6 +59,7 @@ class AsyncArtifactHttpFile(Generic[DataType]):
         ssl: bool | None = None,
         additional_headers: Mapping[str, str] | None = None,
         url_factory: Callable[[], Awaitable[str]] | None = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None: ...
 
     def __init__(
@@ -72,6 +74,7 @@ class AsyncArtifactHttpFile(Generic[DataType]):
         ssl: bool | None = None,
         additional_headers: Mapping[str, str] | None = None,
         url_factory: Callable[[], Awaitable[str]] | None = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         """Initialize an AsyncArtifactHttpFile instance.
 
@@ -92,6 +95,9 @@ class AsyncArtifactHttpFile(Generic[DataType]):
                 Async function to resolve the URL lazily when entering the
                 context manager. If provided, it will be used when `url` is
                 not set. Defaults to None.
+            client (httpx.AsyncClient | None, optional): An existing httpx client
+                to reuse for connection pooling. If provided, the client will NOT
+                be closed when this file is closed. Defaults to None.
 
         """
         if not url and url_factory is None:
@@ -105,7 +111,8 @@ class AsyncArtifactHttpFile(Generic[DataType]):
         self._newline = newline or os.linesep
         self._closed = False
         self._buffer = io.BytesIO()
-        self._client: httpx.AsyncClient | None = None
+        self._client: httpx.AsyncClient | None = client
+        self._owns_client = client is None  # Track if we own the client
         self._timeout = 120
         self._content_type = content_type
         self._ssl = ssl
@@ -117,7 +124,12 @@ class AsyncArtifactHttpFile(Generic[DataType]):
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
-        self._client = httpx.AsyncClient(verify=bool(self._ssl))
+        # Only create a new client if one wasn't provided
+        if self._client is None:
+            # ssl=None means use default (verify=True), ssl=False means disable
+            verify_opt = self._ssl if self._ssl is not None else True
+            self._client = httpx.AsyncClient(verify=verify_opt)
+            self._owns_client = True
         if not self._url:
             if self._url_factory is None:
                 error_msg = "URL not provided and url_factory missing"
@@ -139,7 +151,9 @@ class AsyncArtifactHttpFile(Generic[DataType]):
     def _get_client(self: Self) -> httpx.AsyncClient:
         """Get or create httpx client."""
         if self._client is None:
-            self._client = httpx.AsyncClient(verify=bool(self._ssl))
+            # ssl=None means use default (verify=True), ssl=False means disable
+            verify_opt = self._ssl if self._ssl is not None else True
+            self._client = httpx.AsyncClient(verify=verify_opt)
         return self._client
 
     async def download_content(self: Self, range_header: str | None = None) -> None:
@@ -303,7 +317,7 @@ class AsyncArtifactHttpFile(Generic[DataType]):
         finally:
             self._closed = True
             self._buffer.close()
-            if self._client:
+            if self._client and self._owns_client:
                 await self._client.aclose()
 
     @property

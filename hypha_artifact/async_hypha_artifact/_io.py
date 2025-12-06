@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING, overload
 
@@ -19,6 +20,7 @@ from hypha_artifact.utils import decode_to_text, local_file_or_dir, rel_path_pai
 
 from ._utils import (
     GetFileUrlParams,
+    batch_get_upload_urls,
     build_local_to_remote_pairs,
     build_remote_to_local_pairs,
     clean_params,
@@ -27,7 +29,7 @@ from ._utils import (
     get_url,
     remote_file_or_dir,
     should_use_multipart,
-    upload_file_simple,
+    upload_file_direct,
     upload_multipart,
 )
 
@@ -94,19 +96,32 @@ async def cat(
 
     """
     if isinstance(path, list):
-        return {
-            p: await self.cat(
-                p,
-                recursive=recursive,
-                on_error=on_error,
-                version=version,
-            )
-            for p in path
-        }
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def _cat_one(p: str) -> tuple[str, str | None]:
+            async with semaphore:
+                content = await self.cat(
+                    p,
+                    recursive=recursive,
+                    on_error=on_error,
+                    version=version,
+                )
+                return (p, content)
+
+        results = await asyncio.gather(*[_cat_one(p) for p in path])
+        return dict(results)
 
     if recursive and await self.isdir(path):
         files = await self.find(path, withdirs=False, version=version)
-        return {f: await self.cat(f, on_error=on_error, version=version) for f in files}
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def _cat_file(f: str) -> tuple[str, str | None]:
+            async with semaphore:
+                content = await self.cat(f, on_error=on_error, version=version)
+                return (f, content)
+
+        results = await asyncio.gather(*[_cat_file(f) for f in files])
+        return dict(results)
 
     try:
         async with self.open(path, "r", version=version) as f:
@@ -199,6 +214,7 @@ def fsspec_open(
         ssl=self.ssl,
         additional_headers=combined_headers,
         url_factory=_resolve_url,
+        client=self.get_client(),
     )
 
 
@@ -282,13 +298,19 @@ async def copy(
     else:
         src_dst_paths = [(path1, path2)]
 
-    try:
-        for src_path, dst_path in src_dst_paths:
+    semaphore = asyncio.Semaphore(self.max_concurrency)
+
+    async def _copy_one(src_path: str, dst_path: str) -> None:
+        async with semaphore:
             async with self.open(src_path, "rb", version=version) as src_file:
                 content = await src_file.read()
-
             async with self.open(dst_path, "wb") as dst_file:
                 await dst_file.write(content)
+
+    try:
+        await asyncio.gather(
+            *[_copy_one(src, dst) for src, dst in src_dst_paths],
+        )
     except Exception as e:
         if on_error == "raise":
             raise OSError from e
@@ -338,27 +360,44 @@ async def get(
 
     status_message = StatusMessage("download", len(all_file_pairs))
     callback = callback or TransferProgress("download")
+    semaphore = asyncio.Semaphore(self.max_concurrency)
+    completed_count = 0
+    lock = asyncio.Lock()
 
-    for current_file_index, (remote_path, local_path) in enumerate(all_file_pairs):
+    async def _download_one(
+        remote_path: str,
+        local_path: str,
+    ) -> None:
+        nonlocal completed_count
+        async with lock:
+            idx = completed_count
         if callback:
-            callback(status_message.in_progress(remote_path, current_file_index))
+            callback(status_message.in_progress(remote_path, idx))
         fixed_local_path = local_file_or_dir(remote_path, local_path)
 
         try:
-            await download_to_path(
-                self,
-                remote_path,
-                fixed_local_path,
-                version=version,
-            )
+            async with semaphore:
+                await download_to_path(
+                    self,
+                    remote_path,
+                    fixed_local_path,
+                    version=version,
+                )
         except Exception as e:
             if callback:
                 callback(status_message.error(remote_path, str(e)))
             if on_error == "raise":
                 raise OSError from e
+            return
 
+        async with lock:
+            completed_count += 1
         if callback:
             callback(status_message.success(remote_path))
+
+    await asyncio.gather(
+        *[_download_one(rp, lp) for rp, lp in all_file_pairs],
+    )
 
 
 async def put(
@@ -406,39 +445,126 @@ async def put(
     status_message = StatusMessage("upload", len(all_file_pairs))
     callback = callback or TransferProgress("upload")
 
-    for current_file_index, (local_path, remote_path) in enumerate(all_file_pairs):
-        if callback:
-            callback(status_message.in_progress(local_path, current_file_index))
-        fixed_remote_path = await remote_file_or_dir(self, local_path, remote_path)
+    # Separate files into multipart and simple uploads
+    simple_pairs: list[tuple[str, str]] = []
+    multipart_pairs: list[tuple[str, str]] = []
 
-        try:
-            if should_use_multipart(
-                Path(local_path),
-                multipart_config,
-            ):
-                chunk_size, max_parallel_uploads = get_multipart_settings(
-                    multipart_config,
-                )
+    for local_path, remote_path in all_file_pairs:
+        if should_use_multipart(Path(local_path), multipart_config):
+            multipart_pairs.append((local_path, remote_path))
+        else:
+            simple_pairs.append((local_path, remote_path))
 
-                await upload_multipart(
-                    self,
-                    Path(local_path),
-                    fixed_remote_path,
-                    chunk_size=chunk_size,
-                    max_parallel_uploads=max_parallel_uploads,
-                    callback=callback,
-                )
-            else:
-                await upload_file_simple(self, local_path, fixed_remote_path)
+    completed_count = 0
+    lock = asyncio.Lock()
 
-        except Exception as e:
+    # For simple uploads, batch fetch all presigned URLs first, then upload
+    if simple_pairs:
+        # Resolve remote paths in parallel (handle directory semantics)
+        async def _resolve_remote(
+            local_path: str,
+            remote_path: str,
+        ) -> tuple[str, str]:
+            fixed = await remote_file_or_dir(self, local_path, remote_path)
+            return (local_path, fixed)
+
+        resolved_pairs = list(
+            await asyncio.gather(
+                *[_resolve_remote(lp, rp) for lp, rp in simple_pairs],
+            ),
+        )
+
+        # Batch fetch all presigned URLs in parallel
+        remote_paths = [rp for _, rp in resolved_pairs]
+        presigned_urls = await batch_get_upload_urls(self, remote_paths)
+
+        # Upload all files in parallel using the pre-fetched URLs
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def _upload_simple(
+            local_path: str,
+            presigned_url: str,
+            idx: int,
+        ) -> None:
+            nonlocal completed_count
             if callback:
-                callback(status_message.error(local_path, str(e)))
-            if on_error == "raise":
-                raise OSError from e
+                callback(status_message.in_progress(local_path, idx))
 
-        if callback:
-            callback(status_message.success(local_path))
+            try:
+                async with semaphore:
+                    await upload_file_direct(
+                        self.get_client(),
+                        local_path,
+                        presigned_url,
+                    )
+            except Exception as e:
+                if callback:
+                    callback(status_message.error(local_path, str(e)))
+                if on_error == "raise":
+                    raise OSError from e
+                return
+
+            async with lock:
+                completed_count += 1
+            if callback:
+                callback(status_message.success(local_path))
+
+        await asyncio.gather(
+            *[
+                _upload_simple(lp, url, i)
+                for i, ((lp, _), url) in enumerate(
+                    zip(resolved_pairs, presigned_urls, strict=True),
+                )
+            ],
+        )
+
+    # Handle multipart uploads separately (they have their own URL fetching)
+    if multipart_pairs:
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def _upload_multipart(
+            local_path: str,
+            remote_path: str,
+        ) -> None:
+            nonlocal completed_count
+            async with lock:
+                idx = completed_count
+            if callback:
+                callback(status_message.in_progress(local_path, idx))
+
+            try:
+                async with semaphore:
+                    fixed_remote_path = await remote_file_or_dir(
+                        self,
+                        local_path,
+                        remote_path,
+                    )
+                    chunk_size, max_parallel_uploads = get_multipart_settings(
+                        multipart_config,
+                    )
+                    await upload_multipart(
+                        self,
+                        Path(local_path),
+                        fixed_remote_path,
+                        chunk_size=chunk_size,
+                        max_parallel_uploads=max_parallel_uploads,
+                        callback=callback,
+                    )
+            except Exception as e:
+                if callback:
+                    callback(status_message.error(local_path, str(e)))
+                if on_error == "raise":
+                    raise OSError from e
+                return
+
+            async with lock:
+                completed_count += 1
+            if callback:
+                callback(status_message.success(local_path))
+
+        await asyncio.gather(
+            *[_upload_multipart(lp, rp) for lp, rp in multipart_pairs],
+        )
 
 
 async def cp(

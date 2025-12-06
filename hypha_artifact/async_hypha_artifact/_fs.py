@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 from pathlib import Path
@@ -420,7 +421,13 @@ async def sizes(
         List of file sizes in bytes
 
     """
-    return [await self.size(path, version=version) for path in paths]
+    semaphore = asyncio.Semaphore(self.max_concurrency)
+
+    async def _size_one(path: str) -> int:
+        async with semaphore:
+            return await self.size(path, version=version)
+
+    return list(await asyncio.gather(*[_size_one(p) for p in paths]))
 
 
 async def rm(
@@ -468,19 +475,23 @@ async def rm(
     else:
         paths_to_remove.append(path)
 
-    for file_path in paths_to_remove:
-        simple_params = RemoveFileParams(
-            artifact_id=self.artifact_id,
-            file_path=file_path,
-        )
-        params = clean_params(simple_params)
-        response = await self.get_client().post(
-            url=get_method_url(self, ArtifactMethod.REMOVE_FILE),
-            headers=get_headers(self),
-            json=params,
-        )
+    semaphore = asyncio.Semaphore(self.max_concurrency)
 
-        check_errors(response)
+    async def _rm_one(file_path: str) -> None:
+        async with semaphore:
+            simple_params = RemoveFileParams(
+                artifact_id=self.artifact_id,
+                file_path=file_path,
+            )
+            params = clean_params(simple_params)
+            response = await self.get_client().post(
+                url=get_method_url(self, ArtifactMethod.REMOVE_FILE),
+                headers=get_headers(self),
+                json=params,
+            )
+            check_errors(response)
+
+    await asyncio.gather(*[_rm_one(fp) for fp in paths_to_remove])
 
 
 async def rm_file(self: AsyncHyphaArtifact, path: str) -> None:
