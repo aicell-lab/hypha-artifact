@@ -354,3 +354,154 @@ class TestListChildren:
             await coll.aclose()
             await staged_child.aclose()
             await committed_child.aclose()
+
+
+class TestListFilesLimit:
+    """Integration tests for the limit parameter in the ls method."""
+
+    @pytest.mark.asyncio
+    async def test_ls_limit_parameter(
+        self,
+        credentials: tuple[str, str],
+    ) -> None:
+        """Test that the limit parameter correctly restricts the number of files returned."""
+        token, workspace = credentials
+
+        # Create a test artifact
+        artifact_alias = f"test-limit-{uuid.uuid4().hex[:8]}"
+        artifact = AsyncHyphaArtifact(
+            artifact_alias,
+            workspace=workspace,
+            token=token,
+            server_url="https://hypha.aicell.io",
+        )
+
+        try:
+            # Create the artifact
+            await artifact.create()
+
+            # Create multiple test files (more than the limit we'll test with)
+            num_files = 15
+            file_names = [f"test_file_{i:02d}.txt" for i in range(num_files)]
+
+            await artifact.edit(stage=True)
+            for file_name in file_names:
+                async with artifact.open(file_name, "w") as f:
+                    await f.write(f"Content for {file_name}")
+            await artifact.commit(comment="Add test files for limit testing")
+
+            # Test with limit=5
+            limited_files = await artifact.ls("/", limit=5, detail=True)
+            assert isinstance(limited_files, list)
+            assert (
+                len(limited_files) <= 5
+            ), f"Expected at most 5 files, got {len(limited_files)}"
+
+            # Test with limit=10
+            limited_files_10 = await artifact.ls("/", limit=10, detail=True)
+            assert isinstance(limited_files_10, list)
+            assert (
+                len(limited_files_10) <= 10
+            ), f"Expected at most 10 files, got {len(limited_files_10)}"
+
+            # Test without detail
+            limited_names = await artifact.ls("/", limit=5, detail=False)
+            assert isinstance(limited_names, list)
+            assert (
+                len(limited_names) <= 5
+            ), f"Expected at most 5 file names, got {len(limited_names)}"
+            assert all(
+                isinstance(name, str) for name in limited_names
+            ), "All items should be strings"
+
+            # Test with default limit (should return all files)
+            all_files = await artifact.ls("/", detail=True)
+            assert isinstance(all_files, list)
+            # Should contain all files we created
+            assert (
+                len(all_files) >= num_files
+            ), f"Expected at least {num_files} files, got {len(all_files)}"
+
+            # Verify that the files returned are valid artifact items
+            if limited_files:
+                first_file = limited_files[0]
+                assert "name" in first_file, "File should have a 'name' field"
+                assert "type" in first_file, "File should have a 'type' field"
+                assert "size" in first_file, "File should have a 'size' field"
+
+        finally:
+            # Cleanup
+            try:
+                await artifact.delete(delete_files=True, recursive=True)
+            except Exception:
+                pass
+            await artifact.aclose()
+
+    @pytest.mark.asyncio
+    async def test_ls_limit_with_version(
+        self,
+        credentials: tuple[str, str],
+    ) -> None:
+        """Test that the limit parameter works correctly with version parameter."""
+        token, workspace = credentials
+
+        artifact_alias = f"test-limit-version-{uuid.uuid4().hex[:8]}"
+        artifact = AsyncHyphaArtifact(
+            artifact_alias,
+            workspace=workspace,
+            token=token,
+            server_url="https://hypha.aicell.io",
+        )
+
+        try:
+            # Create the artifact with initial files
+            await artifact.create()
+
+            # Add files to v0
+            num_files_v0 = 8
+            await artifact.edit(stage=True)
+            for i in range(num_files_v0):
+                async with artifact.open(f"file_v0_{i}.txt", "w") as f:
+                    await f.write(f"Content v0 {i}")
+            await artifact.commit(comment="Initial files in v0")
+
+            # Test limit on v0
+            limited_v0 = await artifact.ls("/", limit=3, version="v0", detail=True)
+            assert isinstance(limited_v0, list)
+            assert (
+                len(limited_v0) <= 3
+            ), f"Expected at most 3 files from v0, got {len(limited_v0)}"
+
+            # Create a new version with additional files
+            await artifact.edit(stage=True, version="new")
+            for i in range(5):
+                async with artifact.open(f"file_v1_{i}.txt", "w") as f:
+                    await f.write(f"Content v1 {i}")
+            await artifact.commit(comment="Additional files in new version")
+
+            # Test limit on latest version
+            limited_latest = await artifact.ls("/", limit=5, detail=True)
+            assert isinstance(limited_latest, list)
+            assert (
+                len(limited_latest) <= 5
+            ), f"Expected at most 5 files from latest, got {len(limited_latest)}"
+
+            # Test limit on v0 again to ensure it still returns v0 files only
+            limited_v0_again = await artifact.ls(
+                "/",
+                limit=4,
+                version="v0",
+                detail=False,
+            )
+            assert isinstance(limited_v0_again, list)
+            assert (
+                len(limited_v0_again) <= 4
+            ), f"Expected at most 4 file names from v0, got {len(limited_v0_again)}"
+
+        finally:
+            # Cleanup
+            try:
+                await artifact.delete(delete_files=True, recursive=True)
+            except Exception:
+                pass
+            await artifact.aclose()
