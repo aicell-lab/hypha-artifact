@@ -284,12 +284,6 @@ class AsyncArtifactHttpFile(Generic[DataType]):
 
         return bytes_written
 
-    def ensure_etag(self: Self) -> None:
-        """Ensure that the ETag is set after upload."""
-        if not self.etag:
-            error_msg = "ETag must be set after upload"
-            raise OSError(error_msg)
-
     async def close(self: Self) -> None:
         """Close the file and upload content if in write mode."""
         if self._closed:
@@ -299,7 +293,6 @@ class AsyncArtifactHttpFile(Generic[DataType]):
             if self.writable():
                 response = await self.upload_content()
                 self.etag = response.headers.get("ETag", "").strip('"')
-                self.ensure_etag()
         finally:
             self._closed = True
             self._buffer.close()
