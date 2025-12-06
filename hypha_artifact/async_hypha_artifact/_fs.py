@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 async def ls(
     self: AsyncHyphaArtifact,
     path: str = ".",
+    limit: int = 1000,
     version: str | None = None,
     *,
     detail: None | Literal[False] = False,
@@ -41,6 +42,7 @@ async def ls(
 async def ls(
     self: AsyncHyphaArtifact,
     path: str = ".",
+    limit: int = 1000,
     version: str | None = None,
     *,
     detail: Literal[True],
@@ -51,6 +53,7 @@ async def ls(
 async def ls(
     self: AsyncHyphaArtifact,
     path: str = ".",
+    limit: int = 1000,
     version: str | None = None,
     *,
     detail: None | bool = True,
@@ -60,6 +63,7 @@ async def ls(
 async def ls(
     self: AsyncHyphaArtifact,
     path: str = ".",
+    limit: int = 1000,
     version: str | None = None,
     *,
     detail: None | bool = False,
@@ -78,6 +82,8 @@ async def ls(
         The version of the artifact to list contents from.
         By default, it lists from the latest version.
         If you want to list from a staged version, you can set it to "stage".
+    limit: int
+        The maximum number of items to list.
 
     Returns
     -------
@@ -88,6 +94,7 @@ async def ls(
     simple_params = ListFilesParams(
         artifact_id=self.artifact_id,
         dir_path=path,
+        limit=limit,
         version=version,
     )
     params = clean_params(simple_params)

@@ -101,6 +101,7 @@ class ArtifactIdParams(TypedDict):
 
 class ListFilesParams(ArtifactIdParams):
     dir_path: str
+    limit: int | None
     version: str | None
 
 
