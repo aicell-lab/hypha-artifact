@@ -77,6 +77,7 @@ class HyphaArtifact:
         use_local_url: bool | str | None = None,
         disable_ssl: bool = False,
         additional_headers: Mapping[str, str] | None = None,
+        max_concurrency: int = 10,
     ) -> None:
         """Initialize a HyphaArtifact instance."""
         self._async_artifact = AsyncHyphaArtifact(
@@ -88,6 +89,7 @@ class HyphaArtifact:
             use_local_url=use_local_url,
             disable_ssl=disable_ssl,
             additional_headers=additional_headers,
+            max_concurrency=max_concurrency,
         )
 
     def create(

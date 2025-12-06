@@ -70,6 +70,7 @@ class AsyncHyphaArtifact:
         use_local_url: bool | str | None = None,
         disable_ssl: bool = False,
         additional_headers: Mapping[str, str] | None = None,
+        max_concurrency: int = 10,
     ) -> None:
         """Initialize an AsyncHyphaArtifact instance.
 
@@ -94,6 +95,10 @@ class AsyncHyphaArtifact:
         additional_headers: Mapping[str, str] | None
             Headers that should be attached to outgoing HTTP requests when working
             with artifact files (optional).
+        max_concurrency: int
+            Maximum number of concurrent operations for batch file transfers
+            (put, get, cat, rm, etc.). Set to 1 for sequential execution.
+            Default is 10.
 
         """
         self.artifact_id = artifact_id
@@ -128,6 +133,7 @@ class AsyncHyphaArtifact:
         self.use_proxy = should_use_proxy
         self.use_local_url = env_override("HYPHA_USE_LOCAL_URL", override=use_local_url)
         self.default_headers = additional_headers or {}
+        self.max_concurrency = max_concurrency
 
     async def __aenter__(self: Self) -> Self:
         """Async context manager entry."""
@@ -135,6 +141,7 @@ class AsyncHyphaArtifact:
         self._client = httpx.AsyncClient(
             verify=verify_opt,
             timeout=60.0,
+            http2=True,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
         return self
@@ -161,6 +168,7 @@ class AsyncHyphaArtifact:
             self._client = httpx.AsyncClient(
                 verify=verify_opt,
                 timeout=60.0,
+                http2=True,
                 limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             )
         return self._client

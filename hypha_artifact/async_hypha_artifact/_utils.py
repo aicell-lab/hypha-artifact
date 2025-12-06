@@ -219,6 +219,64 @@ async def upload_file_simple(
         await dst_file.write(data)
 
 
+async def upload_file_direct(
+    client: httpx.AsyncClient,
+    local_path: str | Path,
+    presigned_url: str,
+    content_type: str = "application/octet-stream",
+) -> None:
+    """Upload a file directly to a presigned URL.
+
+    This is optimized for batch uploads where URLs are pre-fetched.
+    """
+    async with await anyio.open_file(local_path, "rb") as src_file:
+        data = await src_file.read()
+
+    response = await client.put(
+        presigned_url,
+        content=data,
+        headers={
+            "Content-Type": content_type,
+            "Content-Length": str(len(data)),
+        },
+        timeout=120,
+    )
+    response.raise_for_status()
+
+
+async def batch_get_upload_urls(
+    self: AsyncHyphaArtifact,
+    remote_paths: list[str],
+) -> list[str]:
+    """Fetch presigned upload URLs for multiple files in parallel.
+
+    This batches the URL requests to reduce sequential round-trip overhead.
+    """
+
+    async def _get_one_url(remote_path: str) -> str:
+        params: dict[str, object] = {
+            "artifact_id": self.artifact_id,
+            "file_path": remote_path,
+        }
+        if self.use_proxy is not None:
+            params["use_proxy"] = self.use_proxy
+        if self.use_local_url is not None:
+            params["use_local_url"] = self.use_local_url
+
+        response = await self.get_client().post(
+            get_method_url(self, ArtifactMethod.PUT_FILE),
+            json=params,
+            headers=get_headers(self),
+            timeout=60,
+        )
+        check_errors(response)
+        return response.content.decode().strip('"')
+
+    # Fetch all URLs in parallel
+    urls = await asyncio.gather(*[_get_one_url(rp) for rp in remote_paths])
+    return list(urls)
+
+
 async def build_remote_to_local_pairs(
     self: AsyncHyphaArtifact,
     rpath: str | list[str],
