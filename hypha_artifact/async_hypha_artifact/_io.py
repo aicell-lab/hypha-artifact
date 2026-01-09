@@ -112,7 +112,7 @@ async def cat(
         async with self.open(path, "r", version=version) as f:
             content = await f.read()
             return decode_to_text(content)
-    except (OSError, FileNotFoundError, httpx.RequestError) as e:
+    except (OSError, httpx.RequestError) as e:
         if on_error == "ignore":
             return None
         raise OSError from e
