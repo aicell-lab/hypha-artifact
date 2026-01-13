@@ -116,8 +116,8 @@ class TestHyphaArtifactUnit:
         artifact.ls("/", detail=True)
         assert isinstance(artifact._async_artifact, MagicMock)
         artifact._async_artifact.ls.assert_called_once_with(
-            "/",
-            None,
+            path="/",
+            version=None,
             detail=True,
         )
 
