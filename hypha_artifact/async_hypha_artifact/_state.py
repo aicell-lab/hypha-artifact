@@ -6,15 +6,17 @@ from typing import TYPE_CHECKING
 
 from ._remote_methods import ArtifactMethod
 from ._utils import (
+    check_errors,
+    clean_params,
+    get_headers,
+    get_method_url,
+)
+from .types import (
     CommitParams,
     CreateParams,
     DeleteParams,
     EditParams,
     ListChildrenParams,
-    check_errors,
-    clean_params,
-    get_headers,
-    get_method_url,
 )
 
 if TYPE_CHECKING:

@@ -15,6 +15,7 @@ def get_artifact(
     artifact_name: str,
     artifact_setup_teardown: tuple[str, str],
 ) -> object:
+    """Create a test artifact for edge cases."""
     token, workspace = artifact_setup_teardown
     return HyphaArtifact(
         artifact_name,
@@ -25,7 +26,10 @@ def get_artifact(
 
 
 class TestSyncFolderEdgeCases:
+    """Test suite for folder edge cases in synchronous artifact."""
+
     def test_directory_methods(self, artifact: HyphaArtifact) -> None:
+        """Test methods on directory paths."""
         folder = "edge_dir"
         subdir = f"{folder}/sub"
         file_path = f"{subdir}/a.txt"

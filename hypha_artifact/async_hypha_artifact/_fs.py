@@ -11,8 +11,6 @@ import httpx
 
 from ._remote_methods import ArtifactMethod
 from ._utils import (
-    ListFilesParams,
-    RemoveFileParams,
     check_errors,
     clean_params,
     filter_by_name,
@@ -20,11 +18,14 @@ from ._utils import (
     get_method_url,
     walk_dir,
 )
+from .types import ListFilesParams, RemoveFileParams
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact
 if TYPE_CHECKING:
     from hypha_artifact.classes import ArtifactItem
+
+KEEP_EXTENSION = ".keep"
 
 
 @overload
@@ -188,7 +189,7 @@ async def isdir(
     try:
         path_info = await self.info(path, version=version)
         return path_info["type"] == "directory"
-    except (OSError, FileNotFoundError):
+    except OSError:
         return False
 
 
@@ -219,7 +220,7 @@ async def isfile(
     try:
         path_info = await self.info(path, version=version)
         return path_info["type"] == "file"
-    except (OSError, FileNotFoundError):
+    except OSError:
         return False
 
 
@@ -325,7 +326,7 @@ async def find(
     )
 
     filtered_all_files = (
-        {k: v for k, v in filtered_all_files.items() if not k.endswith(".keep")}
+        {k: v for k, v in filtered_all_files.items() if not k.endswith(KEEP_EXTENSION)}
         if hide_keep
         else filtered_all_files
     )
@@ -520,12 +521,12 @@ async def rmdir(self: AsyncHyphaArtifact, path: str) -> None:
         raise FileNotFoundError(error_msg)
 
     file_names = await self.ls(path, detail=False)
-    has_keep = any(f_name == ".keep" for f_name in file_names)
+    has_keep = any(f_name == KEEP_EXTENSION for f_name in file_names)
     if (not has_keep and len(file_names) > 0) or (has_keep and len(file_names) > 1):
         error_msg = f"Directory not empty: {path}"
         raise OSError(error_msg)
 
-    await self.rm(str(Path(path) / ".keep"))
+    await self.rm(str(Path(path) / KEEP_EXTENSION))
 
 
 async def touch(
@@ -594,7 +595,7 @@ async def mkdir(
         error_msg = f"Parent path is not a directory: {parent_path}"
         raise NotADirectoryError(error_msg)
 
-    await self.touch(str(Path(child_path) / ".keep"))
+    await self.touch(str(Path(child_path) / KEEP_EXTENSION))
 
 
 async def makedirs(
@@ -652,9 +653,9 @@ async def exists(
         async with self.open(path, "r", version=version) as f:
             await f.read(0)
             return True
-    except (OSError, FileNotFoundError, httpx.HTTPStatusError, httpx.RequestError):
+    except (OSError, httpx.HTTPStatusError, httpx.RequestError):
         try:
             dir_files = await self.ls(path, detail=False, version=version)
             return len(dir_files) > 0
-        except (OSError, FileNotFoundError, httpx.HTTPStatusError, httpx.RequestError):
+        except (OSError, httpx.HTTPStatusError, httpx.RequestError):
             return False

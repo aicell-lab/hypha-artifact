@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable, Mapping
 from typing import TypeVar
 
-import fire  # type: ignore
+import fire  # type: ignore[import]
 from dotenv import load_dotenv
 
 from hypha_artifact.classes import (
@@ -230,7 +230,7 @@ class ArtifactCLI(HyphaArtifact):
 
                 args = shlex.split(cmd)
 
-                fire.Fire(ArtifactCLI(artifact_id), args)  # type: ignore
+                fire.Fire(ArtifactCLI(artifact_id), args)  # type: ignore[no-untyped-call]
             except (KeyboardInterrupt, EOFError):
                 print("\nExiting shell.")  # noqa: T201
                 break
@@ -260,7 +260,7 @@ def main() -> None:
         artifact_id = sys.argv[2]
         ArtifactCLI(artifact_id).run_shell(artifact_id)
     else:
-        fire.Fire(ArtifactCLI)  # type: ignore
+        fire.Fire(ArtifactCLI)  # type: ignore[no-untyped-call]
 
 
 if __name__ == "__main__":

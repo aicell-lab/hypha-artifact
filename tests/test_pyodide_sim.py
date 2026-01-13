@@ -1,5 +1,3 @@
-# ruff: noqa: S101
-
 """Pyodide-like environment simulation tests.
 
 Ensures code paths work when `anyio` is unavailable and thread offloading is
@@ -57,7 +55,7 @@ def test_run_sync_import_override(monkeypatch: pytest.MonkeyPatch) -> None:
     local_run_sync = sync_utils.run_sync
 
     # Should be callable (will error if wrong object)
-    def _noop() -> int:  # pyright: ignore reportUnusedFunction
+    def _noop() -> int:  # pyright: ignore reportUnusedFunction # NOSONAR S7503
         return 1
 
     assert callable(local_run_sync)
@@ -88,11 +86,11 @@ async def test_aio_open_uses_anyio_when_available(
         ) -> None:
             return None
 
-        async def write(self, data: bytes) -> int:
+        async def write(self, data: bytes) -> int:  # NOSONAR S7503 Necessary for test
             self.data.extend(data)
             return len(data)
 
-        async def read(self) -> bytes:
+        async def read(self) -> bytes:  # NOSONAR S7503 Necessary for test
             return bytes(self.data)
 
         @staticmethod
@@ -102,7 +100,7 @@ async def test_aio_open_uses_anyio_when_available(
     calls: list[tuple[str, str]] = []
 
     class DummyAnyio:
-        async def open_file(
+        async def open_file(  # NOSONAR S7503 Necessary for test
             self,
             path: str,
             mode: OpenBinaryMode | OpenTextMode,
