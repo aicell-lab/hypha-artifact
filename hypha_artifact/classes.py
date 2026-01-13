@@ -18,6 +18,41 @@ JsonType = (
 ListChildrenMode = Literal["AND", "OR"]
 
 
+class ArtifactVersion(TypedDict):
+    """Information about an artifact version."""
+
+    version: str
+    created_at: int
+    comment: str | None
+
+
+class ArtifactConfig(TypedDict):
+    """Permissions associated with an artifact."""
+
+    permissions: dict[str, str]
+
+
+class Artifact(TypedDict):
+    """Represents an artifact with its metadata."""
+
+    id: str
+    type: str | None
+    workspace: str
+    parent_id: str
+    alias: str
+    manifest: dict[str, object]
+    staging: None
+    download_count: float
+    view_count: float
+    file_count: int
+    created_at: int
+    created_by: str
+    last_modified: int
+    versions: list[ArtifactVersion]
+    config: ArtifactConfig
+    _id: str
+
+
 class ArtifactItem(TypedDict):
     """Represents an item in the artifact, containing metadata and content."""
 

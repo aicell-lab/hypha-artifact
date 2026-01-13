@@ -11,8 +11,6 @@ import httpx
 
 from ._remote_methods import ArtifactMethod
 from ._utils import (
-    ListFilesParams,
-    RemoveFileParams,
     check_errors,
     clean_params,
     filter_by_name,
@@ -20,6 +18,7 @@ from ._utils import (
     get_method_url,
     walk_dir,
 )
+from .types import ListFilesParams, RemoveFileParams
 
 if TYPE_CHECKING:
     from . import AsyncHyphaArtifact

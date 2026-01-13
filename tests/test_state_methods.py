@@ -8,18 +8,25 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import typing
 import uuid
 
+import httpx
 import pytest
 import pytest_asyncio
 
 from hypha_artifact import AsyncHyphaArtifact
 
-# pylint: disable=protected-access,redefined-outer-name,broad-except
+SMALL_NUMBER = 3
+MEDIUM_NUMBER = 5
+BIG_NUMBER = 10
 
 
 @pytest_asyncio.fixture
-async def ephemeral_artifact(credentials: tuple[str, str]):
+async def ephemeral_artifact(
+    credentials: tuple[str, str],
+) -> typing.AsyncGenerator[AsyncHyphaArtifact, None]:
     """Yield a brand-new AsyncHyphaArtifact with a unique alias for isolated tests."""
     token, workspace = credentials
     alias = f"test-state-{uuid.uuid4().hex[:8]}"
@@ -39,7 +46,10 @@ class TestAsyncStateMethods:
     """Integration tests for Async create() and delete() methods."""
 
     @pytest.mark.asyncio
-    async def test_create_without_params(self, ephemeral_artifact: AsyncHyphaArtifact):
+    async def test_create_without_params(
+        self,
+        ephemeral_artifact: AsyncHyphaArtifact,
+    ) -> None:
         """Calling create() with no parameters should succeed and allow listing root."""
         await ephemeral_artifact.create()
 
@@ -51,7 +61,10 @@ class TestAsyncStateMethods:
         await ephemeral_artifact.delete()
 
     @pytest.mark.asyncio
-    async def test_delete_without_params(self, ephemeral_artifact: AsyncHyphaArtifact):
+    async def test_delete_without_params(
+        self,
+        ephemeral_artifact: AsyncHyphaArtifact,
+    ) -> None:
         """Delete with no parameters should remove the entire artifact."""
         # Create first so we can delete it
         await ephemeral_artifact.create()
@@ -60,7 +73,7 @@ class TestAsyncStateMethods:
         await ephemeral_artifact.delete()
 
         # Subsequent operations against the deleted artifact should fail
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.RequestError):
             await ephemeral_artifact.ls("/", detail=True)
 
 
@@ -68,7 +81,11 @@ class TestVersionedRetrievals:
     """Integration tests that verify the version parameter on read methods."""
 
     @pytest.mark.asyncio
-    async def test_version_parameter_across_methods(self, credentials: tuple[str, str]):
+    async def test_version_parameter_across_methods(
+        self,
+        credentials: tuple[str, str],
+    ) -> None:
+        """Test version parameter across methods."""
         token, workspace = credentials
         alias = f"test-versions-{uuid.uuid4().hex[:8]}"
         artifact = AsyncHyphaArtifact(
@@ -82,7 +99,8 @@ class TestVersionedRetrievals:
             # 1) Create artifact -> should create v0 (metadata only)
             await artifact.create()
 
-            # 2) Add a file to v0 (stage and commit without version intent -> updates latest v0)
+            # 2) Add a file to v0 (stage and commit without version intent
+            # -> updates latest v0)
             fname = "verfile.txt"
             content_v0 = "A-version"
             await artifact.edit(stage=True)
@@ -130,10 +148,8 @@ class TestVersionedRetrievals:
 
         finally:
             # Cleanup: remove the whole artifact
-            try:
+            with contextlib.suppress(Exception):
                 await artifact.delete()
-            except Exception:
-                pass
             await artifact.aclose()
 
 
@@ -145,6 +161,7 @@ class TestListChildren:
         self,
         credentials: tuple[str, str],
     ) -> None:
+        """Test basic listing and ordering of children."""
         token, workspace = credentials
 
         # Parent collection
@@ -194,7 +211,7 @@ class TestListChildren:
 
             # Basic listing
             # Retry a few times in case of eventual consistency
-            async def _list_children_committed():
+            async def _list_children_committed() -> list[dict[str, typing.Any]]:
                 return await coll.list_children(stage=False)
 
             for _ in range(5):
@@ -209,45 +226,33 @@ class TestListChildren:
             res = await _list_children_committed()
 
             assert isinstance(res, list)
-            names = {
-                i.get("manifest", {}).get("name") for i in res if isinstance(i, dict)
-            }
+            names = {i.get("manifest", {}).get("name") for i in res}
             assert {"Alpha", "Beta"}.issubset(names)
 
             # Ordering by custom JSON field (descending by likes)
-            res_ordered = await coll.list_children(
+            ordered_children = await coll.list_children(
                 order_by="manifest.likes>",
                 stage=False,
             )
-            if isinstance(res_ordered, dict):
-                ordered_items = (
-                    res_ordered.get("items")
-                    or res_ordered.get("results")
-                    or res_ordered.get("data")
-                    or res_ordered.get("artifacts")
-                    or []
-                )
-            else:
-                ordered_items = res_ordered
 
-            # Ensure we have at least the two children and ordering is respected
-            ordered_names = [
-                i.get("manifest", {}).get("name")
-                for i in ordered_items
-                if isinstance(i, dict)
-            ]
-            # Since likes: Alpha=10, Beta=5 and '>' means descending, Alpha should come before Beta
-            if set(["Alpha", "Beta"]).issubset(set(ordered_names)):
-                alpha_idx = ordered_names.index("Alpha")
-                beta_idx = ordered_names.index("Beta")
-                assert alpha_idx < beta_idx
+            encountered_alpha = False
+            for child in ordered_children:
+                manifest_raw = child.get("manifest")
+                assert isinstance(manifest_raw, dict)
+                manifest = typing.cast("dict[str, str]", manifest_raw)
+                name = manifest.get("name")
+                if name == "Alpha":
+                    encountered_alpha = True
+                elif name == "Beta":
+                    break
+
+            if not encountered_alpha:
+                pytest.fail("Alpha child not found in ordered listing")
 
         finally:
             # Cleanup: delete parent recursively (children included)
-            try:
+            with contextlib.suppress(Exception):
                 await coll.delete(delete_files=True, recursive=True)
-            except Exception:
-                pass
             await coll.aclose()
             await child1.aclose()
             await child2.aclose()
@@ -257,6 +262,7 @@ class TestListChildren:
         self,
         credentials: tuple[str, str],
     ) -> None:
+        """Test listing children with keywords, filters and stage parameter."""
         token, workspace = credentials
 
         coll_alias = f"test-coll-{uuid.uuid4().hex[:8]}"
@@ -304,28 +310,24 @@ class TestListChildren:
 
             # Keywords should match by name
             # Committed-only listing should find Gamma
-            kw_res = await coll.list_children(keywords=["Gamma"], stage=False)
-            kw_items = kw_res.get("items") if isinstance(kw_res, dict) else kw_res
+            kw_items = await coll.list_children(keywords=["Gamma"], stage=False)
             assert kw_items
             kw_names = {
-                i.get("manifest", {}).get("name")
-                for i in kw_items
-                if isinstance(i, dict)
+                typing.cast("dict[str, str]", kw_item.get("manifest", {})).get(
+                    "name",
+                )
+                for kw_item in kw_items
             }
             assert "Gamma" in kw_names
 
             # Filters against manifest fields
-            flt_res = await coll.list_children(
+            flt_items_raw = await coll.list_children(
                 filters={"manifest": {"category": "x"}},
                 stage=False,
             )
-            flt_items = flt_res.get("items") if isinstance(flt_res, dict) else flt_res
+            flt_items = typing.cast("list[dict[str, typing.Any]]", flt_items_raw)
             assert flt_items
-            flt_names = {
-                i.get("manifest", {}).get("name")
-                for i in flt_items
-                if isinstance(i, dict)
-            }
+            flt_names = {i.get("manifest", {}).get("name") for i in flt_items}
             assert "Gamma" in flt_names
             assert (
                 "Delta" not in flt_names
@@ -333,24 +335,22 @@ class TestListChildren:
 
             # Stage-only listing should include the staged child
             stage_only = await coll.list_children(stage=True)
-            s_items = (
-                stage_only.get("items") if isinstance(stage_only, dict) else stage_only
-            )
+            s_items_raw: object
+            if isinstance(stage_only, dict):
+                stage_only_dict = typing.cast("dict[str, str]", stage_only)
+                s_items_raw = stage_only_dict.get("items")
+            else:
+                s_items_raw = stage_only
+            s_items = typing.cast("list[dict[str, dict[str, object]]]", s_items_raw)
             assert s_items
-            s_names = {
-                i.get("manifest", {}).get("name")
-                for i in s_items
-                if isinstance(i, dict)
-            }
+            s_names = {i.get("manifest", {}).get("name") for i in s_items}
             assert "Delta" in s_names
             # And the committed one should not be present when stage=True
             assert "Gamma" not in s_names
 
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 await coll.delete(delete_files=True, recursive=True)
-            except Exception:
-                pass
             await coll.aclose()
             await staged_child.aclose()
             await committed_child.aclose()
@@ -364,7 +364,7 @@ class TestListFilesLimit:
         self,
         credentials: tuple[str, str],
     ) -> None:
-        """Test that the limit parameter correctly restricts the number of files returned."""
+        """Test that the limit parameter restricts the number of files."""
         token, workspace = credentials
 
         # Create a test artifact
@@ -391,25 +391,23 @@ class TestListFilesLimit:
             await artifact.commit(comment="Add test files for limit testing")
 
             # Test with limit=5
-            limited_files = await artifact.ls("/", limit=5, detail=True)
+            limited_files = await artifact.ls("/", limit=MEDIUM_NUMBER, detail=True)
             assert isinstance(limited_files, list)
             assert (
-                len(limited_files) <= 5
-            ), f"Expected at most 5 files, got {len(limited_files)}"
-
+                len(limited_files) <= MEDIUM_NUMBER
+            ), f"Expected at most {MEDIUM_NUMBER} files, got {len(limited_files)}"
             # Test with limit=10
-            limited_files_10 = await artifact.ls("/", limit=10, detail=True)
+            limited_files_10 = await artifact.ls("/", limit=BIG_NUMBER, detail=True)
             assert isinstance(limited_files_10, list)
             assert (
-                len(limited_files_10) <= 10
-            ), f"Expected at most 10 files, got {len(limited_files_10)}"
-
+                len(limited_files_10) <= BIG_NUMBER
+            ), f"Expected at most {BIG_NUMBER} files, got {len(limited_files_10)}"
             # Test without detail
-            limited_names = await artifact.ls("/", limit=5, detail=False)
+            limited_names = await artifact.ls("/", limit=MEDIUM_NUMBER, detail=False)
             assert isinstance(limited_names, list)
             assert (
-                len(limited_names) <= 5
-            ), f"Expected at most 5 file names, got {len(limited_names)}"
+                len(limited_names) <= MEDIUM_NUMBER
+            ), f"Expected at most {MEDIUM_NUMBER} file names, got {len(limited_names)}"
             assert all(
                 isinstance(name, str) for name in limited_names
             ), "All items should be strings"
@@ -431,10 +429,8 @@ class TestListFilesLimit:
 
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(Exception):
                 await artifact.delete(delete_files=True, recursive=True)
-            except Exception:
-                pass
             await artifact.aclose()
 
     @pytest.mark.asyncio
@@ -466,12 +462,16 @@ class TestListFilesLimit:
             await artifact.commit(comment="Initial files in v0")
 
             # Test limit on v0
-            limited_v0 = await artifact.ls("/", limit=3, version="v0", detail=True)
+            limited_v0 = await artifact.ls(
+                "/",
+                limit=SMALL_NUMBER,
+                version="v0",
+                detail=True,
+            )
             assert isinstance(limited_v0, list)
             assert (
-                len(limited_v0) <= 3
-            ), f"Expected at most 3 files from v0, got {len(limited_v0)}"
-
+                len(limited_v0) <= SMALL_NUMBER
+            ), f"Expected at most {SMALL_NUMBER} files from v0, got {len(limited_v0)}"
             # Create a new version with additional files
             await artifact.edit(stage=True, version="new")
             for i in range(5):
@@ -480,28 +480,25 @@ class TestListFilesLimit:
             await artifact.commit(comment="Additional files in new version")
 
             # Test limit on latest version
-            limited_latest = await artifact.ls("/", limit=5, detail=True)
+            limited_latest = await artifact.ls("/", limit=MEDIUM_NUMBER, detail=True)
             assert isinstance(limited_latest, list)
             assert (
-                len(limited_latest) <= 5
-            ), f"Expected at most 5 files from latest, got {len(limited_latest)}"
-
+                len(limited_latest) <= MEDIUM_NUMBER
+            ), f"Expected max. {MEDIUM_NUMBER} files, got {len(limited_latest)}"
             # Test limit on v0 again to ensure it still returns v0 files only
             limited_v0_again = await artifact.ls(
                 "/",
-                limit=4,
+                limit=MEDIUM_NUMBER - 1,
                 version="v0",
                 detail=False,
             )
             assert isinstance(limited_v0_again, list)
             assert (
-                len(limited_v0_again) <= 4
+                len(limited_v0_again) <= 4  # noqa: PLR2004
             ), f"Expected at most 4 file names from v0, got {len(limited_v0_again)}"
 
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(Exception):
                 await artifact.delete(delete_files=True, recursive=True)
-            except Exception:
-                pass
             await artifact.aclose()

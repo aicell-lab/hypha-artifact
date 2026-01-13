@@ -5,8 +5,6 @@ testing real file operations such as creation, reading, copying, and deletion
 against an actual Hypha artifact service.
 """
 
-import logging
-import os
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -116,11 +114,11 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         artifact.commit()
 
         # Test for existing file
-        self._validate_file_existence(artifact, test_file_path, True)
+        self._validate_file_existence(artifact, test_file_path, should_exist=True)
 
         # Test for non-existent file
         non_existent_path = "this_file_does_not_exist.txt"
-        self._validate_file_existence(artifact, non_existent_path, False)
+        self._validate_file_existence(artifact, non_existent_path, should_exist=False)
 
     def test_remove_file(self, artifact: HyphaArtifact) -> None:
         """Test removing a file from the artifact using real operations."""
@@ -134,7 +132,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         artifact.commit()
 
         # Verify file exists before removal
-        self._validate_file_existence(artifact, removal_test_file, True)
+        self._validate_file_existence(artifact, removal_test_file, should_exist=True)
 
         # Remove the file
         artifact.edit(stage=True)
@@ -142,7 +140,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         artifact.commit()
 
         # Verify file no longer exists
-        self._validate_file_existence(artifact, removal_test_file, False)
+        self._validate_file_existence(artifact, removal_test_file, should_exist=False)
 
     def test_workflow(self, artifact: HyphaArtifact, test_content: str) -> None:
         """Integration test for a complete file workflow: create, read, copy, remove."""
@@ -166,13 +164,12 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         artifact.copy(original_file, copied_file)
         artifact.commit()
         assert artifact.exists(copied_file)
-        logging.info(artifact.ls("/", detail=True))
 
         # Step 4: Remove copied file
         artifact.edit(stage=True)
         artifact.rm(copied_file)
         artifact.commit()
-        self._validate_file_existence(artifact, copied_file, False)
+        self._validate_file_existence(artifact, copied_file, should_exist=False)
         assert artifact.exists(original_file)
 
     def test_partial_file_read(
@@ -218,7 +215,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
 
         # Verify local file exists and has correct content
         assert local_file.exists(), f"Local file {local_file} should exist"
-        with open(local_file, encoding="utf-8") as f:
+        with local_file.open(encoding="utf-8") as f:
             local_content = f.read()
         self._validate_file_content(local_content, test_content)
 
@@ -233,7 +230,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         remote_file = "sync_put_test_file.txt"
 
         # Create a test file locally
-        with open(local_file, "w", encoding="utf-8") as f:
+        with local_file.open("w", encoding="utf-8") as f:
             f.write(test_content)
 
         # Copy from local to remote
@@ -276,9 +273,9 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         assert local_file1.exists(), f"Local file {local_file1} should exist"
         assert local_file2.exists(), f"Local file {local_file2} should exist"
 
-        with open(local_file1, encoding="utf-8") as f:
+        with local_file1.open(encoding="utf-8") as f:
             content1 = f.read()
-        with open(local_file2, encoding="utf-8") as f:
+        with local_file2.open(encoding="utf-8") as f:
             content2 = f.read()
 
         self._validate_file_content(content1, test_content + "_1")
@@ -299,9 +296,9 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
 
         # Create test directory structure locally
         local_subdir.mkdir(parents=True, exist_ok=True)
-        with open(local_file1, "w", encoding="utf-8") as f:
+        with local_file1.open("w", encoding="utf-8") as f:
             f.write(test_content + "_1")
-        with open(local_file2, "w", encoding="utf-8") as f:
+        with local_file2.open("w", encoding="utf-8") as f:
             f.write(test_content + "_2")
 
         # Copy directory recursively from local to remote
@@ -346,9 +343,10 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         artifact.get(remote_files, local_files)
 
         # Verify local files exist and have correct content
-        for i, local_file in enumerate(local_files):
-            assert os.path.exists(local_file), f"Local file {local_file} should exist"
-            with open(local_file, encoding="utf-8") as f:
+        for i, local_file_str in enumerate(local_files):
+            local_file = Path(local_file_str)
+            assert local_file.exists(), f"Local file {local_file} should exist"
+            with local_file.open(encoding="utf-8") as f:
                 content = f.read()
             self._validate_file_content(content, test_content + f"_{i+1}")
 
@@ -359,15 +357,16 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
         tmp_path: Path,
     ) -> None:
         """Test copying multiple files from local to remote using lists."""
-        local_files = [
-            str(tmp_path / "local_put_multi1.txt"),
-            str(tmp_path / "local_put_multi2.txt"),
+        local_files_paths = [
+            tmp_path / "local_put_multi1.txt",
+            tmp_path / "local_put_multi2.txt",
         ]
+        local_files = [str(p) for p in local_files_paths]
         remote_files = ["sync_put_multi1.txt", "sync_put_multi2.txt"]
 
         # Create test files locally
-        for i, local_file in enumerate(local_files):
-            with open(local_file, "w", encoding="utf-8") as f:
+        for i, local_file in enumerate(local_files_paths):
+            with local_file.open("w", encoding="utf-8") as f:
                 f.write(test_content + f"_{i+1}")
 
         # Copy multiple files from local to remote
@@ -399,7 +398,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             test_data = b"A" * 1024  # 1KB of 'A's
             for _ in range(file_size // len(test_data)):
                 temp_file.write(test_data)
-            temp_file_path = temp_file.name
+            temp_file_path = Path(temp_file.name)
 
         try:
             remote_path = "large_multipart_test.bin"
@@ -407,7 +406,7 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             # Upload using multipart
             artifact.edit(stage=True)
             artifact.put(
-                temp_file_path,
+                str(temp_file_path),
                 remote_path,
                 multipart_config=multipart_config,
             )
@@ -428,11 +427,9 @@ class TestHyphaArtifactIntegration(ArtifactTestMixin):
             artifact.edit(stage=True)
             artifact.rm(remote_path)
             artifact.commit()
-        except Exception as e:
-            raise e
         finally:
             # Clean up local temp file
-            os.unlink(temp_file_path)
+            temp_file_path.unlink()
 
     def test_upload_folder(self, artifact: HyphaArtifact) -> None:
         """Test uploading a folder with multiple files."""

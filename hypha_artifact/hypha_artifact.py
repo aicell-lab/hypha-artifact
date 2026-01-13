@@ -405,7 +405,9 @@ class HyphaArtifact:
         detail: None | bool = False,
     ) -> list[str] | list[ArtifactItem]:
         """List files and directories in a directory."""
-        return run_sync(self._async_artifact.ls(path, version, detail=detail))
+        return run_sync(
+            self._async_artifact.ls(path=path, version=version, detail=detail),
+        )
 
     def info(self: Self, path: str, version: str | None = None) -> ArtifactItem:
         """Get information about a file or directory."""

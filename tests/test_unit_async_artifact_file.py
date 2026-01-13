@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -11,14 +12,16 @@ from hypha_artifact.async_artifact_file import AsyncArtifactHttpFile
 
 
 @pytest.mark.asyncio
-async def test_download_content_includes_additional_headers():
+async def test_download_content_includes_additional_headers() -> None:
     """download_content should merge caller-provided headers into the GET request."""
 
     async def url_func() -> str:
+        await asyncio.sleep(0)
         return "https://example.org/resource"
 
     file_obj = AsyncArtifactHttpFile(
-        url_factory=url_func, additional_headers={"X-Test": "abc"}
+        url_factory=url_func,
+        additional_headers={"X-Test": "abc"},
     )
 
     # Resolve URL explicitly to avoid entering context (we mock the client)
@@ -41,10 +44,11 @@ async def test_download_content_includes_additional_headers():
 
 
 @pytest.mark.asyncio
-async def test_upload_content_includes_additional_headers():
+async def test_upload_content_includes_additional_headers() -> None:
     """upload_content should merge caller-provided headers into the PUT request."""
 
     async def url_func() -> str:
+        await asyncio.sleep(0)
         return "https://example.org/resource"
 
     file_obj = AsyncArtifactHttpFile(

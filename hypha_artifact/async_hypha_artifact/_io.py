@@ -17,19 +17,16 @@ from hypha_artifact.classes import (
 from hypha_artifact.transfer_progress import TransferProgress
 from hypha_artifact.utils import decode_to_text, local_file_or_dir, rel_path_pairs
 
+from ._multipart import should_use_multipart, upload_multipart_files_loop
 from ._utils import (
-    GetFileUrlParams,
     build_local_to_remote_pairs,
     build_remote_to_local_pairs,
     clean_params,
     download_to_path,
-    get_multipart_settings,
     get_url,
-    remote_file_or_dir,
-    should_use_multipart,
-    upload_file_simple,
-    upload_multipart,
+    upload_simple_files_batch,
 )
+from .types import GetFileUrlParams
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -371,6 +368,7 @@ async def put(
     *,
     recursive: bool = False,
     multipart_config: MultipartConfig | None = None,
+    batch_size: int = 500,
 ) -> None:
     """Copy file(s) from local filesystem to remote (artifact).
 
@@ -394,6 +392,8 @@ async def put(
         Whether to copy directories recursively
     multipart_config: MultipartConfig | None
         Configuration for multipart uploads, if applicable.
+    batch_size: int
+        Number of files to upload in each batch for simple uploads.
 
     """
     all_file_pairs = build_local_to_remote_pairs(
@@ -406,39 +406,33 @@ async def put(
     status_message = StatusMessage("upload", len(all_file_pairs))
     callback = callback or TransferProgress("upload")
 
-    for current_file_index, (local_path, remote_path) in enumerate(all_file_pairs):
-        if callback:
-            callback(status_message.in_progress(local_path, current_file_index))
-        fixed_remote_path = await remote_file_or_dir(self, local_path, remote_path)
+    simple_files: list[tuple[str, str]] = []
+    multipart_files: list[tuple[str, str]] = []
 
-        try:
-            if should_use_multipart(
-                Path(local_path),
-                multipart_config,
-            ):
-                chunk_size, max_parallel_uploads = get_multipart_settings(
-                    multipart_config,
-                )
+    for lp, rp in all_file_pairs:
+        if should_use_multipart(Path(lp), multipart_config):
+            multipart_files.append((lp, rp))
+        else:
+            simple_files.append((lp, rp))
 
-                await upload_multipart(
-                    self,
-                    Path(local_path),
-                    fixed_remote_path,
-                    chunk_size=chunk_size,
-                    max_parallel_uploads=max_parallel_uploads,
-                    callback=callback,
-                )
-            else:
-                await upload_file_simple(self, local_path, fixed_remote_path)
+    await upload_simple_files_batch(
+        self,
+        simple_files,
+        callback,
+        status_message,
+        batch_size=batch_size,
+        on_error=on_error,
+    )
 
-        except Exception as e:
-            if callback:
-                callback(status_message.error(local_path, str(e)))
-            if on_error == "raise":
-                raise OSError from e
-
-        if callback:
-            callback(status_message.success(local_path))
+    await upload_multipart_files_loop(
+        self,
+        multipart_files,
+        callback,
+        status_message,
+        len(simple_files),
+        on_error,
+        multipart_config,
+    )
 
 
 async def cp(

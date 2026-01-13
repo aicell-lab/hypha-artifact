@@ -1,4 +1,3 @@
-# ruff: noqa: S101, I001
 
 """Integration tests for the AsyncHyphaArtifact module.
 
@@ -18,7 +17,6 @@ import pytest_asyncio
 from hypha_artifact import AsyncHyphaArtifact
 from hypha_artifact.classes import ProgressEvent
 from tests.conftest import ArtifactTestMixin
-
 
 logger = logging.getLogger(__name__)
 

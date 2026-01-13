@@ -4,18 +4,15 @@ This module contains common fixtures and utility functions used by both
 sync and async test suites to avoid code duplication.
 """
 
-# TODO @hugokallander: For all tests, clean up artifacts afterward
-
 import asyncio
-import logging
 import os
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Generator, Sequence
 
 import pytest
 from dotenv import load_dotenv
 from hypha_rpc import connect_to_server  # type: ignore[import]
-from hypha_rpc.rpc import RemoteService  # type: ignore[import]
+from hypha_rpc.rpc import ObjectProxy, RemoteService  # type: ignore[import]
 
 from hypha_artifact import AsyncHyphaArtifact, HyphaArtifact
 
@@ -41,17 +38,17 @@ def get_test_content() -> str:
     return "This is a test file content for integration testing"
 
 
-async def get_artifact_manager(token: str) -> tuple[RemoteService, RemoteService]:
+async def get_artifact_manager(token: str) -> tuple[ObjectProxy, RemoteService]:
     """Get the artifact manager and API client.
 
     Args:
         token (str): The personal access token.
 
     Returns:
-        tuple[object, object]: The artifact manager and API client.
+        tuple[RemoteService, RemoteService]: The artifact manager and API client.
 
     """
-    api: RemoteService = await connect_to_server(  # type: ignore
+    api: RemoteService = await connect_to_server(  # type: ignore[no-untyped-call]
         {
             "name": "artifact-client",
             "server_url": "https://hypha.aicell.io",
@@ -60,9 +57,15 @@ async def get_artifact_manager(token: str) -> tuple[RemoteService, RemoteService
     )
 
     # Get the artifact manager service
-    artifact_manager = await api.get_service("public/artifact-manager")  # type: ignore
+    artifact_manager = await api.get_service(  # type: ignore[no-untyped-call]
+        "public/artifact-manager",
+    )
 
-    return artifact_manager, api  # type: ignore
+    if not isinstance(artifact_manager, ObjectProxy):
+        error_msg = "Failed to get artifact manager service"
+        raise TypeError(error_msg)
+
+    return artifact_manager, api
 
 
 async def create_artifact(artifact_id: str, token: str) -> None:
@@ -81,17 +84,15 @@ async def create_artifact(artifact_id: str, token: str) -> None:
         "description": f"Artifact created programmatically: {artifact_id}",
     }
 
-    logging.info(f"============Creating artifact: {artifact_id}============")
-    await artifact_manager.create(  # type: ignore
+    await artifact_manager.create(  # type: ignore[no-untyped-call]
         alias=artifact_id,
         type="generic",
         manifest=manifest,
         config={"permissions": {"*": "rw+", "@": "rw+"}},
     )
-    logging.info(f"============Created artifact: {artifact_id}============")
 
     # Disconnect from the server
-    await api.disconnect()  # type: ignore
+    await api.disconnect()  # type: ignore[no-untyped-call]
 
 
 async def delete_artifact(artifact_id: str, token: str) -> None:
@@ -105,18 +106,16 @@ async def delete_artifact(artifact_id: str, token: str) -> None:
     artifact_manager, api = await get_artifact_manager(token)
 
     # Delete the artifact
-    logging.info(f"============Deleting artifact: {artifact_id}============")
-    await artifact_manager.delete(artifact_id)  # type: ignore
-    logging.info(f"============Deleted artifact: {artifact_id}============")
+    await artifact_manager.delete(artifact_id)  # type: ignore[no-untyped-call]
 
     # Disconnect from the server
-    await api.disconnect()  # type: ignore
+    await api.disconnect()  # type: ignore[no-untyped-call]
 
 
 def run_func_sync(
     artifact_id: str,
     token: str,
-    func: Callable[[str, str], object],
+    func: Callable[[str, str], Awaitable[None]],
 ) -> None:
     """Wrap async functions synchronously."""
     loop = asyncio.new_event_loop()
@@ -141,8 +140,11 @@ def get_credentials() -> tuple[str, str]:
 
 
 @pytest.fixture(scope="module", name="artifact_setup_teardown")
-def get_artifact_setup_teardown(artifact_name: str, credentials: tuple[str, str]):
-    """Setup and teardown artifact for testing."""
+def get_artifact_setup_teardown(
+    artifact_name: str,
+    credentials: tuple[str, str],
+) -> Generator[tuple[str, str], None, None]:
+    """Set up and tear down artifact using sync wrapper."""
     token, workspace = credentials
 
     # Setup
@@ -192,17 +194,19 @@ class ArtifactTestMixin:
         expected_content: str | bytes,
     ) -> None:
         """Validate file content matches expected."""
-        assert (
-            content == expected_content
-        ), f"File content doesn't match. Expected: '{expected_content}', Got: '{content}'"
+        assert content == expected_content, (
+            f"File content doesn't match. Expected: '{expected_content}', "
+            f"Got: '{content}'"
+        )
 
     def _validate_file_existence(
         self,
         artifact: HyphaArtifact,
         file_path: str,
+        *,
         should_exist: bool,
     ) -> None:
-        """Helper to validate file existence."""
+        """Validate file existence in the artifact."""
         if should_exist:
             assert artifact.exists(file_path) is True, f"File {file_path} should exist"
         else:
